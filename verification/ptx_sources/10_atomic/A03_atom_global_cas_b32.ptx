@@ -1,0 +1,19 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+.visible .entry test_atom_global_cas_b32(
+    .param .u64 p_addr
+) {
+    .reg .u64 %addr;
+    .reg .b32 %cmp, %new_val, %old;
+
+    ld.param.u64 %addr, [p_addr];
+    mov.b32 %cmp, 0;
+    mov.b32 %new_val, 1;
+
+    // === 待测指令 ===
+    atom.global.cas.b32 %old, [%addr], %cmp, %new_val;
+
+    ret;
+}

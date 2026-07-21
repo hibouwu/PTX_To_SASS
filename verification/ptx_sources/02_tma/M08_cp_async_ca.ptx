@@ -1,0 +1,18 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+// M08: cp.async.ca.shared.global (pre-TMA async copy)
+.shared .align 4 .u32 smem_data[256];
+
+.visible .entry test_cp_async_ca(
+    .param .u64 p_gaddr
+) {
+    .reg .u64 %gaddr;
+    ld.param.u64 %gaddr, [p_gaddr];
+
+    // === 待测指令 ===
+    cp.async.ca.shared.global [smem_data], [%gaddr], 4;
+
+    ret;
+}

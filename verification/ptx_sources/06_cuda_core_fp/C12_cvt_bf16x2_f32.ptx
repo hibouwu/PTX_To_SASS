@@ -1,0 +1,17 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+// C12: cvt.rn.bf16x2.f32 (packed F32->BF16x2, HIGH RISK)
+.visible .entry test_cvt_bf16x2_f32() {
+    .reg .f32 %f0, %f1;
+    .reg .b32 %v0;
+
+    mov.f32 %f0, 0f3F800000;
+mov.f32 %f1, 0f40000000;
+
+    // === 待测指令 ===
+    cvt.rn.bf16x2.f32 %v0, %f0, %f1;
+
+    ret;
+}

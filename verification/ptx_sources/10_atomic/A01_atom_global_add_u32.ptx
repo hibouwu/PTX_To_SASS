@@ -1,0 +1,18 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+.visible .entry test_atom_global_add_u32(
+    .param .u64 p_addr
+) {
+    .reg .u64 %addr;
+    .reg .u32 %r0, %old;
+
+    ld.param.u64 %addr, [p_addr];
+    mov.u32 %r0, 1;
+
+    // === 待测指令 ===
+    atom.global.add.u32 %old, [%addr], %r0;
+
+    ret;
+}

@@ -1,0 +1,20 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+// CL06: st.shared::cluster.b32
+.shared .align 4 .u32 smem_data[256];
+
+.visible .entry test_st_shared_cluster() {
+    .reg .u32 %r0, %rank;
+    .reg .u64 %remote_addr;
+
+    mov.u32 %r0, 42;
+    mov.u32 %rank, 0;
+    mapa.shared::cluster.u32 %remote_addr, smem_data, %rank;
+
+    // === 待测指令 ===
+    st.shared::cluster.b32 [%remote_addr], %r0;
+
+    ret;
+}

@@ -1,0 +1,18 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+.visible .entry test_atom_global_add_u64(
+    .param .u64 p_addr
+) {
+    .reg .u64 %addr;
+    .reg .u64 %val, %old;
+
+    ld.param.u64 %addr, [p_addr];
+    mov.u64 %val, 1;
+
+    // === 待测指令 ===
+    atom.global.add.u64 %old, [%addr], %val;
+
+    ret;
+}

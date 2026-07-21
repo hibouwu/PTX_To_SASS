@@ -1,0 +1,25 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+// T15: tcgen05.mma.cta_group::1.kind::i8
+.visible .entry test_tcgen05_mma_cg1_i8(
+    .param .u32 p_taddr,
+    .param .u64 p_smem_desc_a,
+    .param .u64 p_smem_desc_b,
+    .param .u32 p_idesc
+) {
+    .reg .u32 %taddr;
+    .reg .u64 %desc_a, %desc_b;
+    .reg .u32 %idesc;
+
+    ld.param.u32 %taddr, [p_taddr];
+    ld.param.u64 %desc_a, [p_smem_desc_a];
+    ld.param.u64 %desc_b, [p_smem_desc_b];
+    ld.param.u32 %idesc, [p_idesc];
+
+    // === 待测指令 ===
+    tcgen05.mma.cta_group::1.kind::i8 [%taddr], %desc_a, %desc_b, %idesc, 0;
+
+    ret;
+}

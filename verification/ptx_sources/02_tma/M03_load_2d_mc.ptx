@@ -1,0 +1,26 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+// M03: cp.async.bulk.tensor.2d multicast
+.shared .align 128 .u8 smem_buf[1024];
+.shared .align 8 .u64 smem_mbar;
+
+.visible .entry test_tma_load_2d_multicast(
+    .param .u64 p_desc,
+    .param .u16 p_mask
+) {
+    .reg .u64 %desc;
+    .reg .u32 %c0, %c1;
+    .reg .u16 %mask;
+
+    ld.param.u64 %desc, [p_desc];
+    ld.param.u16 %mask, [p_mask];
+    mov.u32 %c0, 0;
+    mov.u32 %c1, 0;
+
+    // === 待测指令 ===
+    cp.async.bulk.tensor.2d.shared::cluster.global.mbarrier::complete_tx::bytes.multicast::cluster [smem_buf], [%desc, {%c0, %c1}], [smem_mbar], %mask;
+
+    ret;
+}

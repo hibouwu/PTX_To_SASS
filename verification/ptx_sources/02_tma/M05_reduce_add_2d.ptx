@@ -1,0 +1,22 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+// M05: cp.async.bulk.tensor.reduce.add.2d.global.shared::cta
+.shared .align 128 .u8 smem_buf[1024];
+
+.visible .entry test_tma_reduce_add_2d(
+    .param .u64 p_desc
+) {
+    .reg .u64 %desc;
+    .reg .u32 %c0, %c1;
+
+    ld.param.u64 %desc, [p_desc];
+    mov.u32 %c0, 0;
+    mov.u32 %c1, 0;
+
+    // === 待测指令 ===
+    cp.async.bulk.tensor.reduce.add.2d.global.shared::cta [%desc, {%c0, %c1}], [smem_buf];
+
+    ret;
+}

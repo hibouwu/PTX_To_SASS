@@ -1,0 +1,18 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+.visible .entry test_st_global_b64(
+    .param .u64 p_addr
+) {
+    .reg .u64 %addr;
+    .reg .b64 %rd0;
+
+    ld.param.u64 %addr, [p_addr];
+    mov.b64 %rd0, 42;
+
+    // === 待测指令 ===
+    st.global.b64 [%addr], %rd0;
+
+    ret;
+}

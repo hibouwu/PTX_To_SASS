@@ -1,0 +1,18 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+// M09: cp.async.cg.shared.global (commit group variant)
+.shared .align 16 .u32 smem_data16[256];
+
+.visible .entry test_cp_async_cg(
+    .param .u64 p_gaddr
+) {
+    .reg .u64 %gaddr;
+    ld.param.u64 %gaddr, [p_gaddr];
+
+    // === 待测指令 ===
+    cp.async.cg.shared.global [smem_data16], [%gaddr], 16;
+
+    ret;
+}

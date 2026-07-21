@@ -1,0 +1,16 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+.shared .align 8 .u32 smem_data[256];
+
+.visible .entry test_st_shared_v2b32() {
+    .reg .b32 %r0, %r1;
+    mov.b32 %r0, 1;
+    mov.b32 %r1, 2;
+
+    // === 待测指令 ===
+    st.shared.v2.b32 [smem_data], {%r0, %r1};
+
+    ret;
+}

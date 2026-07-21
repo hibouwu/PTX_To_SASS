@@ -1,0 +1,16 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+.visible .entry test_bra_cond() {
+    .reg .u32 %r0;
+    .reg .pred %p0;
+
+    mov.u32 %r0, %tid.x;
+    setp.eq.u32 %p0, %r0, 0;
+
+    // === 待测指令 ===
+    @%p0 bra END;
+END:
+    ret;
+}

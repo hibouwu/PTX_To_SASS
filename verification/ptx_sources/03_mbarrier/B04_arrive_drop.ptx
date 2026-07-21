@@ -1,0 +1,13 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+.shared .align 8 .u64 smem_mbar;
+
+.visible .entry test_mbarrier_arrive_drop() {
+    .reg .b64 %state;
+
+    // === 待测指令 ===
+    mbarrier.arrive_drop.shared::cta.b64 %state, [smem_mbar];
+
+    ret;
+}

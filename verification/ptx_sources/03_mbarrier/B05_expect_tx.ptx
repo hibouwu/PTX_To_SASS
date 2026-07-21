@@ -1,0 +1,16 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+.shared .align 8 .u64 smem_mbar;
+
+.visible .entry test_mbarrier_expect_tx(
+    .param .u32 p_tx
+) {
+    .reg .u32 %tx;
+    ld.param.u32 %tx, [p_tx];
+
+    // === 待测指令 ===
+    mbarrier.expect_tx.shared::cta.b64 [smem_mbar], %tx;
+
+    ret;
+}

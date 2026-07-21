@@ -1,0 +1,26 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+// T03: tcgen05.mma.cta_group::1.kind::tf32.sparse
+.visible .entry test_tcgen05_mma_cg1_tf32_sparse(
+    .param .u32 p_taddr,
+    .param .u64 p_smem_desc_a,
+    .param .u64 p_smem_desc_b,
+    .param .u32 p_idesc,
+    .param .u32 p_meta_addr
+) {
+    .reg .u32 %taddr, %idesc, %meta;
+    .reg .u64 %desc_a, %desc_b;
+
+    ld.param.u32 %taddr, [p_taddr];
+    ld.param.u64 %desc_a, [p_smem_desc_a];
+    ld.param.u64 %desc_b, [p_smem_desc_b];
+    ld.param.u32 %idesc, [p_idesc];
+    ld.param.u32 %meta, [p_meta_addr];
+
+    // === 待测指令 ===
+    tcgen05.mma.cta_group::1.kind::tf32.sparse [%taddr], %desc_a, %desc_b, %idesc, 0, %meta;
+
+    ret;
+}

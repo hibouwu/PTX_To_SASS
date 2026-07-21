@@ -1,0 +1,13 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+.shared .align 8 .u64 smem_mbar;
+
+.visible .entry test_mbarrier_try_wait() {
+    .reg .pred %done;
+
+    // === 待测指令 (语义上阻塞等待, 可能展开为循环) ===
+    mbarrier.try_wait.parity.shared::cta.b64 [smem_mbar], 0;
+
+    ret;
+}

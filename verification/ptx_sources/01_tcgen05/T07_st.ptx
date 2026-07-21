@@ -1,0 +1,22 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+// T07: tcgen05.st.sync.aligned
+.visible .entry test_tcgen05_st(
+    .param .u32 p_taddr
+) {
+    .reg .u32 %taddr;
+    .reg .b32 %src<4>;
+
+    ld.param.u32 %taddr, [p_taddr];
+    mov.b32 %src0, 0;
+    mov.b32 %src1, 0;
+    mov.b32 %src2, 0;
+    mov.b32 %src3, 0;
+
+    // === 待测指令 ===
+    tcgen05.st.sync.aligned.16x64b.x1.b32 [%taddr], {%src0, %src1};
+
+    ret;
+}

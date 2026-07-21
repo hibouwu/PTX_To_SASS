@@ -1,0 +1,13 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+.shared .align 8 .u64 smem_mbar;
+
+.visible .entry test_mbarrier_test_wait() {
+    .reg .pred %result;
+
+    // === 待测指令 ===
+    mbarrier.test_wait.parity.shared::cta.b64 %result, [smem_mbar], 0;
+
+    ret;
+}

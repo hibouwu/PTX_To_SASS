@@ -1,0 +1,15 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+.shared .align 4 .u32 smem_atomic;
+
+.visible .entry test_atom_shared_add_u32() {
+    .reg .u32 %r0, %old;
+    mov.u32 %r0, 1;
+
+    // === 待测指令 ===
+    atom.shared.add.u32 %old, [smem_atomic], %r0;
+
+    ret;
+}

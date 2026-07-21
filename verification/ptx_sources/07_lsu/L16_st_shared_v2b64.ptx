@@ -1,0 +1,16 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+.shared .align 16 .u64 smem_data64[128];
+
+.visible .entry test_st_shared_v2b64() {
+    .reg .b64 %rd0, %rd1;
+    mov.b64 %rd0, 1;
+    mov.b64 %rd1, 2;
+
+    // === 待测指令 ===
+    st.shared.v2.b64 [smem_data64], {%rd0, %rd1};
+
+    ret;
+}

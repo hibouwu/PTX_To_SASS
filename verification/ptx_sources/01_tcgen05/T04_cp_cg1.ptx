@@ -1,0 +1,20 @@
+.version 9.3
+.target sm_100a
+.address_size 64
+
+// T04: tcgen05.cp.cta_group::1.sync.aligned
+.visible .entry test_tcgen05_cp(
+    .param .u32 p_taddr,
+    .param .u64 p_smem_desc
+) {
+    .reg .u32 %taddr;
+    .reg .u64 %desc;
+
+    ld.param.u32 %taddr, [p_taddr];
+    ld.param.u64 %desc, [p_smem_desc];
+
+    // === 待测指令 ===
+    tcgen05.cp.cta_group::1.sync.aligned [%taddr], %desc;
+
+    ret;
+}
