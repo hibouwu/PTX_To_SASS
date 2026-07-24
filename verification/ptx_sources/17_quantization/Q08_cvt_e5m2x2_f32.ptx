@@ -1,6 +1,8 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 
 // Q08: cvt.rn.satfinite.e5m2x2.f32 (FP8 E5M2)
 .visible .entry test_cvt_e5m2x2_f32() {
@@ -10,8 +12,14 @@
     mov.f32 %f0, 0f3F800000;
 mov.f32 %f1, 0f40000000;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     cvt.rn.satfinite.e5m2x2.f32 %rs0, %f0, %f1;
+    // === end target instruction ===
+    .loc 1 200 0
+    st.global.b16 [__ptx_sink+0], %rs0;
+    .loc 1 300 0
 
     ret;
 }

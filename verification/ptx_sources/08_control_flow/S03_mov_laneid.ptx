@@ -1,12 +1,20 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 
 .visible .entry test_mov_laneid() {
     .reg .u32 %r0;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     mov.u32 %r0, %laneid;
+    // === end target instruction ===
+    .loc 1 200 0
+    st.global.b32 [__ptx_sink+0], %r0;
+    .loc 1 300 0
 
     ret;
 }

@@ -1,6 +1,8 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 
 // I09: mad.wide.u32 (32x32+64->64)
 .visible .entry test_mad_wide_u32() {
@@ -11,8 +13,14 @@
 mov.u32 %r1, 7;
 mov.u64 %rd0, 100;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     mad.wide.u32 %rd0, %r0, %r1, %rd0;
+    // === end target instruction ===
+    .loc 1 200 0
+    st.global.b64 [__ptx_sink+0], %rd0;
+    .loc 1 300 0
 
     ret;
 }

@@ -1,6 +1,8 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 
 // W01: shfl.sync.bfly.b32 (butterfly)
 .visible .entry test_shfl_bfly() {
@@ -8,8 +10,14 @@
 
     mov.b32 %r0, %tid.x;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     shfl.sync.bfly.b32 %r1, %r0, 1, 0x1f, 0xFFFFFFFF;
+    // === end target instruction ===
+    .loc 1 200 0
+    st.global.b32 [__ptx_sink+0], %r1;
+    .loc 1 300 0
 
     ret;
 }

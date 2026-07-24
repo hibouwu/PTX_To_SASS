@@ -1,13 +1,21 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 .shared .align 8 .u64 smem_mbar;
 
 .visible .entry test_mbarrier_arrive_drop() {
     .reg .b64 %state;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     mbarrier.arrive_drop.shared::cta.b64 %state, [smem_mbar];
+    // === end target instruction ===
+    .loc 1 200 0
+    st.global.b64 [__ptx_sink+0], %state;
+    .loc 1 300 0
 
     ret;
 }

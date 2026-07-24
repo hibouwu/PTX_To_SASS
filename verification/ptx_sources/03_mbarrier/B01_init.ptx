@@ -1,6 +1,7 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
 .shared .align 8 .u64 smem_mbar;
 
 .visible .entry test_mbarrier_init(
@@ -9,8 +10,13 @@
     .reg .u32 %count;
     ld.param.u32 %count, [p_count];
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     mbarrier.init.shared::cta.b64 [smem_mbar], %count;
+    // === end target instruction ===
+    .loc 1 200 0
+    .loc 1 300 0
 
     ret;
 }

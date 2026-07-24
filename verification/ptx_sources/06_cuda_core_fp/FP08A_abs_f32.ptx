@@ -1,0 +1,23 @@
+.version 8.7
+.target sm_100a
+.address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
+
+// FP08A: abs.f32
+.visible .entry test_abs_f32() {
+    .reg .f32 %f0, %f1;
+
+    mov.f32 %f0, 0fBF800000;
+
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
+    abs.f32 %f1, %f0;
+    // === end target instruction ===
+    .loc 1 200 0
+    st.global.b32 [__ptx_sink+0], %f1;
+    .loc 1 300 0
+
+    ret;
+}

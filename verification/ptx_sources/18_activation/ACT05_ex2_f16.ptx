@@ -1,6 +1,8 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 
 // ACT05: ex2.approx.f16 (softmax exp)
 .visible .entry test_ex2_f16() {
@@ -8,8 +10,14 @@
 
     mov.b16 %h0, 0x3C00;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     ex2.approx.f16 %h1, %h0;
+    // === end target instruction ===
+    .loc 1 200 0
+    st.global.b16 [__ptx_sink+0], %h1;
+    .loc 1 300 0
 
     ret;
 }

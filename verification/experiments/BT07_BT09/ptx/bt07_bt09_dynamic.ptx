@@ -1,0 +1,62 @@
+.version 8.7
+.target sm_100a
+.address_size 64
+.file 1 "bt07_bt09_dynamic.ptx"
+
+// Control kernel: same dynamic source/sink path, but no bit transformation.
+.visible .entry test_mov_dynamic(
+    .param .u64 p_out,
+    .param .u32 p_in
+) {
+    .reg .u64 %rd0;
+    .reg .b32 %r0, %r1;
+
+    ld.param.u64 %rd0, [p_out];
+    ld.param.u32 %r0, [p_in];
+
+    .loc 1 100 0
+    mov.b32 %r1, %r0;
+    .loc 1 200 0
+    st.global.b32 [%rd0], %r1;
+    .loc 1 300 0
+    ret;
+}
+
+// BT07: dynamic input prevents O3 constant folding.
+.visible .entry test_popc_dynamic(
+    .param .u64 p_out,
+    .param .u32 p_in
+) {
+    .reg .u64 %rd0;
+    .reg .b32 %r0;
+    .reg .u32 %r1;
+
+    ld.param.u64 %rd0, [p_out];
+    ld.param.u32 %r0, [p_in];
+
+    .loc 1 110 0
+    popc.b32 %r1, %r0;
+    .loc 1 210 0
+    st.global.u32 [%rd0], %r1;
+    .loc 1 310 0
+    ret;
+}
+
+// BT09: dynamic input prevents O3 constant folding.
+.visible .entry test_brev_dynamic(
+    .param .u64 p_out,
+    .param .u32 p_in
+) {
+    .reg .u64 %rd0;
+    .reg .b32 %r0, %r1;
+
+    ld.param.u64 %rd0, [p_out];
+    ld.param.u32 %r0, [p_in];
+
+    .loc 1 120 0
+    brev.b32 %r1, %r0;
+    .loc 1 220 0
+    st.global.b32 [%rd0], %r1;
+    .loc 1 320 0
+    ret;
+}

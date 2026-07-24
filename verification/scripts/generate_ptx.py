@@ -7,6 +7,7 @@ PTX→SASS 1:1 映射验证 - PTX 测试用例批量生成脚本
 """
 
 import os
+import re
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -14,10 +15,14 @@ from dataclasses import dataclass
 BASE_DIR = Path(__file__).resolve().parent.parent / "ptx_sources"
 
 HEADER = """\
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
 """
+
+TARGET_MARKER = "// === target instruction"
+END_TARGET_MARKER = "// === end target instruction ==="
+SINK_DECLARATION = ".global .align 16 .b8 __ptx_sink[256];"
 
 
 @dataclass
@@ -29,13 +34,148 @@ class PTXTestCase:
     body: str        # kernel 完整体
 
 
+def _declared_register_types(body: str) -> dict[str, str]:
+    """Return a mapping from PTX register names to their declared types."""
+    result = {}
+    for match in re.finditer(r"\.reg\s+\.(\w+)\s+([^;]+);", body):
+        ptx_type, declaration = match.groups()
+        array_spans = []
+        for array_match in re.finditer(r"%(\w+)<(\d+)>", declaration):
+            base, count = array_match.groups()
+            result.update({f"%{base}{index}": ptx_type for index in range(int(count))})
+            array_spans.append(array_match.span())
+
+        declaration_without_arrays = declaration
+        for start, end in reversed(array_spans):
+            declaration_without_arrays = (
+                declaration_without_arrays[:start] + declaration_without_arrays[end:]
+            )
+        for register in re.findall(r"%[A-Za-z_$][\w$]*", declaration_without_arrays):
+            result[register] = ptx_type
+    return result
+
+
+def _first_operand(operands: str) -> str:
+    """Extract the first PTX operand while respecting vector/bracket nesting."""
+    depth = 0
+    for index, char in enumerate(operands):
+        if char in "{[(":
+            depth += 1
+        elif char in "}])":
+            depth -= 1
+        elif char == "," and depth == 0:
+            return operands[:index].strip()
+    return operands.strip().rstrip(";")
+
+
+def make_target_observable(body: str) -> str:
+    """Add output sinks so ptxas cannot remove a side-effect-free target at -O0."""
+    lines = body.splitlines()
+    marker_index = next(
+        (index for index, line in enumerate(lines) if TARGET_MARKER in line), None
+    )
+    if marker_index is None:
+        entry_index = next(
+            (index for index, line in enumerate(lines) if ".entry " in line), None
+        )
+        if entry_index is None:
+            raise ValueError("PTX case is missing both an entry and a target marker")
+        body_index = next(
+            (index for index in range(entry_index, len(lines)) if "{" in lines[index]),
+            None,
+        )
+        if body_index is None:
+            raise ValueError("PTX entry is missing its body")
+        target_index = next(
+            (
+                index
+                for index in range(body_index + 1, len(lines))
+                if lines[index].strip()
+            ),
+            None,
+        )
+        if target_index is None:
+            raise ValueError("PTX entry body is empty")
+        lines.insert(target_index, "    // === target instruction ===")
+        marker_index = target_index
+
+    target_start = marker_index + 1
+    while target_start < len(lines) and not lines[target_start].strip():
+        target_start += 1
+
+    target_end = target_start
+    while target_end < len(lines):
+        stripped = lines[target_end].strip()
+        if not stripped or stripped == "}" or stripped.endswith(":"):
+            break
+        if stripped == "ret;" and target_end > target_start:
+            break
+        target_end += 1
+
+    register_types = _declared_register_types(body)
+    destinations = []
+    for line in lines[target_start:target_end]:
+        instruction = re.sub(r"^@!?%\w+\s+", "", line.strip())
+        parts = instruction.split(None, 1)
+        if len(parts) != 2:
+            continue
+        first_operand = _first_operand(parts[1])
+        if first_operand.startswith("["):
+            continue
+        for register in re.findall(r"%[A-Za-z_$][\w$]*", first_operand):
+            if register in register_types and register not in destinations:
+                destinations.append(register)
+
+    sink_lines = ["    " + END_TARGET_MARKER, "    .loc 1 200 0"]
+    sink_offset = 0
+    for register in destinations:
+        ptx_type = register_types[register]
+        if ptx_type == "pred":
+            sink_lines.extend([
+                f"    @{register} st.global.u32 [__ptx_sink+{sink_offset}], 1;",
+                f"    @!{register} st.global.u32 [__ptx_sink+{sink_offset}], 0;",
+            ])
+            sink_offset += 4
+            continue
+
+        width_match = re.search(r"(16|32|64)$", ptx_type)
+        if not width_match:
+            continue
+        width = int(width_match.group(1))
+        alignment = width // 8
+        sink_offset = (sink_offset + alignment - 1) // alignment * alignment
+        sink_lines.append(
+            f"    st.global.b{width} [__ptx_sink+{sink_offset}], {register};"
+        )
+        sink_offset += alignment
+
+    sink_lines.append("    .loc 1 300 0")
+    lines[target_end:target_end] = sink_lines
+    lines.insert(marker_index, "    .loc 1 10 0")
+    lines.insert(marker_index + 2, "    .loc 1 100 0")
+    observable_body = "\n".join(lines) + "\n"
+    module_declarations = '.file 1 "ptx_mapping_case.ptx"\n'
+    if destinations:
+        module_declarations += SINK_DECLARATION + "\n"
+    observable_body = observable_body.replace(
+        ".address_size 64\n",
+        f".address_size 64\n{module_declarations}",
+        1,
+    )
+    return observable_body
+
+
 def write_case(case: PTXTestCase):
     """将测试用例写入对应 PTX 文件."""
     out_dir = BASE_DIR / case.batch
     out_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{case.case_id}_{case.mnemonic}.ptx"
     filepath = out_dir / filename
-    filepath.write_text(case.body, encoding="utf-8")
+    try:
+        body = make_target_observable(case.body)
+    except ValueError as error:
+        raise ValueError(f"{case.batch}/{case.case_id}: {error}") from error
+    filepath.write_text(body, encoding="utf-8")
     return filepath
 
 
@@ -52,24 +192,31 @@ def gen_tcgen05_cases() -> list[PTXTestCase]:
         description="tcgen05.mma.cta_group::1.kind::tf32 standard",
         body=HEADER + """
 // T01: tcgen05.mma.cta_group::1.kind::tf32 (standard)
-// 需要 TMEM 已分配, SMEM descriptor 就绪
+// Requires allocated TMEM and valid SMEM descriptors.
 .visible .entry test_tcgen05_mma_cg1_tf32(
     .param .u32 p_taddr,
     .param .u64 p_smem_desc_a,
     .param .u64 p_smem_desc_b,
     .param .u32 p_idesc
 ) {
-    .reg .u32 %taddr;
-    .reg .u64 %desc_a, %desc_b;
-    .reg .u32 %idesc;
+    .reg .b32 %taddr;
+    .reg .b64 %desc_a, %desc_b;
+    .reg .b32 %idesc;
+    .reg .b32 %mask<4>;
+    .reg .pred %enable;
 
-    ld.param.u32 %taddr, [p_taddr];
-    ld.param.u64 %desc_a, [p_smem_desc_a];
-    ld.param.u64 %desc_b, [p_smem_desc_b];
-    ld.param.u32 %idesc, [p_idesc];
+    ld.param.b32 %taddr, [p_taddr];
+    ld.param.b64 %desc_a, [p_smem_desc_a];
+    ld.param.b64 %desc_b, [p_smem_desc_b];
+    ld.param.b32 %idesc, [p_idesc];
+    mov.u32 %mask0, 0;
+    mov.u32 %mask1, 0;
+    mov.u32 %mask2, 0;
+    mov.u32 %mask3, 0;
+    setp.ne.u32 %enable, %idesc, 0;
 
-    // === 待测指令 ===
-    tcgen05.mma.cta_group::1.kind::tf32 [%taddr], %desc_a, %desc_b, %idesc, 0;
+    // === target instruction ===
+    tcgen05.mma.cta_group::1.kind::tf32 [%taddr], %desc_a, %desc_b, %idesc, {%mask0, %mask1, %mask2, %mask3}, %enable;
 
     ret;
 }
@@ -87,17 +234,28 @@ def gen_tcgen05_cases() -> list[PTXTestCase]:
     .param .u64 p_smem_desc_b,
     .param .u32 p_idesc
 ) {
-    .reg .u32 %taddr;
-    .reg .u64 %desc_a, %desc_b;
-    .reg .u32 %idesc;
+    .reg .b32 %taddr;
+    .reg .b64 %desc_a, %desc_b;
+    .reg .b32 %idesc;
+    .reg .b32 %mask<8>;
+    .reg .pred %enable;
 
-    ld.param.u32 %taddr, [p_taddr];
-    ld.param.u64 %desc_a, [p_smem_desc_a];
-    ld.param.u64 %desc_b, [p_smem_desc_b];
-    ld.param.u32 %idesc, [p_idesc];
+    ld.param.b32 %taddr, [p_taddr];
+    ld.param.b64 %desc_a, [p_smem_desc_a];
+    ld.param.b64 %desc_b, [p_smem_desc_b];
+    ld.param.b32 %idesc, [p_idesc];
+    mov.u32 %mask0, 0;
+    mov.u32 %mask1, 0;
+    mov.u32 %mask2, 0;
+    mov.u32 %mask3, 0;
+    mov.u32 %mask4, 0;
+    mov.u32 %mask5, 0;
+    mov.u32 %mask6, 0;
+    mov.u32 %mask7, 0;
+    setp.ne.u32 %enable, %idesc, 0;
 
-    // === 待测指令 ===
-    tcgen05.mma.cta_group::2.kind::tf32 [%taddr], %desc_a, %desc_b, %idesc, 0;
+    // === target instruction ===
+    tcgen05.mma.cta_group::2.kind::tf32 [%taddr], %desc_a, %desc_b, %idesc, {%mask0, %mask1, %mask2, %mask3, %mask4, %mask5, %mask6, %mask7}, %enable;
 
     ret;
 }
@@ -116,17 +274,24 @@ def gen_tcgen05_cases() -> list[PTXTestCase]:
     .param .u32 p_idesc,
     .param .u32 p_meta_addr
 ) {
-    .reg .u32 %taddr, %idesc, %meta;
-    .reg .u64 %desc_a, %desc_b;
+    .reg .b32 %taddr, %idesc, %meta;
+    .reg .b64 %desc_a, %desc_b;
+    .reg .b32 %mask<4>;
+    .reg .pred %enable;
 
-    ld.param.u32 %taddr, [p_taddr];
-    ld.param.u64 %desc_a, [p_smem_desc_a];
-    ld.param.u64 %desc_b, [p_smem_desc_b];
-    ld.param.u32 %idesc, [p_idesc];
-    ld.param.u32 %meta, [p_meta_addr];
+    ld.param.b32 %taddr, [p_taddr];
+    ld.param.b64 %desc_a, [p_smem_desc_a];
+    ld.param.b64 %desc_b, [p_smem_desc_b];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %meta, [p_meta_addr];
+    mov.u32 %mask0, 0;
+    mov.u32 %mask1, 0;
+    mov.u32 %mask2, 0;
+    mov.u32 %mask3, 0;
+    setp.ne.u32 %enable, %idesc, 0;
 
-    // === 待测指令 ===
-    tcgen05.mma.cta_group::1.kind::tf32.sparse [%taddr], %desc_a, %desc_b, %idesc, 0, %meta;
+    // === target instruction ===
+    tcgen05.mma.sp.cta_group::1.kind::tf32 [%taddr], %desc_a, %desc_b, [%meta], %idesc, {%mask0, %mask1, %mask2, %mask3}, %enable;
 
     ret;
 }
@@ -135,9 +300,9 @@ def gen_tcgen05_cases() -> list[PTXTestCase]:
     # T04: tcgen05.cp
     cases.append(PTXTestCase(
         batch="01_tcgen05", case_id="T04", mnemonic="cp_cg1",
-        description="tcgen05.cp.cta_group::1.sync.aligned",
+        description="tcgen05.cp.cta_group::1.128x256b",
         body=HEADER + """
-// T04: tcgen05.cp.cta_group::1.sync.aligned
+// T04: tcgen05.cp.cta_group::1.128x256b
 .visible .entry test_tcgen05_cp(
     .param .u32 p_taddr,
     .param .u64 p_smem_desc
@@ -148,8 +313,8 @@ def gen_tcgen05_cases() -> list[PTXTestCase]:
     ld.param.u32 %taddr, [p_taddr];
     ld.param.u64 %desc, [p_smem_desc];
 
-    // === 待测指令 ===
-    tcgen05.cp.cta_group::1.sync.aligned [%taddr], %desc;
+    // === target instruction ===
+    tcgen05.cp.cta_group::1.128x256b [%taddr], %desc;
 
     ret;
 }
@@ -165,12 +330,12 @@ def gen_tcgen05_cases() -> list[PTXTestCase]:
     .param .u32 p_taddr
 ) {
     .reg .u32 %taddr;
-    .reg .b32 %dst<2>;
+    .reg .b32 %dst<1>;
 
     ld.param.u32 %taddr, [p_taddr];
 
-    // === 待测指令 ===
-    tcgen05.ld.sync.aligned.16x64b.x1.b32 {%dst0, %dst1}, [%taddr];
+    // === target instruction ===
+    tcgen05.ld.sync.aligned.16x64b.x1.b32 {%dst0}, [%taddr];
 
     ret;
 }
@@ -186,12 +351,12 @@ def gen_tcgen05_cases() -> list[PTXTestCase]:
     .param .u32 p_taddr
 ) {
     .reg .u32 %taddr;
-    .reg .b32 %dst<16>;
+    .reg .b32 %dst<8>;
 
     ld.param.u32 %taddr, [p_taddr];
 
-    // === 待测指令 ===
-    tcgen05.ld.sync.aligned.16x128b.x4.b32 {%dst0, %dst1, %dst2, %dst3, %dst4, %dst5, %dst6, %dst7, %dst8, %dst9, %dst10, %dst11, %dst12, %dst13, %dst14, %dst15}, [%taddr];
+    // === target instruction ===
+    tcgen05.ld.sync.aligned.16x128b.x4.b32 {%dst0, %dst1, %dst2, %dst3, %dst4, %dst5, %dst6, %dst7}, [%taddr];
 
     ret;
 }
@@ -207,16 +372,13 @@ def gen_tcgen05_cases() -> list[PTXTestCase]:
     .param .u32 p_taddr
 ) {
     .reg .u32 %taddr;
-    .reg .b32 %src<4>;
+    .reg .b32 %src<1>;
 
     ld.param.u32 %taddr, [p_taddr];
     mov.b32 %src0, 0;
-    mov.b32 %src1, 0;
-    mov.b32 %src2, 0;
-    mov.b32 %src3, 0;
 
-    // === 待测指令 ===
-    tcgen05.st.sync.aligned.16x64b.x1.b32 [%taddr], {%src0, %src1};
+    // === target instruction ===
+    tcgen05.st.sync.aligned.16x64b.x1.b32 [%taddr], {%src0};
 
     ret;
 }
@@ -225,9 +387,9 @@ def gen_tcgen05_cases() -> list[PTXTestCase]:
     # T08: tcgen05.alloc
     cases.append(PTXTestCase(
         batch="01_tcgen05", case_id="T08", mnemonic="alloc_cg1",
-        description="tcgen05.alloc.cta_group::1.sync.aligned.shared.b32",
+        description="tcgen05.alloc.cta_group::1.sync.aligned.shared::cta.b32",
         body=HEADER + """
-// T08: tcgen05.alloc.cta_group::1.sync.aligned.shared.b32
+// T08: tcgen05.alloc.cta_group::1.sync.aligned.shared::cta.b32
 .shared .align 4 .u32 smem_result;
 
 .visible .entry test_tcgen05_alloc(
@@ -237,8 +399,8 @@ def gen_tcgen05_cases() -> list[PTXTestCase]:
 
     ld.param.u32 %ncols, [p_ncols];
 
-    // === 待测指令 ===
-    tcgen05.alloc.cta_group::1.sync.aligned.shared.b32 [smem_result], %ncols;
+    // === target instruction ===
+    tcgen05.alloc.cta_group::1.sync.aligned.shared::cta.b32 [smem_result], %ncols;
 
     ret;
 }
@@ -259,7 +421,7 @@ def gen_tcgen05_cases() -> list[PTXTestCase]:
     ld.param.u32 %taddr, [p_taddr];
     ld.param.u32 %ncols, [p_ncols];
 
-    // === 待测指令 ===
+    // === target instruction ===
     tcgen05.dealloc.cta_group::1.sync.aligned.b32 %taddr, %ncols;
 
     ret;
@@ -275,8 +437,8 @@ def gen_tcgen05_cases() -> list[PTXTestCase]:
 .shared .align 8 .u64 smem_mbar;
 
 .visible .entry test_tcgen05_commit() {
-    // === 待测指令 ===
-    tcgen05.commit.cta_group::1.mbarrier::arrive::one.shared::cta.b64 [smem_mbar];
+    // === target instruction ===
+    tcgen05.commit.cta_group::1.mbarrier::arrive::one.shared::cluster.b64 [smem_mbar];
 
     ret;
 }
@@ -289,7 +451,7 @@ def gen_tcgen05_cases() -> list[PTXTestCase]:
         body=HEADER + """
 // T11: tcgen05.fence::after_thread_sync
 .visible .entry test_tcgen05_fence() {
-    // === 待测指令 ===
+    // === target instruction ===
     tcgen05.fence::after_thread_sync;
 
     ret;
@@ -308,45 +470,59 @@ def gen_tcgen05_cases() -> list[PTXTestCase]:
     .param .u64 p_smem_desc_b,
     .param .u32 p_idesc
 ) {
-    .reg .u32 %taddr;
-    .reg .u64 %desc_a, %desc_b;
-    .reg .u32 %idesc;
+    .reg .b32 %taddr;
+    .reg .b64 %desc_a, %desc_b;
+    .reg .b32 %idesc;
+    .reg .b32 %mask<4>;
+    .reg .pred %enable;
 
-    ld.param.u32 %taddr, [p_taddr];
-    ld.param.u64 %desc_a, [p_smem_desc_a];
-    ld.param.u64 %desc_b, [p_smem_desc_b];
-    ld.param.u32 %idesc, [p_idesc];
+    ld.param.b32 %taddr, [p_taddr];
+    ld.param.b64 %desc_a, [p_smem_desc_a];
+    ld.param.b64 %desc_b, [p_smem_desc_b];
+    ld.param.b32 %idesc, [p_idesc];
+    mov.u32 %mask0, 0;
+    mov.u32 %mask1, 0;
+    mov.u32 %mask2, 0;
+    mov.u32 %mask3, 0;
+    setp.ne.u32 %enable, %idesc, 0;
 
-    // === 待测指令 ===
-    tcgen05.mma.cta_group::1.kind::f16 [%taddr], %desc_a, %desc_b, %idesc, 0;
+    // === target instruction ===
+    tcgen05.mma.cta_group::1.kind::f16 [%taddr], %desc_a, %desc_b, %idesc, {%mask0, %mask1, %mask2, %mask3}, %enable;
 
     ret;
 }
 """))
 
-    # T13: tcgen05.mma kind::bf16 (BF16 MMA)
+    # T13: BF16 uses kind::f16; operand formats are encoded by the instruction descriptor.
     cases.append(PTXTestCase(
         batch="01_tcgen05", case_id="T13", mnemonic="mma_cg1_bf16",
-        description="tcgen05.mma.cta_group::1.kind::bf16 (BF16, inference primary)",
+        description="tcgen05.mma.cta_group::1.kind::f16 (BF16 via descriptor)",
         body=HEADER + """
-// T13: tcgen05.mma.cta_group::1.kind::bf16
+// T13: tcgen05.mma.cta_group::1.kind::f16 (BF16 descriptor)
 .visible .entry test_tcgen05_mma_cg1_bf16(
     .param .u32 p_taddr,
     .param .u64 p_smem_desc_a,
     .param .u64 p_smem_desc_b,
     .param .u32 p_idesc
 ) {
-    .reg .u32 %taddr;
-    .reg .u64 %desc_a, %desc_b;
-    .reg .u32 %idesc;
+    .reg .b32 %taddr;
+    .reg .b64 %desc_a, %desc_b;
+    .reg .b32 %idesc;
+    .reg .b32 %mask<4>;
+    .reg .pred %enable;
 
-    ld.param.u32 %taddr, [p_taddr];
-    ld.param.u64 %desc_a, [p_smem_desc_a];
-    ld.param.u64 %desc_b, [p_smem_desc_b];
-    ld.param.u32 %idesc, [p_idesc];
+    ld.param.b32 %taddr, [p_taddr];
+    ld.param.b64 %desc_a, [p_smem_desc_a];
+    ld.param.b64 %desc_b, [p_smem_desc_b];
+    ld.param.b32 %idesc, [p_idesc];
+    mov.u32 %mask0, 0;
+    mov.u32 %mask1, 0;
+    mov.u32 %mask2, 0;
+    mov.u32 %mask3, 0;
+    setp.ne.u32 %enable, %idesc, 0;
 
-    // === 待测指令 ===
-    tcgen05.mma.cta_group::1.kind::bf16 [%taddr], %desc_a, %desc_b, %idesc, 0;
+    // === target instruction ===
+    tcgen05.mma.cta_group::1.kind::f16 [%taddr], %desc_a, %desc_b, %idesc, {%mask0, %mask1, %mask2, %mask3}, %enable;
 
     ret;
 }
@@ -364,17 +540,24 @@ def gen_tcgen05_cases() -> list[PTXTestCase]:
     .param .u64 p_smem_desc_b,
     .param .u32 p_idesc
 ) {
-    .reg .u32 %taddr;
-    .reg .u64 %desc_a, %desc_b;
-    .reg .u32 %idesc;
+    .reg .b32 %taddr;
+    .reg .b64 %desc_a, %desc_b;
+    .reg .b32 %idesc;
+    .reg .b32 %mask<4>;
+    .reg .pred %enable;
 
-    ld.param.u32 %taddr, [p_taddr];
-    ld.param.u64 %desc_a, [p_smem_desc_a];
-    ld.param.u64 %desc_b, [p_smem_desc_b];
-    ld.param.u32 %idesc, [p_idesc];
+    ld.param.b32 %taddr, [p_taddr];
+    ld.param.b64 %desc_a, [p_smem_desc_a];
+    ld.param.b64 %desc_b, [p_smem_desc_b];
+    ld.param.b32 %idesc, [p_idesc];
+    mov.u32 %mask0, 0;
+    mov.u32 %mask1, 0;
+    mov.u32 %mask2, 0;
+    mov.u32 %mask3, 0;
+    setp.ne.u32 %enable, %idesc, 0;
 
-    // === 待测指令 ===
-    tcgen05.mma.cta_group::1.kind::f8f6f4 [%taddr], %desc_a, %desc_b, %idesc, 0;
+    // === target instruction ===
+    tcgen05.mma.cta_group::1.kind::f8f6f4 [%taddr], %desc_a, %desc_b, %idesc, {%mask0, %mask1, %mask2, %mask3}, %enable;
 
     ret;
 }
@@ -392,17 +575,24 @@ def gen_tcgen05_cases() -> list[PTXTestCase]:
     .param .u64 p_smem_desc_b,
     .param .u32 p_idesc
 ) {
-    .reg .u32 %taddr;
-    .reg .u64 %desc_a, %desc_b;
-    .reg .u32 %idesc;
+    .reg .b32 %taddr;
+    .reg .b64 %desc_a, %desc_b;
+    .reg .b32 %idesc;
+    .reg .b32 %mask<4>;
+    .reg .pred %enable;
 
-    ld.param.u32 %taddr, [p_taddr];
-    ld.param.u64 %desc_a, [p_smem_desc_a];
-    ld.param.u64 %desc_b, [p_smem_desc_b];
-    ld.param.u32 %idesc, [p_idesc];
+    ld.param.b32 %taddr, [p_taddr];
+    ld.param.b64 %desc_a, [p_smem_desc_a];
+    ld.param.b64 %desc_b, [p_smem_desc_b];
+    ld.param.b32 %idesc, [p_idesc];
+    mov.u32 %mask0, 0;
+    mov.u32 %mask1, 0;
+    mov.u32 %mask2, 0;
+    mov.u32 %mask3, 0;
+    setp.ne.u32 %enable, %idesc, 0;
 
-    // === 待测指令 ===
-    tcgen05.mma.cta_group::1.kind::i8 [%taddr], %desc_a, %desc_b, %idesc, 0;
+    // === target instruction ===
+    tcgen05.mma.cta_group::1.kind::i8 [%taddr], %desc_a, %desc_b, %idesc, {%mask0, %mask1, %mask2, %mask3}, %enable;
 
     ret;
 }
@@ -437,7 +627,7 @@ def gen_tma_cases() -> list[PTXTestCase]:
     mov.u32 %c0, 0;
     mov.u32 %c1, 0;
 
-    // === 待测指令 ===
+    // === target instruction ===
     cp.async.bulk.tensor.2d.shared::cta.global.mbarrier::complete_tx::bytes [smem_buf], [%desc, {%c0, %c1}], [smem_mbar];
 
     ret;
@@ -464,7 +654,7 @@ def gen_tma_cases() -> list[PTXTestCase]:
     mov.u32 %c1, 0;
     mov.u32 %c2, 0;
 
-    // === 待测指令 ===
+    // === target instruction ===
     cp.async.bulk.tensor.3d.shared::cta.global.mbarrier::complete_tx::bytes [smem_buf], [%desc, {%c0, %c1, %c2}], [smem_mbar];
 
     ret;
@@ -493,7 +683,7 @@ def gen_tma_cases() -> list[PTXTestCase]:
     mov.u32 %c0, 0;
     mov.u32 %c1, 0;
 
-    // === 待测指令 ===
+    // === target instruction ===
     cp.async.bulk.tensor.2d.shared::cluster.global.mbarrier::complete_tx::bytes.multicast::cluster [smem_buf], [%desc, {%c0, %c1}], [smem_mbar], %mask;
 
     ret;
@@ -505,7 +695,7 @@ def gen_tma_cases() -> list[PTXTestCase]:
         batch="02_tma", case_id="M04", mnemonic="store_2d",
         description="cp.async.bulk.tensor.2d store",
         body=HEADER + """
-// M04: cp.async.bulk.tensor.2d.global.shared::cta (store)
+// M04: cp.async.bulk.tensor.2d.global.shared::cta.bulk_group (store)
 .shared .align 128 .u8 smem_buf[1024];
 
 .visible .entry test_tma_store_2d(
@@ -518,8 +708,8 @@ def gen_tma_cases() -> list[PTXTestCase]:
     mov.u32 %c0, 0;
     mov.u32 %c1, 0;
 
-    // === 待测指令 ===
-    cp.async.bulk.tensor.2d.global.shared::cta [%desc, {%c0, %c1}], [smem_buf];
+    // === target instruction ===
+    cp.async.bulk.tensor.2d.global.shared::cta.bulk_group [%desc, {%c0, %c1}], [smem_buf];
 
     ret;
 }
@@ -528,9 +718,9 @@ def gen_tma_cases() -> list[PTXTestCase]:
     # M05: TMA reduce store
     cases.append(PTXTestCase(
         batch="02_tma", case_id="M05", mnemonic="reduce_add_2d",
-        description="cp.async.bulk.tensor.reduce.add.2d",
+        description="cp.reduce.async.bulk.tensor.2d add",
         body=HEADER + """
-// M05: cp.async.bulk.tensor.reduce.add.2d.global.shared::cta
+// M05: cp.reduce.async.bulk.tensor.2d.global.shared::cta.add.bulk_group
 .shared .align 128 .u8 smem_buf[1024];
 
 .visible .entry test_tma_reduce_add_2d(
@@ -543,8 +733,8 @@ def gen_tma_cases() -> list[PTXTestCase]:
     mov.u32 %c0, 0;
     mov.u32 %c1, 0;
 
-    // === 待测指令 ===
-    cp.async.bulk.tensor.reduce.add.2d.global.shared::cta [%desc, {%c0, %c1}], [smem_buf];
+    // === target instruction ===
+    cp.reduce.async.bulk.tensor.2d.global.shared::cta.add.bulk_group [%desc, {%c0, %c1}], [smem_buf];
 
     ret;
 }
@@ -566,7 +756,7 @@ def gen_tma_cases() -> list[PTXTestCase]:
     mov.u32 %c0, 0;
     mov.u32 %c1, 0;
 
-    // === 待测指令 ===
+    // === target instruction ===
     cp.async.bulk.prefetch.tensor.2d.L2.global [%desc, {%c0, %c1}];
 
     ret;
@@ -580,7 +770,7 @@ def gen_tma_cases() -> list[PTXTestCase]:
         body=HEADER + """
 // M07: cp.async.bulk.commit_group
 .visible .entry test_commit_group() {
-    // === 待测指令 ===
+    // === target instruction ===
     cp.async.bulk.commit_group;
 
     ret;
@@ -601,7 +791,7 @@ def gen_tma_cases() -> list[PTXTestCase]:
     .reg .u64 %gaddr;
     ld.param.u64 %gaddr, [p_gaddr];
 
-    // === 待测指令 ===
+    // === target instruction ===
     cp.async.ca.shared.global [smem_data], [%gaddr], 4;
 
     ret;
@@ -622,7 +812,7 @@ def gen_tma_cases() -> list[PTXTestCase]:
     .reg .u64 %gaddr;
     ld.param.u64 %gaddr, [p_gaddr];
 
-    // === 待测指令 ===
+    // === target instruction ===
     cp.async.cg.shared.global [smem_data16], [%gaddr], 16;
 
     ret;
@@ -636,7 +826,7 @@ def gen_tma_cases() -> list[PTXTestCase]:
         body=HEADER + """
 // M10: cp.async.wait_group 0
 .visible .entry test_cp_async_wait() {
-    // === 待测指令 ===
+    // === target instruction ===
     cp.async.wait_group 0;
 
     ret;
@@ -666,7 +856,7 @@ def gen_mbarrier_cases() -> list[PTXTestCase]:
     .reg .u32 %count;
     ld.param.u32 %count, [p_count];
 
-    // === 待测指令 ===
+    // === target instruction ===
     mbarrier.init.shared::cta.b64 [smem_mbar], %count;
 
     ret;
@@ -681,7 +871,7 @@ def gen_mbarrier_cases() -> list[PTXTestCase]:
 .visible .entry test_mbarrier_arrive() {
     .reg .b64 %state;
 
-    // === 待测指令 ===
+    // === target instruction ===
     mbarrier.arrive.shared::cta.b64 %state, [smem_mbar];
 
     ret;
@@ -700,7 +890,7 @@ def gen_mbarrier_cases() -> list[PTXTestCase]:
     .reg .u32 %tx;
     ld.param.u32 %tx, [p_tx];
 
-    // === 待测指令 ===
+    // === target instruction ===
     mbarrier.arrive.expect_tx.shared::cta.b64 %state, [smem_mbar], %tx;
 
     ret;
@@ -715,7 +905,7 @@ def gen_mbarrier_cases() -> list[PTXTestCase]:
 .visible .entry test_mbarrier_arrive_drop() {
     .reg .b64 %state;
 
-    // === 待测指令 ===
+    // === target instruction ===
     mbarrier.arrive_drop.shared::cta.b64 %state, [smem_mbar];
 
     ret;
@@ -733,7 +923,7 @@ def gen_mbarrier_cases() -> list[PTXTestCase]:
     .reg .u32 %tx;
     ld.param.u32 %tx, [p_tx];
 
-    // === 待测指令 ===
+    // === target instruction ===
     mbarrier.expect_tx.shared::cta.b64 [smem_mbar], %tx;
 
     ret;
@@ -751,7 +941,7 @@ def gen_mbarrier_cases() -> list[PTXTestCase]:
     .reg .u32 %tx;
     ld.param.u32 %tx, [p_tx];
 
-    // === 待测指令 ===
+    // === target instruction ===
     mbarrier.complete_tx.relaxed.cta.shared::cta.b64 [smem_mbar], %tx;
 
     ret;
@@ -766,8 +956,8 @@ def gen_mbarrier_cases() -> list[PTXTestCase]:
 .visible .entry test_mbarrier_try_wait() {
     .reg .pred %done;
 
-    // === 待测指令 (语义上阻塞等待, 可能展开为循环) ===
-    mbarrier.try_wait.parity.shared::cta.b64 [smem_mbar], 0;
+    // === target instruction (blocking semantics may lower to a loop) ===
+    mbarrier.try_wait.parity.shared::cta.b64 %done, [smem_mbar], 0;
 
     ret;
 }
@@ -781,7 +971,7 @@ def gen_mbarrier_cases() -> list[PTXTestCase]:
 .visible .entry test_mbarrier_test_wait() {
     .reg .pred %result;
 
-    // === 待测指令 ===
+    // === target instruction ===
     mbarrier.test_wait.parity.shared::cta.b64 %result, [smem_mbar], 0;
 
     ret;
@@ -794,7 +984,7 @@ def gen_mbarrier_cases() -> list[PTXTestCase]:
         description="mbarrier.inval.shared::cta.b64",
         body=HEADER + smem_decl + """
 .visible .entry test_mbarrier_inval() {
-    // === 待测指令 ===
+    // === target instruction ===
     mbarrier.inval.shared::cta.b64 [smem_mbar];
 
     ret;
@@ -943,7 +1133,7 @@ def gen_int_cases() -> list[PTXTestCase]:
 
     {setup}
 
-    // === 待测指令 ===
+    // === target instruction ===
     {instr}
 
     ret;
@@ -1019,32 +1209,51 @@ def gen_int_cases() -> list[PTXTestCase]:
                                    "shr.s64 %rd1, %rd0, 4;",
                                    regs=".reg .s64 %rd0, %rd1;",
                                    setup="mov.s64 %rd0, 42;"))
-    # I17: and.b32 / or.b32 / xor.b32
-    cases.append(simple_int_kernel("I17", "logic_b32", "and/or/xor.b32",
-                                   "and.b32 %r2, %r0, %r1;\n    or.b32 %r2, %r2, %r0;\n    xor.b32 %r2, %r2, %r1;",
-                                   regs=".reg .b32 %r0, %r1, %r2;",
-                                   setup="mov.b32 %r0, 0xFF00FF00;\nmov.b32 %r1, 0x0F0F0F0F;"))
-    # I18: and.b64 / or.b64
-    cases.append(simple_int_kernel("I18", "logic_b64", "and.b64 / or.b64",
-                                   "and.b64 %rd2, %rd0, %rd1;\n    or.b64 %rd2, %rd0, %rd1;",
-                                   regs=".reg .b64 %rd0, %rd1, %rd2;",
-                                   setup="mov.b64 %rd0, 0xFF00FF00FF00FF00;\nmov.b64 %rd1, 0x0F0F0F0F0F0F0F0F;"))
-    # I19: setp.eq.s32 / setp.lt.s32
-    cases.append(simple_int_kernel("I19", "setp_s32", "setp.eq.s32 / setp.lt.s32",
-                                   "setp.eq.s32 %p0, %r0, %r1;\n    setp.lt.s32 %p1, %r0, %r1;",
-                                   regs=".reg .s32 %r0, %r1;\n    .reg .pred %p0, %p1;",
-                                   setup="mov.s32 %r0, 42;\nmov.s32 %r1, 7;"))
-    # I20: selp.b32 / selp.b64
-    cases.append(simple_int_kernel("I20", "selp", "selp.b32 / selp.b64",
-                                   "setp.eq.s32 %p0, %r0, %r1;\n    selp.b32 %r2, %r0, %r1, %p0;",
-                                   regs=".reg .s32 %r0, %r1, %r2;\n    .reg .pred %p0;",
-                                   setup="mov.s32 %r0, 42;\nmov.s32 %r1, 7;"))
+    # Keep exactly one target PTX statement per case so source-line attribution
+    # yields an unambiguous PTX -> SASS sequence.
+    logic32_setup = "mov.b32 %r0, 0xFF00FF00;\nmov.b32 %r1, 0x0F0F0F0F;"
+    for case_id, mnemonic, instruction in (
+        ("I17A", "and_b32", "and.b32 %r2, %r0, %r1;"),
+        ("I17B", "or_b32", "or.b32 %r2, %r0, %r1;"),
+        ("I17C", "xor_b32", "xor.b32 %r2, %r0, %r1;"),
+    ):
+        cases.append(simple_int_kernel(
+            case_id, mnemonic, instruction.removesuffix(";"), instruction,
+            regs=".reg .b32 %r0, %r1, %r2;", setup=logic32_setup))
 
-    # I21: mov.b32 / mov.b64 (basic data movement)
-    cases.append(simple_int_kernel("I21", "mov_b32_b64", "mov.b32 / mov.b64 (data movement)",
-                                   "mov.b32 %r2, %r0;\n    mov.b64 %rd1, %rd0;",
-                                   regs=".reg .b32 %r0, %r2;\n    .reg .b64 %rd0, %rd1;",
-                                   setup="mov.b32 %r0, 42;\nmov.b64 %rd0, 42;"))
+    logic64_setup = (
+        "mov.b64 %rd0, 0xFF00FF00FF00FF00;\n"
+        "mov.b64 %rd1, 0x0F0F0F0F0F0F0F0F;"
+    )
+    for case_id, mnemonic, instruction in (
+        ("I18A", "and_b64", "and.b64 %rd2, %rd0, %rd1;"),
+        ("I18B", "or_b64", "or.b64 %rd2, %rd0, %rd1;"),
+    ):
+        cases.append(simple_int_kernel(
+            case_id, mnemonic, instruction.removesuffix(";"), instruction,
+            regs=".reg .b64 %rd0, %rd1, %rd2;", setup=logic64_setup))
+
+    compare_setup = "mov.s32 %r0, 42;\nmov.s32 %r1, 7;"
+    for case_id, mnemonic, instruction, predicate in (
+        ("I19A", "setp_eq_s32", "setp.eq.s32 %p0, %r0, %r1;", "%p0"),
+        ("I19B", "setp_lt_s32", "setp.lt.s32 %p0, %r0, %r1;", "%p0"),
+    ):
+        cases.append(simple_int_kernel(
+            case_id, mnemonic, instruction.removesuffix(";"), instruction,
+            regs=f".reg .s32 %r0, %r1;\n    .reg .pred {predicate};",
+            setup=compare_setup))
+
+    cases.append(simple_int_kernel(
+        "I20", "selp_b32", "selp.b32", "selp.b32 %r2, %r0, %r1, %p0;",
+        regs=".reg .s32 %r0, %r1, %r2;\n    .reg .pred %p0;",
+        setup=compare_setup + "\nsetp.eq.s32 %p0, %r0, %r1;"))
+
+    cases.append(simple_int_kernel(
+        "I21A", "mov_b32", "mov.b32 (data movement)", "mov.b32 %r1, %r0;",
+        regs=".reg .b32 %r0, %r1;", setup="mov.b32 %r0, 42;"))
+    cases.append(simple_int_kernel(
+        "I21B", "mov_b64", "mov.b64 (data movement)", "mov.b64 %rd1, %rd0;",
+        regs=".reg .b64 %rd0, %rd1;", setup="mov.b64 %rd0, 42;"))
 
     return cases
 
@@ -1067,7 +1276,7 @@ def gen_fp_cases() -> list[PTXTestCase]:
 
     {setup}
 
-    // === 待测指令 ===
+    // === target instruction ===
     {instr}
 
     ret;
@@ -1104,13 +1313,23 @@ def gen_fp_cases() -> list[PTXTestCase]:
         ".reg .f64 %fd0, %fd1, %fd2;",
         "mov.f64 %fd0, 0d3FF0000000000000;\nmov.f64 %fd1, 0d4000000000000000;\nmov.f64 %fd2, 0d0000000000000000;"))
 
-    cases.append(fp_kernel("FP07", "max_min_f32", "max.f32 / min.f32",
-        "max.f32 %f2, %f0, %f1;\n    min.f32 %f2, %f0, %f1;",
+    cases.append(fp_kernel("FP07A", "max_f32", "max.f32",
+        "max.f32 %f2, %f0, %f1;",
         ".reg .f32 %f0, %f1, %f2;",
         "mov.f32 %f0, 0f3F800000;\nmov.f32 %f1, 0f40000000;"))
 
-    cases.append(fp_kernel("FP08", "abs_neg_f32", "abs.f32 / neg.f32",
-        "abs.f32 %f1, %f0;\n    neg.f32 %f1, %f0;",
+    cases.append(fp_kernel("FP07B", "min_f32", "min.f32",
+        "min.f32 %f2, %f0, %f1;",
+        ".reg .f32 %f0, %f1, %f2;",
+        "mov.f32 %f0, 0f3F800000;\nmov.f32 %f1, 0f40000000;"))
+
+    cases.append(fp_kernel("FP08A", "abs_f32", "abs.f32",
+        "abs.f32 %f1, %f0;",
+        ".reg .f32 %f0, %f1;",
+        "mov.f32 %f0, 0fBF800000;"))
+
+    cases.append(fp_kernel("FP08B", "neg_f32", "neg.f32",
+        "neg.f32 %f1, %f0;",
         ".reg .f32 %f0, %f1;",
         "mov.f32 %f0, 0fBF800000;"))
 
@@ -1175,7 +1394,7 @@ def gen_cvt_cases() -> list[PTXTestCase]:
 
     {setup}
 
-    // === 待测指令 ===
+    // === target instruction ===
     {instr}
 
     ret;
@@ -1224,12 +1443,12 @@ def gen_cvt_cases() -> list[PTXTestCase]:
 
     cases.append(cvt_kernel("C09", "cvt_bf16_f32", "cvt.rn.bf16.f32 (f32->bf16)",
         "cvt.rn.bf16.f32 %bh0, %f0;",
-        ".reg .f32 %f0;\n    .reg .bf16 %bh0;",
+        ".reg .f32 %f0;\n    .reg .b16 %bh0;",
         "mov.f32 %f0, 0f3F800000;"))
 
     cases.append(cvt_kernel("C10", "cvt_f32_bf16", "cvt.f32.bf16 (bf16->f32)",
         "cvt.f32.bf16 %f0, %bh0;",
-        ".reg .bf16 %bh0;\n    .reg .f32 %f0;",
+        ".reg .b16 %bh0;\n    .reg .f32 %f0;",
         "mov.b16 %bh0, 0x3F80;"))
 
     # C11: cvt.rn.f16x2.f32 (packed F32->F16x2, epilogue critical)
@@ -1264,7 +1483,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
 .visible .entry test_ld_shared_b32() {
     .reg .u32 %r0;
 
-    // === 待测指令 ===
+    // === target instruction ===
     ld.shared.b32 %r0, [smem_data];
 
     ret;
@@ -1281,7 +1500,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
 .visible .entry test_ld_shared_b64() {
     .reg .b64 %rd0;
 
-    // === 待测指令 ===
+    // === target instruction ===
     ld.shared.b64 %rd0, [smem_data64];
 
     ret;
@@ -1298,7 +1517,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
 .visible .entry test_ld_shared_b128() {
     .reg .b32 %r0, %r1, %r2, %r3;
 
-    // === 待测指令 ===
+    // === target instruction ===
     ld.shared.v4.b32 {%r0, %r1, %r2, %r3}, [smem_data128];
 
     ret;
@@ -1316,7 +1535,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
     .reg .u32 %r0;
     mov.u32 %r0, 42;
 
-    // === 待测指令 ===
+    // === target instruction ===
     st.shared.b32 [smem_data], %r0;
 
     ret;
@@ -1334,7 +1553,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
     .reg .b64 %rd0;
     mov.b64 %rd0, 42;
 
-    // === 待测指令 ===
+    // === target instruction ===
     st.shared.b64 [smem_data64], %rd0;
 
     ret;
@@ -1355,7 +1574,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
     mov.b32 %r2, 3;
     mov.b32 %r3, 4;
 
-    // === 待测指令 ===
+    // === target instruction ===
     st.shared.v4.b32 [smem_data128], {%r0, %r1, %r2, %r3};
 
     ret;
@@ -1375,7 +1594,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
 
     ld.param.u64 %addr, [p_addr];
 
-    // === 待测指令 ===
+    // === target instruction ===
     ld.global.b32 %r0, [%addr];
 
     ret;
@@ -1395,7 +1614,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
 
     ld.param.u64 %addr, [p_addr];
 
-    // === 待测指令 ===
+    // === target instruction ===
     ld.global.b64 %rd0, [%addr];
 
     ret;
@@ -1415,7 +1634,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
 
     ld.param.u64 %addr, [p_addr];
 
-    // === 待测指令 ===
+    // === target instruction ===
     ld.global.v4.b32 {%r0, %r1, %r2, %r3}, [%addr];
 
     ret;
@@ -1436,7 +1655,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
     ld.param.u64 %addr, [p_addr];
     mov.u32 %r0, 42;
 
-    // === 待测指令 ===
+    // === target instruction ===
     st.global.b32 [%addr], %r0;
 
     ret;
@@ -1457,7 +1676,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
     ld.param.u64 %addr, [p_addr];
     mov.b64 %rd0, 42;
 
-    // === 待测指令 ===
+    // === target instruction ===
     st.global.b64 [%addr], %rd0;
 
     ret;
@@ -1474,7 +1693,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
 ) {
     .reg .u64 %rd0;
 
-    // === 待测指令 ===
+    // === target instruction ===
     ld.param.u64 %rd0, [p_val];
 
     ret;
@@ -1491,7 +1710,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
 .visible .entry test_ld_shared_v2b32() {
     .reg .b32 %r0, %r1;
 
-    // === 待测指令 ===
+    // === target instruction ===
     ld.shared.v2.b32 {%r0, %r1}, [smem_data];
 
     ret;
@@ -1508,7 +1727,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
 .visible .entry test_ld_shared_v2b64() {
     .reg .b64 %rd0, %rd1;
 
-    // === 待测指令 ===
+    // === target instruction ===
     ld.shared.v2.b64 {%rd0, %rd1}, [smem_data64];
 
     ret;
@@ -1527,7 +1746,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
     mov.b32 %r0, 1;
     mov.b32 %r1, 2;
 
-    // === 待测指令 ===
+    // === target instruction ===
     st.shared.v2.b32 [smem_data], {%r0, %r1};
 
     ret;
@@ -1546,7 +1765,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
     mov.b64 %rd0, 1;
     mov.b64 %rd1, 2;
 
-    // === 待测指令 ===
+    // === target instruction ===
     st.shared.v2.b64 [smem_data64], {%rd0, %rd1};
 
     ret;
@@ -1566,7 +1785,7 @@ def gen_lsu_cases() -> list[PTXTestCase]:
 
     ld.param.u64 %addr, [p_addr];
 
-    // === 待测指令 ===
+    // === target instruction ===
     ld.global.nc.b32 %r0, [%addr];
 
     ret;
@@ -1591,7 +1810,7 @@ def gen_special_cases() -> list[PTXTestCase]:
 .visible .entry test_mov_tid_x() {
     .reg .u32 %r0;
 
-    // === 待测指令 ===
+    // === target instruction ===
     mov.u32 %r0, %tid.x;
 
     ret;
@@ -1606,7 +1825,7 @@ def gen_special_cases() -> list[PTXTestCase]:
 .visible .entry test_mov_ctaid_x() {
     .reg .u32 %r0;
 
-    // === 待测指令 ===
+    // === target instruction ===
     mov.u32 %r0, %ctaid.x;
 
     ret;
@@ -1621,7 +1840,7 @@ def gen_special_cases() -> list[PTXTestCase]:
 .visible .entry test_mov_laneid() {
     .reg .u32 %r0;
 
-    // === 待测指令 ===
+    // === target instruction ===
     mov.u32 %r0, %laneid;
 
     ret;
@@ -1634,7 +1853,7 @@ def gen_special_cases() -> list[PTXTestCase]:
         description="bra (unconditional branch)",
         body=HEADER + """
 .visible .entry test_bra_uncond() {
-    // === 待测指令 ===
+    // === target instruction ===
     bra END;
 END:
     ret;
@@ -1653,7 +1872,7 @@ END:
     mov.u32 %r0, %tid.x;
     setp.eq.u32 %p0, %r0, 0;
 
-    // === 待测指令 ===
+    // === target instruction ===
     @%p0 bra END;
 END:
     ret;
@@ -1666,7 +1885,7 @@ END:
         description="ret",
         body=HEADER + """
 .visible .entry test_ret() {
-    // === 待测指令 ===
+    // === target instruction ===
     ret;
 }
 """))
@@ -1695,7 +1914,7 @@ def gen_atomic_cases() -> list[PTXTestCase]:
     ld.param.u64 %addr, [p_addr];
     mov.u32 %r0, 1;
 
-    // === 待测指令 ===
+    // === target instruction ===
     atom.global.add.u32 %old, [%addr], %r0;
 
     ret;
@@ -1716,7 +1935,7 @@ def gen_atomic_cases() -> list[PTXTestCase]:
     ld.param.u64 %addr, [p_addr];
     mov.u64 %val, 1;
 
-    // === 待测指令 ===
+    // === target instruction ===
     atom.global.add.u64 %old, [%addr], %val;
 
     ret;
@@ -1738,7 +1957,7 @@ def gen_atomic_cases() -> list[PTXTestCase]:
     mov.b32 %cmp, 0;
     mov.b32 %new_val, 1;
 
-    // === 待测指令 ===
+    // === target instruction ===
     atom.global.cas.b32 %old, [%addr], %cmp, %new_val;
 
     ret;
@@ -1760,7 +1979,7 @@ def gen_atomic_cases() -> list[PTXTestCase]:
     mov.b64 %cmp, 0;
     mov.b64 %new_val, 1;
 
-    // === 待测指令 ===
+    // === target instruction ===
     atom.global.cas.b64 %old, [%addr], %cmp, %new_val;
 
     ret;
@@ -1778,7 +1997,7 @@ def gen_atomic_cases() -> list[PTXTestCase]:
     .reg .u32 %r0, %old;
     mov.u32 %r0, 1;
 
-    // === 待测指令 ===
+    // === target instruction ===
     atom.shared.add.u32 %old, [smem_atomic], %r0;
 
     ret;
@@ -1799,7 +2018,7 @@ def gen_atomic_cases() -> list[PTXTestCase]:
     ld.param.u64 %addr, [p_addr];
     mov.u32 %r0, 1;
 
-    // === 待测指令 ===
+    // === target instruction ===
     red.global.add.u32 [%addr], %r0;
 
     ret;
@@ -1827,7 +2046,7 @@ def gen_half_precision_cases() -> list[PTXTestCase]:
 
     {setup}
 
-    // === 待测指令 ===
+    // === target instruction ===
     {instr}
 
     ret;
@@ -1887,12 +2106,12 @@ def gen_half_precision_cases() -> list[PTXTestCase]:
     cases.append(hp_kernel("H11", "neg_f16x2", "neg.f16x2",
         "neg.f16x2 %v1, %v0;",
         ".reg .b32 %v0, %v1;",
-        "mov.b32 %v0, 0x3C003C00;"))
+        "mov.u32 %v0, %clock;"))
 
     cases.append(hp_kernel("H12", "abs_f16x2", "abs.f16x2",
         "abs.f16x2 %v1, %v0;",
         ".reg .b32 %v0, %v1;",
-        "mov.b32 %v0, 0xBC00BC00;"))
+        "mov.u32 %v0, %clock;"))
 
     cases.append(hp_kernel("H13", "max_f16", "max.f16",
         "max.f16 %h2, %h0, %h1;",
@@ -1930,7 +2149,7 @@ def gen_bf16_cases() -> list[PTXTestCase]:
 
     {setup}
 
-    // === 待测指令 ===
+    // === target instruction ===
     {instr}
 
     ret;
@@ -1939,22 +2158,22 @@ def gen_bf16_cases() -> list[PTXTestCase]:
 
     cases.append(bf_kernel("BF01", "add_bf16", "add.bf16",
         "add.bf16 %b2, %b0, %b1;",
-        ".reg .bf16 %b0, %b1, %b2;",
+        ".reg .b16 %b0, %b1, %b2;",
         "mov.b16 %b0, 0x3F80;\nmov.b16 %b1, 0x4000;"))
 
     cases.append(bf_kernel("BF02", "sub_bf16", "sub.bf16",
         "sub.bf16 %b2, %b0, %b1;",
-        ".reg .bf16 %b0, %b1, %b2;",
+        ".reg .b16 %b0, %b1, %b2;",
         "mov.b16 %b0, 0x4000;\nmov.b16 %b1, 0x3F80;"))
 
     cases.append(bf_kernel("BF03", "mul_bf16", "mul.bf16",
         "mul.bf16 %b2, %b0, %b1;",
-        ".reg .bf16 %b0, %b1, %b2;",
+        ".reg .b16 %b0, %b1, %b2;",
         "mov.b16 %b0, 0x3F80;\nmov.b16 %b1, 0x4000;"))
 
     cases.append(bf_kernel("BF04", "fma_bf16", "fma.rn.bf16",
         "fma.rn.bf16 %b2, %b0, %b1, %b2;",
-        ".reg .bf16 %b0, %b1, %b2;",
+        ".reg .b16 %b0, %b1, %b2;",
         "mov.b16 %b0, 0x3F80;\nmov.b16 %b1, 0x4000;\nmov.b16 %b2, 0x0000;"))
 
     cases.append(bf_kernel("BF05", "add_bf16x2", "add.bf16x2",
@@ -1997,18 +2216,23 @@ def gen_bf16_cases() -> list[PTXTestCase]:
 def gen_warp_comm_cases() -> list[PTXTestCase]:
     cases = []
 
-    def wc_kernel(case_id, mnemonic, desc, instr, regs, setup):
+    def wc_kernel(case_id, mnemonic, desc, instr, regs, setup,
+                  unsupported_reason=""):
+        unsupported_marker = (
+            f"// EXPECTED_UNSUPPORTED_BY_PTX_ISA: {unsupported_reason}\n"
+            if unsupported_reason else ""
+        )
         return PTXTestCase(
             batch="13_warp_comm", case_id=case_id, mnemonic=mnemonic,
             description=desc,
             body=HEADER + f"""
 // {case_id}: {desc}
-.visible .entry test_{mnemonic}() {{
+{unsupported_marker}.visible .entry test_{mnemonic}() {{
     {regs}
 
     {setup}
 
-    // === 待测指令 ===
+    // === target instruction ===
     {instr}
 
     ret;
@@ -2047,10 +2271,11 @@ def gen_warp_comm_cases() -> list[PTXTestCase]:
         ".reg .s32 %r0, %r1;",
         "mov.s32 %r0, %tid.x;"))
 
-    cases.append(wc_kernel("W07", "redux_add_f32", "redux.sync.add.f32 (sm_100 new)",
+    cases.append(wc_kernel("W07", "redux_add_f32", "redux.sync.add.f32 (negative test)",
         "redux.sync.add.f32 %f1, %f0, 0xFFFFFFFF;",
         ".reg .f32 %f0, %f1;",
-        "mov.f32 %f0, 0f3F800000;"))
+        "mov.f32 %f0, 0f3F800000;",
+        "PTX ISA 9.3 permits .add only with .u32/.s32; .f32 permits only .min/.max"))
 
     cases.append(wc_kernel("W08", "redux_max_f32", "redux.sync.max.f32 (sm_100 new)",
         "redux.sync.max.f32 %f1, %f0, 0xFFFFFFFF;",
@@ -2065,18 +2290,18 @@ def gen_warp_comm_cases() -> list[PTXTestCase]:
     # vote.sync
     cases.append(wc_kernel("W10", "vote_all", "vote.sync.all.pred",
         "vote.sync.all.pred %p1, %p0, 0xFFFFFFFF;",
-        ".reg .pred %p0, %p1;",
-        "setp.gt.u32 %p0, %tid.x, 0;"))
+        ".reg .pred %p0, %p1;\n    .reg .u32 %lane;",
+        "mov.u32 %lane, %tid.x;\nsetp.gt.u32 %p0, %lane, 0;"))
 
     cases.append(wc_kernel("W11", "vote_any", "vote.sync.any.pred",
         "vote.sync.any.pred %p1, %p0, 0xFFFFFFFF;",
-        ".reg .pred %p0, %p1;",
-        "setp.eq.u32 %p0, %tid.x, 0;"))
+        ".reg .pred %p0, %p1;\n    .reg .u32 %lane;",
+        "mov.u32 %lane, %tid.x;\nsetp.eq.u32 %p0, %lane, 0;"))
 
     cases.append(wc_kernel("W12", "vote_ballot", "vote.sync.ballot.b32",
         "vote.sync.ballot.b32 %r0, %p0, 0xFFFFFFFF;",
-        ".reg .pred %p0;\n    .reg .b32 %r0;",
-        "setp.gt.u32 %p0, %tid.x, 15;"))
+        ".reg .pred %p0;\n    .reg .b32 %r0;\n    .reg .u32 %lane;",
+        "mov.u32 %lane, %tid.x;\nsetp.gt.u32 %p0, %lane, 15;"))
 
     # match.sync
     cases.append(wc_kernel("W13", "match_any", "match.sync.any.b32",
@@ -2088,7 +2313,7 @@ def gen_warp_comm_cases() -> list[PTXTestCase]:
     cases.append(wc_kernel("W14", "elect_sync", "elect.sync (leader election)",
         "elect.sync %r0|%p0, 0xFFFFFFFF;",
         ".reg .b32 %r0;\n    .reg .pred %p0;",
-        ""))
+        "// no setup"))
 
     return cases
 
@@ -2111,7 +2336,7 @@ def gen_bit_ops_cases() -> list[PTXTestCase]:
 
     {setup}
 
-    // === 待测指令 ===
+    // === target instruction ===
     {instr}
 
     ret;
@@ -2168,8 +2393,8 @@ def gen_bit_ops_cases() -> list[PTXTestCase]:
         ".reg .b32 %r0, %r1;\n    .reg .u32 %r2;",
         "mov.b32 %r0, 0xFF00FF00;\nmov.b32 %r1, 3;"))
 
-    cases.append(bit_kernel("BT11", "bmsk_b32", "bmsk.b32 (bitmask generation)",
-        "bmsk.b32 %r2, %r0, %r1;",
+    cases.append(bit_kernel("BT11", "bmsk_b32", "bmsk.clamp.b32 (bitmask generation)",
+        "bmsk.clamp.b32 %r2, %r0, %r1;",
         ".reg .b32 %r0, %r1, %r2;",
         "mov.b32 %r0, 4;\nmov.b32 %r1, 8;"))
 
@@ -2193,11 +2418,11 @@ def gen_cluster_dsmem_cases() -> list[PTXTestCase]:
 
 .visible .entry test_mapa() {
     .reg .u32 %r0, %rank;
-    .reg .u64 %addr;
+    .reg .u32 %addr;
 
     mov.u32 %rank, 0;
 
-    // === 待测指令 ===
+    // === target instruction ===
     mapa.shared::cluster.u32 %addr, smem_data, %rank;
 
     ret;
@@ -2214,12 +2439,12 @@ def gen_cluster_dsmem_cases() -> list[PTXTestCase]:
 
 .visible .entry test_getctarank() {
     .reg .u32 %rank;
-    .reg .u64 %addr;
+    .reg .u32 %addr;
 
-    mov.u64 %addr, smem_data;
+    mov.u32 %addr, smem_data;
 
-    // === 待测指令 ===
-    getctarank.shared::cluster.u32 %rank, [%addr];
+    // === target instruction ===
+    getctarank.shared::cluster.u32 %rank, %addr;
 
     ret;
 }
@@ -2236,7 +2461,7 @@ def gen_cluster_dsmem_cases() -> list[PTXTestCase]:
 .visible .entry test_cvta_shared_cta() {
     .reg .u64 %gen_addr;
 
-    // === 待测指令 ===
+    // === target instruction ===
     cvta.shared::cta.u64 %gen_addr, smem_data;
 
     ret;
@@ -2257,7 +2482,7 @@ def gen_cluster_dsmem_cases() -> list[PTXTestCase]:
 
     ld.param.u64 %addr, [p_addr];
 
-    // === 待测指令 ===
+    // === target instruction ===
     isspacep.shared %is_shared, %addr;
 
     ret;
@@ -2274,12 +2499,12 @@ def gen_cluster_dsmem_cases() -> list[PTXTestCase]:
 
 .visible .entry test_ld_shared_cluster() {
     .reg .u32 %r0, %rank;
-    .reg .u64 %remote_addr;
+    .reg .u32 %remote_addr;
 
     mov.u32 %rank, 0;
     mapa.shared::cluster.u32 %remote_addr, smem_data, %rank;
 
-    // === 待测指令 ===
+    // === target instruction ===
     ld.shared::cluster.b32 %r0, [%remote_addr];
 
     ret;
@@ -2296,13 +2521,13 @@ def gen_cluster_dsmem_cases() -> list[PTXTestCase]:
 
 .visible .entry test_st_shared_cluster() {
     .reg .u32 %r0, %rank;
-    .reg .u64 %remote_addr;
+    .reg .u32 %remote_addr;
 
     mov.u32 %r0, 42;
     mov.u32 %rank, 0;
     mapa.shared::cluster.u32 %remote_addr, smem_data, %rank;
 
-    // === 待测指令 ===
+    // === target instruction ===
     st.shared::cluster.b32 [%remote_addr], %r0;
 
     ret;
@@ -2326,7 +2551,7 @@ def gen_megakernel_ctrl_cases() -> list[PTXTestCase]:
         body=HEADER + """
 // MK01: bar.warp.sync
 .visible .entry test_bar_warp_sync() {
-    // === 待测指令 ===
+    // === target instruction ===
     bar.warp.sync 0xFFFFFFFF;
 
     ret;
@@ -2340,7 +2565,7 @@ def gen_megakernel_ctrl_cases() -> list[PTXTestCase]:
         body=HEADER + """
 // MK02: nanosleep
 .visible .entry test_nanosleep() {
-    // === 待测指令 ===
+    // === target instruction ===
     nanosleep.u32 100;
 
     ret;
@@ -2354,7 +2579,7 @@ def gen_megakernel_ctrl_cases() -> list[PTXTestCase]:
         body=HEADER + """
 // MK03: griddepcontrol.launch_dependents
 .visible .entry test_griddep_launch() {
-    // === 待测指令 ===
+    // === target instruction ===
     griddepcontrol.launch_dependents;
 
     ret;
@@ -2368,7 +2593,7 @@ def gen_megakernel_ctrl_cases() -> list[PTXTestCase]:
         body=HEADER + """
 // MK04: griddepcontrol.wait
 .visible .entry test_griddep_wait() {
-    // === 待测指令 ===
+    // === target instruction ===
     griddepcontrol.wait;
 
     ret;
@@ -2387,7 +2612,7 @@ def gen_megakernel_ctrl_cases() -> list[PTXTestCase]:
     .reg .u64 %addr;
     ld.param.u64 %addr, [p_addr];
 
-    // === 待测指令 ===
+    // === target instruction ===
     prefetch.global.L2 [%addr];
 
     ret;
@@ -2415,7 +2640,7 @@ def gen_quantization_cases() -> list[PTXTestCase]:
 
     {setup}
 
-    // === 待测指令 ===
+    // === target instruction ===
     {instr}
 
     ret;
@@ -2445,13 +2670,13 @@ def gen_quantization_cases() -> list[PTXTestCase]:
         "mov.u32 %r0, 0x00010002;\nmov.u32 %r1, 0x00030004;\nmov.u32 %r2, 0;"))
 
     # cvt.pack
-    cases.append(q_kernel("Q05", "cvt_pack_s8", "cvt.pack.sat.s8.s32 (INT8 pack)",
-        "cvt.pack.sat.s8.s32 %r2, %r0, %r1, 0;",
+    cases.append(q_kernel("Q05", "cvt_pack_s8", "cvt.pack.sat.s8.s32.b32 (INT8 pack)",
+        "cvt.pack.sat.s8.s32.b32 %r2, %r0, %r1, 0;",
         ".reg .s32 %r0, %r1;\n    .reg .b32 %r2;",
         "mov.s32 %r0, 42;\nmov.s32 %r1, -10;"))
 
-    cases.append(q_kernel("Q06", "cvt_pack_u8", "cvt.pack.sat.u8.s32 (UINT8 pack)",
-        "cvt.pack.sat.u8.s32 %r2, %r0, %r1, 0;",
+    cases.append(q_kernel("Q06", "cvt_pack_u8", "cvt.pack.sat.u8.s32.b32 (UINT8 pack)",
+        "cvt.pack.sat.u8.s32.b32 %r2, %r0, %r1, 0;",
         ".reg .s32 %r0, %r1;\n    .reg .b32 %r2;",
         "mov.s32 %r0, 200;\nmov.s32 %r1, 100;"))
 
@@ -2487,7 +2712,7 @@ def gen_activation_cases() -> list[PTXTestCase]:
 
     {setup}
 
-    // === 待测指令 ===
+    // === target instruction ===
     {instr}
 
     ret;
@@ -2506,7 +2731,7 @@ def gen_activation_cases() -> list[PTXTestCase]:
 
     cases.append(act_kernel("ACT03", "tanh_bf16", "tanh.approx.bf16",
         "tanh.approx.bf16 %b1, %b0;",
-        ".reg .bf16 %b0, %b1;",
+        ".reg .b16 %b0, %b1;",
         "mov.b16 %b0, 0x3F80;"))
 
     cases.append(act_kernel("ACT04", "tanh_bf16x2", "tanh.approx.bf16x2 (vectorized)",
@@ -2526,7 +2751,7 @@ def gen_activation_cases() -> list[PTXTestCase]:
 
     cases.append(act_kernel("ACT07", "ex2_bf16", "ex2.approx.ftz.bf16 (BF16 softmax)",
         "ex2.approx.ftz.bf16 %b1, %b0;",
-        ".reg .bf16 %b0, %b1;",
+        ".reg .b16 %b0, %b1;",
         "mov.b16 %b0, 0x3F80;"))
 
     cases.append(act_kernel("ACT08", "tanh_f32", "tanh.approx.f32 (sm_100 native)",
@@ -2562,6 +2787,15 @@ def main():
     all_cases.extend(gen_megakernel_ctrl_cases())
     all_cases.extend(gen_quantization_cases())
     all_cases.extend(gen_activation_cases())
+
+    expected_paths = {
+        BASE_DIR / case.batch / f"{case.case_id}_{case.mnemonic}.ptx"
+        for case in all_cases
+    }
+    stale_paths = sorted(set(BASE_DIR.rglob("*.ptx")) - expected_paths)
+    for stale_path in stale_paths:
+        stale_path.unlink()
+        print(f"  [removed stale] {stale_path.relative_to(BASE_DIR)}")
 
     print(f"Generating {len(all_cases)} PTX test cases...")
     for case in all_cases:

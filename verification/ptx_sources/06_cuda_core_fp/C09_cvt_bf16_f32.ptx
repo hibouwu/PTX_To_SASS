@@ -1,16 +1,24 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 
 // C09: cvt.rn.bf16.f32 (f32->bf16)
 .visible .entry test_cvt_bf16_f32() {
     .reg .f32 %f0;
-    .reg .bf16 %bh0;
+    .reg .b16 %bh0;
 
     mov.f32 %f0, 0f3F800000;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     cvt.rn.bf16.f32 %bh0, %f0;
+    // === end target instruction ===
+    .loc 1 200 0
+    st.global.b16 [__ptx_sink+0], %bh0;
+    .loc 1 300 0
 
     ret;
 }

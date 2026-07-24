@@ -1,15 +1,23 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 
 // H12: abs.f16x2
 .visible .entry test_abs_f16x2() {
     .reg .b32 %v0, %v1;
 
-    mov.b32 %v0, 0xBC00BC00;
+    mov.u32 %v0, %clock;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     abs.f16x2 %v1, %v0;
+    // === end target instruction ===
+    .loc 1 200 0
+    st.global.b32 [__ptx_sink+0], %v1;
+    .loc 1 300 0
 
     ret;
 }

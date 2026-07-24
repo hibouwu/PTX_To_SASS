@@ -1,6 +1,7 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
 
 // T14: tcgen05.mma.cta_group::1.kind::f8f6f4
 .visible .entry test_tcgen05_mma_cg1_f8f6f4(
@@ -9,17 +10,29 @@
     .param .u64 p_smem_desc_b,
     .param .u32 p_idesc
 ) {
-    .reg .u32 %taddr;
-    .reg .u64 %desc_a, %desc_b;
-    .reg .u32 %idesc;
+    .reg .b32 %taddr;
+    .reg .b64 %desc_a, %desc_b;
+    .reg .b32 %idesc;
+    .reg .b32 %mask<4>;
+    .reg .pred %enable;
 
-    ld.param.u32 %taddr, [p_taddr];
-    ld.param.u64 %desc_a, [p_smem_desc_a];
-    ld.param.u64 %desc_b, [p_smem_desc_b];
-    ld.param.u32 %idesc, [p_idesc];
+    ld.param.b32 %taddr, [p_taddr];
+    ld.param.b64 %desc_a, [p_smem_desc_a];
+    ld.param.b64 %desc_b, [p_smem_desc_b];
+    ld.param.b32 %idesc, [p_idesc];
+    mov.u32 %mask0, 0;
+    mov.u32 %mask1, 0;
+    mov.u32 %mask2, 0;
+    mov.u32 %mask3, 0;
+    setp.ne.u32 %enable, %idesc, 0;
 
-    // === 待测指令 ===
-    tcgen05.mma.cta_group::1.kind::f8f6f4 [%taddr], %desc_a, %desc_b, %idesc, 0;
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
+    tcgen05.mma.cta_group::1.kind::f8f6f4 [%taddr], %desc_a, %desc_b, %idesc, {%mask0, %mask1, %mask2, %mask3}, %enable;
+    // === end target instruction ===
+    .loc 1 200 0
+    .loc 1 300 0
 
     ret;
 }

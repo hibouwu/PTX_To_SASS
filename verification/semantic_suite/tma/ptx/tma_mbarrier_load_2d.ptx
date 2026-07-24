@@ -1,0 +1,83 @@
+.version 8.7
+.target sm_100a
+.address_size 64
+.file 1 "tma_mbarrier_load_2d.ptx"
+
+// Semantic (not mapping) test:
+//   one initializer -> mbarrier.init -> CTA publication -> TMA issue
+//   -> arrive.expect_tx -> TMA load's implicit complete_tx -> try_wait loop
+//   -> shared-memory use.
+//
+// The tensor map describes a 16 x 16 u32 tile, so the transaction count is
+// exactly 16 * 16 * sizeof(u32) == 1024 bytes.
+.shared .align 128 .b8 smem_tile[1024];
+.shared .align 8 .b64 smem_bar;
+
+.visible .entry semantic_tma_mbarrier_load_2d(
+    .param .u64 p_desc,
+    .param .u64 p_output,
+    .param .u64 p_status
+) {
+    .reg .pred %p<3>;
+    .reg .u32 %r<9>;
+    .reg .u64 %rd<5>;
+
+    mov.u32 %r0, %tid.x;
+    setp.eq.u32 %p0, %r0, 0;
+
+    // Exactly one thread initializes a barrier whose sole arrive-on operation
+    // below is also issued by exactly one thread.  Publish initialization to
+    // the whole CTA before any other thread can observe the object.
+    @%p0 mbarrier.init.shared::cta.b64 [smem_bar], 1;
+    bar.sync 0;
+    @!%p0 bra TMA_LOAD_DONE;
+
+    ld.param.u64 %rd0, [p_desc];
+    ld.param.u64 %rd1, [p_output];
+    ld.param.u64 %rd2, [p_status];
+
+    // The host copied this opaque tensor map into device global memory.  Its
+    // async-proxy access therefore needs an explicit tensormap acquire fence.
+    fence.proxy.tensormap::generic.acquire.sys [%rd0], 128;
+
+    // Make the initialized mbarrier visible to the asynchronous proxy.
+    fence.proxy.async.shared::cta;
+
+    mov.u32 %r1, 0;
+    mov.u32 %r2, 0;
+    cp.async.bulk.tensor.2d.shared::cta.global.tile.mbarrier::complete_tx::bytes
+        [smem_tile], [%rd0, {%r1, %r2}], [smem_bar];
+    // Keep this issue -> arrive.expect_tx ordering: it is the canonical TMA
+    // protocol used by NVIDIA's CUDA Programming Guide.
+    mbarrier.arrive.expect_tx.release.cta.shared::cta.b64 %rd3, [smem_bar], 1024;
+
+TMA_WAIT:
+    mbarrier.try_wait.acquire.cta.shared::cta.b64 %p1, [smem_bar], %rd3;
+    @!%p1 bra TMA_WAIT;
+
+    // A successful acquire wait makes the TMA writes observable here.  Copy
+    // every element out so the host can check the full 16 x 16 layout, not
+    // merely a permutation-insensitive checksum.
+    mov.u32 %r3, 0;
+TMA_COPY_OUT:
+    mul.lo.u32 %r5, %r3, 4;
+    cvta.shared.u64 %rd3, smem_tile;
+    cvt.u64.u32 %rd4, %r5;
+    add.u64 %rd3, %rd3, %rd4;
+    ld.shared.u32 %r6, [%rd3];
+    add.u64 %rd3, %rd1, %rd4;
+    st.global.u32 [%rd3], %r6;
+    add.u32 %r3, %r3, 1;
+    setp.lt.u32 %p2, %r3, 256;
+    @%p2 bra TMA_COPY_OUT;
+
+    mov.u32 %r8, 0xA11CE001;
+    st.global.u32 [%rd2], %r8;
+
+    // This test does not reuse the shared storage, but invalidate the object
+    // explicitly to close its lifecycle before the CTA exits.
+    mbarrier.inval.shared::cta.b64 [smem_bar];
+
+TMA_LOAD_DONE:
+    ret;
+}

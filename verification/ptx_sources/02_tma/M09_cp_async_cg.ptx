@@ -1,6 +1,7 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
 
 // M09: cp.async.cg.shared.global (commit group variant)
 .shared .align 16 .u32 smem_data16[256];
@@ -11,8 +12,13 @@
     .reg .u64 %gaddr;
     ld.param.u64 %gaddr, [p_gaddr];
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     cp.async.cg.shared.global [smem_data16], [%gaddr], 16;
+    // === end target instruction ===
+    .loc 1 200 0
+    .loc 1 300 0
 
     ret;
 }

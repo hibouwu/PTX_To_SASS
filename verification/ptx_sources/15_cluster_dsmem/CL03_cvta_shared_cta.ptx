@@ -1,6 +1,8 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 
 // CL03: cvta.shared::cta.shared
 .shared .align 4 .u32 smem_data[256];
@@ -8,8 +10,14 @@
 .visible .entry test_cvta_shared_cta() {
     .reg .u64 %gen_addr;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     cvta.shared::cta.u64 %gen_addr, smem_data;
+    // === end target instruction ===
+    .loc 1 200 0
+    st.global.b64 [__ptx_sink+0], %gen_addr;
+    .loc 1 300 0
 
     ret;
 }

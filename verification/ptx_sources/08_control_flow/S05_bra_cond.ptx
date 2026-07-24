@@ -1,6 +1,7 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
 
 .visible .entry test_bra_cond() {
     .reg .u32 %r0;
@@ -9,8 +10,13 @@
     mov.u32 %r0, %tid.x;
     setp.eq.u32 %p0, %r0, 0;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     @%p0 bra END;
+    // === end target instruction ===
+    .loc 1 200 0
+    .loc 1 300 0
 END:
     ret;
 }

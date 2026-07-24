@@ -1,6 +1,7 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
 
 // MK05: prefetch.global.L2
 .visible .entry test_prefetch_global(
@@ -9,8 +10,13 @@
     .reg .u64 %addr;
     ld.param.u64 %addr, [p_addr];
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     prefetch.global.L2 [%addr];
+    // === end target instruction ===
+    .loc 1 200 0
+    .loc 1 300 0
 
     ret;
 }

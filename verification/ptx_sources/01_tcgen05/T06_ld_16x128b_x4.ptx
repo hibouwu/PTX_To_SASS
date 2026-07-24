@@ -1,18 +1,33 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 
 // T06: tcgen05.ld.sync.aligned.16x128b.x4.b32
 .visible .entry test_tcgen05_ld_16x128b_x4(
     .param .u32 p_taddr
 ) {
     .reg .u32 %taddr;
-    .reg .b32 %dst<16>;
+    .reg .b32 %dst<8>;
 
     ld.param.u32 %taddr, [p_taddr];
 
-    // === 待测指令 ===
-    tcgen05.ld.sync.aligned.16x128b.x4.b32 {%dst0, %dst1, %dst2, %dst3, %dst4, %dst5, %dst6, %dst7, %dst8, %dst9, %dst10, %dst11, %dst12, %dst13, %dst14, %dst15}, [%taddr];
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
+    tcgen05.ld.sync.aligned.16x128b.x4.b32 {%dst0, %dst1, %dst2, %dst3, %dst4, %dst5, %dst6, %dst7}, [%taddr];
+    // === end target instruction ===
+    .loc 1 200 0
+    st.global.b32 [__ptx_sink+0], %dst0;
+    st.global.b32 [__ptx_sink+4], %dst1;
+    st.global.b32 [__ptx_sink+8], %dst2;
+    st.global.b32 [__ptx_sink+12], %dst3;
+    st.global.b32 [__ptx_sink+16], %dst4;
+    st.global.b32 [__ptx_sink+20], %dst5;
+    st.global.b32 [__ptx_sink+24], %dst6;
+    st.global.b32 [__ptx_sink+28], %dst7;
+    .loc 1 300 0
 
     ret;
 }

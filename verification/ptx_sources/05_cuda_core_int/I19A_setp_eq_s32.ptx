@@ -1,0 +1,26 @@
+.version 8.7
+.target sm_100a
+.address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
+
+// I19A: setp.eq.s32 %p0, %r0, %r1
+.visible .entry test_setp_eq_s32() {
+    .reg .s32 %r0, %r1;
+    .reg .pred %p0;
+
+    mov.s32 %r0, 42;
+mov.s32 %r1, 7;
+
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
+    setp.eq.s32 %p0, %r0, %r1;
+    // === end target instruction ===
+    .loc 1 200 0
+    @%p0 st.global.u32 [__ptx_sink+0], 1;
+    @!%p0 st.global.u32 [__ptx_sink+0], 0;
+    .loc 1 300 0
+
+    ret;
+}

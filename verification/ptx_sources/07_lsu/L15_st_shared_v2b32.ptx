@@ -1,6 +1,7 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
 
 .shared .align 8 .u32 smem_data[256];
 
@@ -9,8 +10,13 @@
     mov.b32 %r0, 1;
     mov.b32 %r1, 2;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     st.shared.v2.b32 [smem_data], {%r0, %r1};
+    // === end target instruction ===
+    .loc 1 200 0
+    .loc 1 300 0
 
     ret;
 }

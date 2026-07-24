@@ -1,17 +1,25 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 
 // BF04: fma.rn.bf16
 .visible .entry test_fma_bf16() {
-    .reg .bf16 %b0, %b1, %b2;
+    .reg .b16 %b0, %b1, %b2;
 
     mov.b16 %b0, 0x3F80;
 mov.b16 %b1, 0x4000;
 mov.b16 %b2, 0x0000;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     fma.rn.bf16 %b2, %b0, %b1, %b2;
+    // === end target instruction ===
+    .loc 1 200 0
+    st.global.b16 [__ptx_sink+0], %b2;
+    .loc 1 300 0
 
     ret;
 }

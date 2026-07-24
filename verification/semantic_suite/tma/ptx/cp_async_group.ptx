@@ -1,0 +1,58 @@
+.version 8.7
+.target sm_100a
+.address_size 64
+.file 1 "cp_async_group.ptx"
+
+// Semantic test for the classic per-thread cp.async-group completion path.
+// It deliberately uses both M08's .ca form and M09's .cg form, then supplies
+// the otherwise-missing cp.async.commit_group + cp.async.wait_group 0 pair.
+.shared .align 16 .b8 smem_words[32];
+
+.visible .entry semantic_cp_async_group(
+    .param .u64 p_input,
+    .param .u64 p_output,
+    .param .u64 p_status
+) {
+    .reg .pred %p<1>;
+    .reg .u32 %r<9>;
+    .reg .u64 %rd<4>;
+
+    mov.u32 %r0, %tid.x;
+    setp.eq.u32 %p0, %r0, 0;
+    @!%p0 bra CP_ASYNC_DONE;
+
+    ld.param.u64 %rd0, [p_input];
+    ld.param.u64 %rd1, [p_output];
+    ld.param.u64 %rd2, [p_status];
+    add.u64 %rd3, %rd0, 16;
+
+    // Each copy is 16-byte aligned.  The pair belongs to the same per-thread
+    // classic async group, which is committed and then fully waited below.
+    cp.async.ca.shared.global [smem_words], [%rd0], 16;
+    cp.async.cg.shared.global [smem_words+16], [%rd3], 16;
+    cp.async.commit_group;
+    cp.async.wait_group 0;
+
+    // cp.async writes are visible to this issuing thread only after the wait.
+    ld.shared.u32 %r1, [smem_words];
+    ld.shared.u32 %r2, [smem_words+4];
+    ld.shared.u32 %r3, [smem_words+8];
+    ld.shared.u32 %r4, [smem_words+12];
+    ld.shared.u32 %r5, [smem_words+16];
+    ld.shared.u32 %r6, [smem_words+20];
+    ld.shared.u32 %r7, [smem_words+24];
+    ld.shared.u32 %r8, [smem_words+28];
+    st.global.u32 [%rd1], %r1;
+    st.global.u32 [%rd1+4], %r2;
+    st.global.u32 [%rd1+8], %r3;
+    st.global.u32 [%rd1+12], %r4;
+    st.global.u32 [%rd1+16], %r5;
+    st.global.u32 [%rd1+20], %r6;
+    st.global.u32 [%rd1+24], %r7;
+    st.global.u32 [%rd1+28], %r8;
+    mov.u32 %r0, 0xC0A57C01;
+    st.global.u32 [%rd2], %r0;
+
+CP_ASYNC_DONE:
+    ret;
+}

@@ -1,6 +1,8 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 
 // CL04: isspacep.shared
 .visible .entry test_isspacep(
@@ -11,8 +13,15 @@
 
     ld.param.u64 %addr, [p_addr];
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     isspacep.shared %is_shared, %addr;
+    // === end target instruction ===
+    .loc 1 200 0
+    @%is_shared st.global.u32 [__ptx_sink+0], 1;
+    @!%is_shared st.global.u32 [__ptx_sink+0], 0;
+    .loc 1 300 0
 
     ret;
 }

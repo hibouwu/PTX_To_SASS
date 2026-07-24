@@ -1,8 +1,9 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
 
-// T08: tcgen05.alloc.cta_group::1.sync.aligned.shared.b32
+// T08: tcgen05.alloc.cta_group::1.sync.aligned.shared::cta.b32
 .shared .align 4 .u32 smem_result;
 
 .visible .entry test_tcgen05_alloc(
@@ -12,8 +13,13 @@
 
     ld.param.u32 %ncols, [p_ncols];
 
-    // === 待测指令 ===
-    tcgen05.alloc.cta_group::1.sync.aligned.shared.b32 [smem_result], %ncols;
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
+    tcgen05.alloc.cta_group::1.sync.aligned.shared::cta.b32 [smem_result], %ncols;
+    // === end target instruction ===
+    .loc 1 200 0
+    .loc 1 300 0
 
     ret;
 }

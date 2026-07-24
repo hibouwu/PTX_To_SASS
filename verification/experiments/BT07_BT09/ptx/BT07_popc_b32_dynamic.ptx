@@ -1,0 +1,23 @@
+.version 8.7
+.target sm_100a
+.address_size 64
+.file 1 "BT07_popc_b32_dynamic.ptx"
+
+.visible .entry test_popc_b32_dynamic(
+    .param .u64 p_out,
+    .param .u32 p_in
+) {
+    .reg .u64 %rd0;
+    .reg .b32 %r0;
+    .reg .u32 %r1;
+
+    ld.param.u64 %rd0, [p_out];
+    ld.param.u32 %r0, [p_in];
+
+    .loc 1 100 0
+    popc.b32 %r1, %r0;
+    .loc 1 200 0
+    st.global.u32 [%rd0], %r1;
+    .loc 1 300 0
+    ret;
+}

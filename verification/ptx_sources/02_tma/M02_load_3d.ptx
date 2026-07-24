@@ -1,6 +1,7 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
 
 // M02: cp.async.bulk.tensor.3d.shared::cta.global.mbarrier::complete_tx::bytes
 .shared .align 128 .u8 smem_buf[1024];
@@ -17,8 +18,13 @@
     mov.u32 %c1, 0;
     mov.u32 %c2, 0;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     cp.async.bulk.tensor.3d.shared::cta.global.mbarrier::complete_tx::bytes [smem_buf], [%desc, {%c0, %c1, %c2}], [smem_mbar];
+    // === end target instruction ===
+    .loc 1 200 0
+    .loc 1 300 0
 
     ret;
 }

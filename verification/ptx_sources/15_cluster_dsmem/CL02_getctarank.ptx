@@ -1,18 +1,26 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 
 // CL02: getctarank
 .shared .align 4 .u32 smem_data[256];
 
 .visible .entry test_getctarank() {
     .reg .u32 %rank;
-    .reg .u64 %addr;
+    .reg .u32 %addr;
 
-    mov.u64 %addr, smem_data;
+    mov.u32 %addr, smem_data;
 
-    // === 待测指令 ===
-    getctarank.shared::cluster.u32 %rank, [%addr];
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
+    getctarank.shared::cluster.u32 %rank, %addr;
+    // === end target instruction ===
+    .loc 1 200 0
+    st.global.b32 [__ptx_sink+0], %rank;
+    .loc 1 300 0
 
     ret;
 }

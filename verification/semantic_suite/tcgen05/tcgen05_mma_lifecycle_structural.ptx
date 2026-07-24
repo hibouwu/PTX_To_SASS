@@ -1,0 +1,96 @@
+// STATUS: STRUCTURAL_COMPILE_ONLY
+//
+// This composed kernel proves that one PTX module can contain the complete
+// tcgen05 MMA lifecycle.  It is deliberately NOT a runnable numerical test:
+// p_smem_desc_a, p_smem_desc_b, and p_idesc are raw hardware descriptors and
+// must be constructed by a device-side wrapper for this CTA's shared memory.
+// Do not launch this entry with arbitrary host values.
+//
+// Lifecycle represented here:
+//   init -> alloc -> one-thread mma -> commit -> mbarrier wait
+//        -> CTA handoff -> fence -> warp-collective ld -> wait::ld
+//        -> dealloc -> relinquish_alloc_permit -> mbarrier.inval
+
+.version 8.7
+.target sm_100a
+.address_size 64
+.file 1 "tcgen05_mma_lifecycle_structural.ptx"
+
+.shared .align 8 .b64 smem_mbar;
+.shared .align 4 .u32 smem_taddr;
+
+// Launch contract: exactly one 32-thread CTA.  alloc/dealloc and ld/wait are
+// warp-collective; mma and commit intentionally have single-thread semantics.
+.visible .entry tcgen05_mma_lifecycle_structural(
+    .param .u64 p_smem_desc_a,
+    .param .u64 p_smem_desc_b,
+    .param .u32 p_idesc,
+    .param .u64 p_sink
+) .reqntid 32, 1, 1 {
+    .reg .pred %p<4>;
+    .reg .b32 %r<12>;
+    .reg .b64 %rd<4>;
+
+    ld.param.u64 %rd0, [p_smem_desc_a];
+    ld.param.u64 %rd1, [p_smem_desc_b];
+    ld.param.u32 %r0, [p_idesc];
+    ld.param.u64 %rd2, [p_sink];
+    mov.u32 %r1, %tid.x;
+    mov.u32 %r2, 1;
+    mov.u32 %r3, 32;
+
+    // One commit issuer means one expected arrival for this barrier phase.
+    setp.ne.u32 %p0, %r1, 0;
+    @%p0 bra INIT_DONE;
+    mbarrier.init.shared::cta.b64 [smem_mbar], %r2;
+INIT_DONE:
+    bar.sync 0;
+
+    // Every lane in the only warp participates uniformly in allocation.
+    tcgen05.alloc.cta_group::1.sync.aligned.shared::cta.b32 [smem_taddr], %r3;
+    bar.sync 1;
+    ld.shared.b32 %r4, [smem_taddr];
+
+    // A future runnable wrapper must initialize descriptor-referenced shared
+    // storage before this async-proxy handoff.  This fence alone is not data
+    // initialization and is not claimed to make the supplied descriptors valid.
+    fence.proxy.async.shared::cta;
+
+    // tcgen05.mma and tcgen05.commit have single-thread issue granularity.
+    @%p0 bra MMA_DONE_SYNC;
+    mov.u32 %r5, 0;
+    mov.u32 %r6, 0;
+    mov.u32 %r7, 0;
+    mov.u32 %r8, 0;
+    setp.ne.u32 %p1, %r0, 0;
+    tcgen05.mma.cta_group::1.kind::tf32 [%r4], %rd0, %rd1, %r0,
+        {%r5, %r6, %r7, %r8}, %p1;
+    tcgen05.commit.cta_group::1.mbarrier::arrive::one.shared::cluster.b64 [smem_mbar];
+
+WAIT_MMA:
+    mbarrier.try_wait.parity.shared::cta.b64 %p2, [smem_mbar], 0;
+    @!%p2 bra WAIT_MMA;
+
+MMA_DONE_SYNC:
+    // Give all 32 load lanes a completed producer phase before consuming TMEM.
+    bar.sync 2;
+    tcgen05.fence::after_thread_sync;
+
+    // tcgen05.ld and tcgen05.wait::ld are collective across the full warp.
+    tcgen05.ld.sync.aligned.16x64b.x1.b32 {%r9}, [%r4];
+    tcgen05.wait::ld.sync.aligned;
+
+    // This keeps the load live for SASS inspection.  It is not a pass/fail
+    // value: without a real descriptor wrapper, its contents are undefined.
+    @%p0 bra LOAD_RETIRED;
+    st.global.u32 [%rd2], %r9;
+LOAD_RETIRED:
+    tcgen05.dealloc.cta_group::1.sync.aligned.b32 %r4, %r3;
+    tcgen05.relinquish_alloc_permit.cta_group::1.sync.aligned;
+    // No thread may invalidate a barrier while another lane can still issue a
+    // barrier operation.  The collective TMEM operations are now retired;
+    // synchronize the sole warp and let the original initializer close it.
+    bar.sync 3;
+    @!%p0 mbarrier.inval.shared::cta.b64 [smem_mbar];
+    ret;
+}

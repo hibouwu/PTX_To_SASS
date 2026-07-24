@@ -1,20 +1,26 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
 
 // CL06: st.shared::cluster.b32
 .shared .align 4 .u32 smem_data[256];
 
 .visible .entry test_st_shared_cluster() {
     .reg .u32 %r0, %rank;
-    .reg .u64 %remote_addr;
+    .reg .u32 %remote_addr;
 
     mov.u32 %r0, 42;
     mov.u32 %rank, 0;
     mapa.shared::cluster.u32 %remote_addr, smem_data, %rank;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     st.shared::cluster.b32 [%remote_addr], %r0;
+    // === end target instruction ===
+    .loc 1 200 0
+    .loc 1 300 0
 
     ret;
 }

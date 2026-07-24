@@ -1,15 +1,26 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 
 // W11: vote.sync.any.pred
 .visible .entry test_vote_any() {
     .reg .pred %p0, %p1;
+    .reg .u32 %lane;
 
-    setp.eq.u32 %p0, %tid.x, 0;
+    mov.u32 %lane, %tid.x;
+setp.eq.u32 %p0, %lane, 0;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     vote.sync.any.pred %p1, %p0, 0xFFFFFFFF;
+    // === end target instruction ===
+    .loc 1 200 0
+    @%p1 st.global.u32 [__ptx_sink+0], 1;
+    @!%p1 st.global.u32 [__ptx_sink+0], 0;
+    .loc 1 300 0
 
     ret;
 }

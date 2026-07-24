@@ -1,8 +1,9 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
 
-// M04: cp.async.bulk.tensor.2d.global.shared::cta (store)
+// M04: cp.async.bulk.tensor.2d.global.shared::cta.bulk_group (store)
 .shared .align 128 .u8 smem_buf[1024];
 
 .visible .entry test_tma_store_2d(
@@ -15,8 +16,13 @@
     mov.u32 %c0, 0;
     mov.u32 %c1, 0;
 
-    // === 待测指令 ===
-    cp.async.bulk.tensor.2d.global.shared::cta [%desc, {%c0, %c1}], [smem_buf];
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
+    cp.async.bulk.tensor.2d.global.shared::cta.bulk_group [%desc, {%c0, %c1}], [smem_buf];
+    // === end target instruction ===
+    .loc 1 200 0
+    .loc 1 300 0
 
     ret;
 }

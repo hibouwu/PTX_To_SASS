@@ -1,14 +1,22 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 
 .shared .align 8 .u64 smem_data64[128];
 
 .visible .entry test_ld_shared_b64() {
     .reg .b64 %rd0;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     ld.shared.b64 %rd0, [smem_data64];
+    // === end target instruction ===
+    .loc 1 200 0
+    st.global.b64 [__ptx_sink+0], %rd0;
+    .loc 1 300 0
 
     ret;
 }

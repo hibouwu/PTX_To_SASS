@@ -10,6 +10,7 @@ PTX→SASS 1:1 映射验证 - 自动化分析脚本
 用法: python3 scripts/analyze.py [--sass-dir sass_dumps] [--ptx-dir ptx_sources]
 """
 
+import collections
 import csv
 import os
 import re
@@ -75,6 +76,8 @@ class PTXInfo:
     target_instruction: str = ""
     # 参数加载指令数 (ld.param 等)
     setup_instruction_count: int = 0
+    # 非法但有研究价值的负向用例（例如规范未定义的 opcode/type 组合）
+    unsupported_reason: str = ""
 
 
 @dataclass
@@ -92,6 +95,8 @@ class SASSInfo:
     pred_registers_used: set = field(default_factory=set)
     # 原始文本
     raw_text: str = ""
+    # True when scheduling makes source line 100 reappear after another line.
+    source_locations_interleaved: bool = False
 
 
 @dataclass
@@ -109,12 +114,28 @@ class AnalysisResult:
     sass_target_instrs_O0: int = 0
     sass_gp_regs_O0: int = 0
     sass_extra_regs_O0: int = 0
+    sass_sequence_O0: str = ""
+    sass_core_instrs_O0: int = 0
+    sass_core_sequence_O0: str = ""
+    core_filter_notes_O0: str = ""
     # SASS O3 侧
     sass_total_instrs_O3: int = 0
     sass_target_instrs_O3: int = 0
     sass_gp_regs_O3: int = 0
     sass_extra_regs_O3: int = 0
+    sass_sequence_O3: str = ""
+    sass_core_instrs_O3: int = 0
+    sass_core_sequence_O3: str = ""
+    core_filter_notes_O3: str = ""
+    # 人工审计口径：仅在规则已由具体 SASS 证据确认时填写。
+    audited_sass_instrs_O0: int = -1
+    audited_sass_sequence_O0: str = ""
+    audit_status: str = "PENDING"
+    audit_verdict: str = "PENDING"
+    audit_notes: str = ""
     # 判定
+    raw_verdict: str = "UNKNOWN"
+    cleaned_verdict: str = "UNKNOWN"
     verdict: str = "UNKNOWN"
     notes: str = ""
 
@@ -181,18 +202,30 @@ def parse_ptx_file(filepath: Path) -> PTXInfo:
 
     info.reg_declarations = {"total": reg_count, "sass_gp_slots": sass_gp_slots}
 
-    # 提取待测指令 (在 "// === 待测指令" 标记之后)
+    unsupported_match = re.search(
+        r"^\s*//\s*EXPECTED_UNSUPPORTED_BY_PTX_ISA:\s*(.+)$",
+        text,
+        re.MULTILINE,
+    )
+    if unsupported_match:
+        info.unsupported_reason = unsupported_match.group(1).strip()
+
+    # 提取待测指令 (在 ASCII marker 之后；ptxas rejects non-ASCII PTX text)
     lines = text.splitlines()
     in_target = False
     target_lines = []
     setup_count = 0
     for line in lines:
         stripped = line.strip()
-        if "待测指令" in stripped:
+        if in_target and "end target instruction" in stripped:
+            break
+        if "target instruction" in stripped:
             in_target = True
             continue
+        if in_target and stripped.startswith(".loc "):
+            continue
         if in_target and stripped and not stripped.startswith("//"):
-            if stripped in ("ret;", "}", ""):
+            if stripped == "}":
                 break
             target_lines.append(stripped)
 
@@ -224,14 +257,23 @@ def parse_sass_file(filepath: Path, opt_level: str) -> SASSInfo | None:
     # 提取所有指令行
     instr_pattern = re.compile(
         r'/\*[0-9a-fA-F]+\*/\s+'   # 地址前缀
-        r'(@[!]?P\d+\s+)?'         # 可选谓词
+        r'(@[!]?(?:P\d+|UP\d+|PT|UPT)\s+)?'  # 可选普通/统一/恒真谓词
         r'([A-Z][A-Z0-9_.]+)'      # 操作码
         r'(.*);\s*$'               # 操作数
     )
+    instruction_like_pattern = re.compile(r'/\*[0-9a-fA-F]+\*/')
 
     all_instrs = []
+    unparsed_instruction_lines = []
+    source_line = None
+    source_line_events = []
     for line in text.splitlines():
         line = line.strip()
+        line_match = re.match(r'//## File ".*", line (\d+)', line)
+        if line_match:
+            source_line = int(line_match.group(1))
+            source_line_events.append(source_line)
+            continue
         m = instr_pattern.match(line)
         if m:
             predicate = m.group(1) or ""
@@ -242,9 +284,32 @@ def parse_sass_file(filepath: Path, opt_level: str) -> SASSInfo | None:
                 "opcode": opcode,
                 "operands": operands,
                 "raw": line,
+                "source_line": source_line,
             })
+        elif instruction_like_pattern.match(line) and line.endswith(";"):
+            unparsed_instruction_lines.append(line)
+
+    if unparsed_instruction_lines:
+        sample = "\n  ".join(unparsed_instruction_lines[:5])
+        raise ValueError(
+            f"Unparsed SASS instruction line(s) in {filepath}: "
+            f"{len(unparsed_instruction_lines)}\n  {sample}"
+        )
 
     info.all_instructions = all_instrs
+    target_event_indices = [
+        index for index, event in enumerate(source_line_events) if event == 100
+    ]
+    if target_event_indices:
+        first_target = target_event_indices[0]
+        last_target = target_event_indices[-1]
+        info.source_locations_interleaved = (
+            200 in source_line_events[:first_target]
+            or any(
+                event != 100
+                for event in source_line_events[first_target:last_target + 1]
+            )
+        )
 
     # 提取 GP 寄存器使用
     gp_regs = set()
@@ -260,17 +325,11 @@ def parse_sass_file(filepath: Path, opt_level: str) -> SASSInfo | None:
     info.gp_registers_used = gp_regs
     info.pred_registers_used = pred_regs
 
-    # 分离 target 指令 vs setup 指令
-    # 策略: 排除 IGNORED 和 SETUP opcodes 后的剩余为 target
-    target_instrs = []
-    for instr in all_instrs:
-        base_opcode = instr["opcode"].split(".")[0]  # IMAD.MOV -> IMAD
-        if base_opcode in IGNORED_SASS_OPCODES:
-            continue
-        # 不排除 SETUP, 因为有些 setup opcode 也是待测指令
-        target_instrs.append(instr)
-
-    info.target_instructions = target_instrs
+    # The generator assigns the target PTX statement(s) to .loc line 100.
+    # nvdisasm -g propagates that source location to every lowered SASS op.
+    info.target_instructions = [
+        instr for instr in all_instrs if instr["source_line"] == 100
+    ]
 
     return info
 
@@ -292,53 +351,419 @@ def compute_expected_sass_regs(ptx_info: PTXInfo) -> int:
     return ptx_info.reg_declarations.get("total", 0)
 
 
-def classify_result(result: AnalysisResult) -> str:
+def recover_coalesced_source_location(ptx_info: PTXInfo, sass_info: SASSInfo) -> bool:
+    """Recover targets whose SASS was attributed to the preceding setup line.
+
+    ptxas can fuse unary packed-half operations with operand modifiers and retain
+    the source location of the producing setup instruction. These signatures
+    were established by direct inspection of the B200 nvdisasm output. A match
+    is deliberately strict so an unrelated setup instruction is never claimed.
+    """
+    if sass_info.target_instructions:
+        return False
+
+    instruction = ptx_info.target_instruction
+    if instruction.startswith("neg.f16x2 "):
+        predicate = lambda item: (
+            item["opcode"] == "HADD2"
+            and "-RZ.H0_H0" in item["operands"]
+            and re.search(r",\s*-R\d+,", item["operands"])
+        )
+    elif instruction.startswith("abs.f16x2 "):
+        predicate = lambda item: (
+            item["opcode"] == "HADD2"
+            and "-RZ.H0_H0" in item["operands"]
+            and re.search(r",\s*\|R\d+\|,", item["operands"])
+        )
+    else:
+        return False
+
+    candidates = [
+        item for item in sass_info.all_instructions
+        if item["source_line"] == 10 and predicate(item)
+    ]
+    if len(candidates) != 1:
+        return False
+    sass_info.target_instructions = candidates
+    return True
+
+
+def _is_identity_move(item: dict) -> bool:
+    """Return true for a register self-move with no architectural effect."""
+    if item["opcode"] not in {"MOV", "UMOV"}:
+        return False
+    operands = [part.strip() for part in item["operands"].split(",")]
+    return len(operands) == 2 and operands[0] == operands[1]
+
+
+def _is_identity_iadd3(item: dict) -> bool:
+    """Return true for an IADD3 used only as an O0 register self-copy."""
+    opcode = item["opcode"]
+    if opcode not in {"IADD3", "UIADD3"}:
+        return False
+    operands = [part.strip() for part in item["operands"].split(",")]
+    if len(operands) != 6:
+        return False
+    destination, pred_out_1, pred_out_2, *sources = operands
+    expected_pred = "UPT" if opcode == "UIADD3" else "PT"
+    zero = "URZ" if opcode == "UIADD3" else "RZ"
+    return (
+        pred_out_1 == expected_pred
+        and pred_out_2 == expected_pred
+        and sources.count(destination) == 1
+        and sources.count(zero) == 2
+    )
+
+
+def clean_target_instructions(ptx_info: PTXInfo, instructions: list) -> tuple[list, str]:
+    """Remove only proven non-semantic scaffolding from a raw sequence."""
+    cleaned = []
+    removed = []
+    target_is_mov = ptx_info.target_instruction.lstrip().startswith("mov.")
+    preserve_identity_mov = target_is_mov and not any(
+        item["opcode"] not in {"MOV", "UMOV", "NOP"}
+        and not _is_identity_iadd3(item)
+        for item in instructions
+    )
+
+    for item in instructions:
+        if item["opcode"] == "NOP":
+            removed.append("NOP")
+            continue
+        if _is_identity_move(item) and not preserve_identity_mov:
+            removed.append("identity MOV")
+            continue
+        if _is_identity_iadd3(item):
+            removed.append("identity IADD3")
+            continue
+        if (
+            cleaned
+            and item["opcode"] == "WARPSYNC.ALL"
+            and cleaned[-1]["opcode"] == "WARPSYNC.ALL"
+        ):
+            removed.append("duplicate WARPSYNC.ALL")
+            continue
+        if preserve_identity_mov and _is_identity_move(item):
+            signature = (item["opcode"], item["operands"])
+            if any(
+                (previous["opcode"], previous["operands"]) == signature
+                for previous in cleaned
+            ):
+                removed.append("duplicate target MOV")
+                continue
+        cleaned.append(item)
+
+    if (
+        ptx_info.target_instruction.lstrip().startswith("ret;")
+        and any(item["opcode"] == "EXIT" for item in cleaned)
+    ):
+        without_exit_trap = [
+            item for item in cleaned
+            if not (item["opcode"] == "BRA" and ".L_x_0" in item["operands"])
+        ]
+        if len(without_exit_trap) != len(cleaned):
+            removed.append("post-EXIT trap BRA")
+            cleaned = without_exit_trap
+
+    counts = collections.Counter(removed)
+    notes = ", ".join(
+        f"removed {count} {name}" for name, count in counts.items()
+    )
+    return cleaned, notes
+
+
+def format_sass_instruction(item: dict) -> str:
+    """Render a parsed SASS instruction without dropping its predicate."""
+    prefix = f'{item["predicate"]} ' if item["predicate"] else ""
+    return f'{prefix}{item["opcode"]} {item["operands"]}'.strip()
+
+
+def audit_semantic_sequence(
+    ptx_info: PTXInfo, core_instructions: list
+) -> tuple[list, str, str]:
+    """Return a manually justified semantic sequence for audited families.
+
+    This layer is intentionally allow-list based.  A source-line association is
+    not enough to prove that an instruction implements the target PTX: ptxas can
+    attribute address construction, operand routing, and result copies to line
+    100.  Until a family has an explicit rule here, its audit status remains
+    PENDING and the conservative core evidence is left untouched.
+    """
+    selected = []
+    notes = ""
+
+    if ptx_info.batch == "01_tcgen05" and ptx_info.case_id in {"T05", "T06", "T07"}:
+        terminal_prefix = "STTM" if ptx_info.case_id == "T07" else "LDTM"
+        selected = [
+            item for item in core_instructions
+            if item["opcode"] == "WARPSYNC.ALL"
+            or item["opcode"] == "R2UR"
+            or item["opcode"].startswith(terminal_prefix)
+        ]
+        expected = ["WARPSYNC.ALL", "R2UR", terminal_prefix]
+        actual = [
+            terminal_prefix if item["opcode"].startswith(terminal_prefix)
+            else item["opcode"]
+            for item in selected
+        ]
+        if actual != expected:
+            return [], "PENDING", "tcgen05 ld/st protocol signature mismatch"
+        notes = "verified tcgen05 ld/st protocol: warp sync + R-to-UR routing + TMEM opcode"
+
+    elif ptx_info.batch == "01_tcgen05":
+        if ptx_info.case_id == "T11":
+            selected = []
+            notes = "verified zero-core lowering: tcgen05 fence produced only NOP"
+        elif ptx_info.case_id in {"T08", "T09"}:
+            start = next(
+                (
+                    index for index, item in enumerate(core_instructions)
+                    if item["opcode"] == "WARPSYNC.ALL"
+                ),
+                None,
+            )
+            if start is None:
+                return [], "PENDING", "tcgen05 alloc/dealloc protocol has no WARPSYNC"
+            selected = core_instructions[start:]
+            notes = (
+                "verified tcgen05 allocation guardrail protocol; excluded input/shared-address setup"
+            )
+        else:
+            protocol_prefixes = (
+                "R2UR", "VOTEU.", "PLOP3.", "ELECT", "UTCHMMA",
+                "UTCQMMA", "UTCIMMA", "UTCCP", "UTCBAR", "BRA",
+            )
+            selected = [
+                item for item in core_instructions
+                if item["opcode"].startswith(protocol_prefixes)
+            ]
+            if not any(item["opcode"].startswith("UTC") for item in selected):
+                return [], "PENDING", "tcgen05 protocol has no UTC execution opcode"
+            notes = (
+                "verified tcgen05 uniform/election protocol; excluded input predicate, "
+                "coordinate, and shared-address setup"
+            )
+
+    elif ptx_info.batch == "02_tma":
+        protocol_prefixes = (
+            "R2UR", "PLOP3.", "ELECT", "UTMA", "LDGSTS", "DEPBAR", "BRA",
+        )
+        selected = [
+            item for item in core_instructions
+            if item["opcode"].startswith(protocol_prefixes)
+        ]
+        execution_prefixes = ("UTMA", "LDGSTS", "DEPBAR")
+        if not any(item["opcode"].startswith(execution_prefixes) for item in selected):
+            return [], "PENDING", "TMA protocol has no execution opcode"
+        notes = (
+            "verified TMA uniform/election protocol; excluded shared-address and coordinate setup"
+        )
+
+    elif ptx_info.batch == "07_lsu":
+        instruction = ptx_info.target_instruction
+        if instruction.startswith("ld.shared"):
+            opcode_prefix = "LDS"
+        elif instruction.startswith("st.shared"):
+            opcode_prefix = "STS"
+        elif instruction.startswith("ld.global"):
+            opcode_prefix = "LDG"
+        elif instruction.startswith("st.global"):
+            opcode_prefix = "STG"
+        elif instruction.startswith("ld.param"):
+            opcode_prefix = "LDC"
+        else:
+            return [], "PENDING", "LSU target has no audited opcode rule"
+        selected = [
+            item for item in core_instructions
+            if item["opcode"].startswith(opcode_prefix)
+        ]
+        if len(selected) != 1:
+            return [], "PENDING", f"expected one {opcode_prefix} opcode, found {len(selected)}"
+        notes = (
+            f"verified {opcode_prefix} execution opcode; excluded address/descriptor "
+            "preparation and result routing"
+        )
+
+    elif ptx_info.batch == "10_atomic":
+        instruction = ptx_info.target_instruction
+        if instruction.startswith("atom.global"):
+            opcode_prefix = "ATOMG"
+        elif instruction.startswith("atom.shared"):
+            opcode_prefix = "ATOMS"
+        elif instruction.startswith("red.global"):
+            opcode_prefix = "REDG"
+        else:
+            return [], "PENDING", "atomic target has no audited opcode rule"
+        selected = [
+            item for item in core_instructions
+            if item["opcode"].startswith(opcode_prefix)
+        ]
+        if len(selected) != 1:
+            return [], "PENDING", f"expected one {opcode_prefix} opcode, found {len(selected)}"
+        notes = (
+            f"verified {opcode_prefix} execution opcode; excluded address/descriptor preparation"
+        )
+
+    elif ptx_info.batch in {
+        "05_cuda_core_int",
+        "06_cuda_core_fp",
+        "11_half_precision",
+        "12_bf16",
+        "14_bit_ops",
+        "17_quantization",
+        "18_activation",
+    }:
+        # These batches have register/immediate operands only.  After the
+        # conservative NOP/identity cleanup there is no address-construction or
+        # descriptor scaffold to subtract.  Multi-op sequences (64-bit lane
+        # splits, div/rem, exact f64 reciprocal/sqrt, fns, packed activation)
+        # are therefore genuine lowering evidence, including non-identity MOVs
+        # used to route intermediate values.
+        selected = list(core_instructions)
+        notes = (
+            "verified register/immediate lowering; retained width splits, "
+            "software expansion, and intermediate-value routing"
+        )
+
+    elif ptx_info.batch == "03_mbarrier":
+        selected = [
+            item for item in core_instructions
+            if item["opcode"].startswith("SYNCS.")
+        ]
+        if len(selected) != 1:
+            return [], "PENDING", f"expected one SYNCS opcode, found {len(selected)}"
+        notes = "verified SYNCS execution opcode; excluded shared-address and operand encoding"
+
+    elif ptx_info.batch == "04_fence":
+        # Fence and cluster-barrier fallbacks are control protocols rather than
+        # operand-address scaffolding.  Keep every conservatively cleaned op.
+        selected = list(core_instructions)
+        notes = "verified fence/barrier protocol; retained architecture fallback control flow"
+
+    elif ptx_info.batch == "08_control_flow":
+        selected = list(core_instructions)
+        notes = "verified direct special-register/control-flow lowering"
+
+    elif ptx_info.batch == "13_warp_comm":
+        if ptx_info.unsupported_reason:
+            return [], "NOT_APPLICABLE", ptx_info.unsupported_reason
+        semantic_prefixes = ("SHFL.", "REDUX.", "CREDUX.", "VOTE.", "MATCH.")
+        selected = [
+            item for item in core_instructions
+            if item["opcode"].startswith("WARPSYNC.COLLECTIVE")
+            or item["opcode"] == "ENDCOLLECTIVE"
+            or item["opcode"].startswith(semantic_prefixes)
+            or (item["opcode"] == "ELECT" and ptx_info.case_id == "W14")
+            or (
+                item["opcode"] == "MOV"
+                and "UR79" in item["operands"]
+                and ptx_info.case_id in {"W05", "W06", "W08", "W09", "W14"}
+            )
+        ]
+        expected_counts = {
+            "W01": 3, "W02": 3, "W03": 3, "W04": 3,
+            "W05": 4, "W06": 4, "W08": 4, "W09": 4,
+            "W10": 3, "W11": 3, "W12": 3, "W13": 3, "W14": 4,
+        }
+        expected = expected_counts.get(ptx_info.case_id)
+        if expected is None or len(selected) != expected:
+            return [], "PENDING", (
+                f"warp collective signature mismatch: expected {expected}, found {len(selected)}"
+            )
+        notes = (
+            "verified warp collective protocol; excluded input/mask setup and predicate normalization"
+        )
+
+    elif ptx_info.batch == "15_cluster_dsmem" and ptx_info.case_id != "CL03":
+        prefixes = {
+            "CL01": ("PRMT",),
+            "CL02": ("SHF.L.U64.HI",),
+            "CL04": ("QSPC",),
+            "CL05": ("LD.E",),
+            "CL06": ("ST.E",),
+        }[ptx_info.case_id]
+        selected = [
+            item for item in core_instructions
+            if item["opcode"].startswith(prefixes)
+        ]
+        if len(selected) != 1:
+            return [], "PENDING", f"cluster opcode signature mismatch: found {len(selected)}"
+        notes = "verified cluster execution opcode; excluded address-space encoding preparation"
+
+    elif ptx_info.batch == "15_cluster_dsmem" and ptx_info.case_id == "CL03":
+        # The first MOV/S2R/LEA triple materializes the test fixture's static
+        # shared symbol.  Everything after it is the u32 shared -> u64 generic
+        # address conversion and O0 register routing.
+        lea_index = next(
+            (
+                index for index, item in enumerate(core_instructions)
+                if item["opcode"].startswith("LEA")
+            ),
+            None,
+        )
+        if lea_index is None or lea_index + 1 >= len(core_instructions):
+            return [], "PENDING", "cvta.shared conversion signature mismatch"
+        selected = core_instructions[lea_index + 1:]
+        if not any(
+            item["opcode"] == "S2R" and "SR_SWINHI" in item["operands"]
+            for item in selected
+        ):
+            return [], "PENDING", "cvta.shared conversion lacks SR_SWINHI read"
+        notes = (
+            "verified shared-to-generic address conversion and O0 result routing; "
+            "excluded static shared-symbol construction"
+        )
+
+    elif ptx_info.batch == "16_megakernel_ctrl":
+        if ptx_info.case_id == "MK01":
+            selected = [
+                item for item in core_instructions
+                if item["opcode"].startswith("WARPSYNC.COLLECTIVE")
+                or item["opcode"] == "ENDCOLLECTIVE"
+            ]
+            if len(selected) != 2:
+                return [], "PENDING", "bar.warp collective signature mismatch"
+            notes = "verified bar.warp collective begin/end protocol; excluded mask setup"
+        else:
+            selected = list(core_instructions)
+            notes = "verified direct megakernel-control lowering"
+
+    else:
+        return [], "PENDING", "family not yet manually audited"
+
+    return selected, "VERIFIED", notes
+
+
+def classify_count(count: int, result: AnalysisResult, ptx_info: PTXInfo) -> str:
     """根据分析数据判定映射类别."""
+    if ptx_info.unsupported_reason:
+        return "UNSUPPORTED_BY_PTX_ISA"
+
     # 特殊标记: 如果 O0 SASS 文件不存在 (编译失败)
     if result.sass_total_instrs_O0 == -1:
         return "COMPILE_FAIL"
 
-    target_O0 = result.sass_target_instrs_O0
-    extra_O0 = result.sass_extra_regs_O0
-    target_O3 = result.sass_target_instrs_O3
-
-    # 对于只有一条 setup + 一条 target 的简单 kernel:
-    # 去掉 param load 后, 理想情况是 1 条 SASS 对应待测指令
-    # 但由于 ptxas 会加入 param load 指令, 需要更宽松的判定
-
-    # 判定: 如果待测指令区域只有 <= setup_count + 1 条有效指令
-    # 且无额外寄存器, 则为 1:1
-
-    # 简化判定 (保守):
-    # - target_O0 <= ptx_setup + 待测指令数 且 extra_regs == 0 -> 1:1
-    # - 否则需人工审查
-
-    ptx_setup = result.ptx_setup_count
-    # 注意: 有些测试包含多条待测指令 (如 I17 包含 and/or/xor 三条)
     target_instr_count = result.instruction.count(";") if result.instruction else 1
-    expected_sass_count = ptx_setup + target_instr_count
 
-    if target_O0 <= 0:
-        return "NEEDS_REVIEW"
+    if count == 0:
+        return "ELIMINATED"
+    if count == target_instr_count:
+        return "1:1"
+    if count > target_instr_count:
+        return "1:N"
+    return "NEEDS_REVIEW"
 
-    # 核心判定
-    if target_O0 <= expected_sass_count + 2 and extra_O0 <= 1:
-        # 允许 +2 的余量: ptxas 可能插入 IMAD 地址计算或 MOV 常数
-        if extra_O0 == 0:
-            return "1:1"
-        else:
-            return "1:1_FORMAT"
-    elif target_O0 > expected_sass_count + 5:
-        # 明显展开
-        if result.sass_total_instrs_O3 != -1:
-            # O3 也展开 -> 架构强制
-            if target_O3 > expected_sass_count + 3:
-                return "EXPAND_ARCH"
-            else:
-                return "EXPAND_OPT"
-        return "EXPAND_ARCH"
-    else:
-        return "NEEDS_REVIEW"
+
+def classify_core_result(result: AnalysisResult, ptx_info: PTXInfo) -> str:
+    """Classify the cleaned core while preserving zero-cost lowering evidence."""
+    verdict = classify_count(result.sass_core_instrs_O0, result, ptx_info)
+    if (
+        verdict == "ELIMINATED"
+        and result.sass_target_instrs_O0 > 0
+        and not ptx_info.unsupported_reason
+    ):
+        return "NO_CORE_SASS"
+    return verdict
 
 
 def analyze_case(ptx_info: PTXInfo, sass_dir: Path = SASS_DIR) -> AnalysisResult:
@@ -351,6 +776,10 @@ def analyze_case(ptx_info: PTXInfo, sass_dir: Path = SASS_DIR) -> AnalysisResult
         ptx_reg_count=ptx_info.reg_declarations.get("total", 0),
         ptx_setup_count=ptx_info.setup_instruction_count,
     )
+    if ptx_info.unsupported_reason:
+        result.audit_status = "NOT_APPLICABLE"
+        result.audit_verdict = "UNSUPPORTED_BY_PTX_ISA"
+        result.audit_notes = ptx_info.unsupported_reason
 
     # 构造 SASS 文件路径
     # 命名规则: {batch}__{case_id}_{mnemonic}_{O0|O3}.sass
@@ -361,9 +790,37 @@ def analyze_case(ptx_info: PTXInfo, sass_dir: Path = SASS_DIR) -> AnalysisResult
     # 解析 O0
     sass_O0 = parse_sass_file(sass_O0_path, "O0")
     if sass_O0:
+        if recover_coalesced_source_location(ptx_info, sass_O0):
+            result.notes += "O0 target source location coalesced into setup line 10; "
         result.sass_total_instrs_O0 = len(sass_O0.all_instructions)
         result.sass_target_instrs_O0 = len(sass_O0.target_instructions)
         result.sass_gp_regs_O0 = len(sass_O0.gp_registers_used)
+        result.sass_sequence_O0 = " | ".join(
+            format_sass_instruction(instr) for instr in sass_O0.target_instructions
+        )
+        core_O0, result.core_filter_notes_O0 = clean_target_instructions(
+            ptx_info, sass_O0.target_instructions
+        )
+        result.sass_core_instrs_O0 = len(core_O0)
+        result.sass_core_sequence_O0 = " | ".join(
+            format_sass_instruction(instr) for instr in core_O0
+        )
+        audited_O0, result.audit_status, result.audit_notes = audit_semantic_sequence(
+            ptx_info, core_O0
+        )
+        if result.audit_status == "VERIFIED":
+            result.audited_sass_instrs_O0 = len(audited_O0)
+            result.audited_sass_sequence_O0 = " | ".join(
+                format_sass_instruction(instr) for instr in audited_O0
+            )
+            result.audit_verdict = classify_count(
+                result.audited_sass_instrs_O0, result, ptx_info
+            )
+            if (
+                result.audit_verdict == "ELIMINATED"
+                and result.sass_target_instrs_O0 > 0
+            ):
+                result.audit_verdict = "NO_CORE_SASS"
         # 额外寄存器 = SASS GP slot 总数 - 预期 GP slot 数
         # 预期: PTX 声明的 sass_gp_slots (64-bit x2) + 1 (R1 栈指针)
         expected = ptx_info.reg_declarations.get("sass_gp_slots",
@@ -377,9 +834,26 @@ def analyze_case(ptx_info: PTXInfo, sass_dir: Path = SASS_DIR) -> AnalysisResult
     # 解析 O3
     sass_O3 = parse_sass_file(sass_O3_path, "O3")
     if sass_O3:
+        if sass_O3.source_locations_interleaved:
+            result.notes += (
+                "O3 source locations interleaved by scheduling; "
+                "O3 core sequence is advisory only; "
+            )
+        if recover_coalesced_source_location(ptx_info, sass_O3):
+            result.notes += "O3 target source location coalesced into setup line 10; "
         result.sass_total_instrs_O3 = len(sass_O3.all_instructions)
         result.sass_target_instrs_O3 = len(sass_O3.target_instructions)
         result.sass_gp_regs_O3 = len(sass_O3.gp_registers_used)
+        result.sass_sequence_O3 = " | ".join(
+            format_sass_instruction(instr) for instr in sass_O3.target_instructions
+        )
+        core_O3, result.core_filter_notes_O3 = clean_target_instructions(
+            ptx_info, sass_O3.target_instructions
+        )
+        result.sass_core_instrs_O3 = len(core_O3)
+        result.sass_core_sequence_O3 = " | ".join(
+            format_sass_instruction(instr) for instr in core_O3
+        )
         expected = ptx_info.reg_declarations.get("sass_gp_slots",
                    ptx_info.reg_declarations.get("total", 0))
         result.sass_extra_regs_O3 = max(0, len(sass_O3.gp_registers_used) - expected - 1)
@@ -389,7 +863,18 @@ def analyze_case(ptx_info: PTXInfo, sass_dir: Path = SASS_DIR) -> AnalysisResult
         result.notes += "O3 SASS not found; "
 
     # 判定
-    result.verdict = classify_result(result)
+    if ptx_info.unsupported_reason:
+        result.notes += f"{ptx_info.unsupported_reason}; "
+    result.raw_verdict = classify_count(
+        result.sass_target_instrs_O0, result, ptx_info
+    )
+    result.cleaned_verdict = classify_core_result(result, ptx_info)
+    if result.audit_status == "VERIFIED":
+        result.verdict = result.audit_verdict
+    elif result.audit_status == "NOT_APPLICABLE" and ptx_info.unsupported_reason:
+        result.verdict = "UNSUPPORTED_BY_PTX_ISA"
+    else:
+        result.verdict = result.cleaned_verdict
 
     return result
 
@@ -403,9 +888,15 @@ REPORT_FIELDS = [
     "ptx_reg_count", "ptx_setup_count",
     "sass_total_instrs_O0", "sass_target_instrs_O0",
     "sass_gp_regs_O0", "sass_extra_regs_O0",
+    "sass_sequence_O0", "sass_core_instrs_O0", "sass_core_sequence_O0",
+    "core_filter_notes_O0",
     "sass_total_instrs_O3", "sass_target_instrs_O3",
     "sass_gp_regs_O3", "sass_extra_regs_O3",
-    "verdict", "notes",
+    "sass_sequence_O3", "sass_core_instrs_O3", "sass_core_sequence_O3",
+    "core_filter_notes_O3",
+    "audited_sass_instrs_O0", "audited_sass_sequence_O0",
+    "audit_status", "audit_verdict", "audit_notes",
+    "raw_verdict", "cleaned_verdict", "verdict", "notes",
 ]
 
 
@@ -421,17 +912,34 @@ def generate_report(results: list[AnalysisResult], output_path: Path):
                 "batch": r.batch,
                 "case_id": r.case_id,
                 "mnemonic": r.mnemonic,
-                "instruction": r.instruction[:80],  # 截断过长内容
+                # The report is the canonical per-PTX evidence; never truncate
+                # long tcgen05/TMA statements.
+                "instruction": r.instruction,
                 "ptx_reg_count": r.ptx_reg_count,
                 "ptx_setup_count": r.ptx_setup_count,
                 "sass_total_instrs_O0": r.sass_total_instrs_O0,
                 "sass_target_instrs_O0": r.sass_target_instrs_O0,
                 "sass_gp_regs_O0": r.sass_gp_regs_O0,
                 "sass_extra_regs_O0": r.sass_extra_regs_O0,
+                "sass_sequence_O0": r.sass_sequence_O0,
+                "sass_core_instrs_O0": r.sass_core_instrs_O0,
+                "sass_core_sequence_O0": r.sass_core_sequence_O0,
+                "core_filter_notes_O0": r.core_filter_notes_O0,
                 "sass_total_instrs_O3": r.sass_total_instrs_O3,
                 "sass_target_instrs_O3": r.sass_target_instrs_O3,
                 "sass_gp_regs_O3": r.sass_gp_regs_O3,
                 "sass_extra_regs_O3": r.sass_extra_regs_O3,
+                "sass_sequence_O3": r.sass_sequence_O3,
+                "sass_core_instrs_O3": r.sass_core_instrs_O3,
+                "sass_core_sequence_O3": r.sass_core_sequence_O3,
+                "core_filter_notes_O3": r.core_filter_notes_O3,
+                "audited_sass_instrs_O0": r.audited_sass_instrs_O0,
+                "audited_sass_sequence_O0": r.audited_sass_sequence_O0,
+                "audit_status": r.audit_status,
+                "audit_verdict": r.audit_verdict,
+                "audit_notes": r.audit_notes,
+                "raw_verdict": r.raw_verdict,
+                "cleaned_verdict": r.cleaned_verdict,
                 "verdict": r.verdict,
                 "notes": r.notes,
             })
@@ -459,15 +967,25 @@ def print_summary(results: list[AnalysisResult]):
     print("")
 
     # 列出需要关注的 cases
-    expand_cases = [r for r in results if "EXPAND" in r.verdict]
+    expand_cases = [r for r in results if r.verdict == "1:N"]
     review_cases = [r for r in results if r.verdict == "NEEDS_REVIEW"]
     fail_cases = [r for r in results if r.verdict == "COMPILE_FAIL"]
+    unsupported_cases = [
+        r for r in results if r.verdict == "UNSUPPORTED_BY_PTX_ISA"
+    ]
 
     if expand_cases:
         print("  EXPAND cases (require attention):")
         for r in expand_cases:
+            effective_count = (
+                r.audited_sass_instrs_O0
+                if r.audit_status == "VERIFIED"
+                else r.sass_core_instrs_O0
+            )
             print(f"    [{r.batch}] {r.case_id} {r.mnemonic}: "
-                  f"O0={r.sass_target_instrs_O0} instrs, "
+                  f"O0 audited={effective_count} instrs "
+                  f"(cleaned={r.sass_core_instrs_O0}, "
+                  f"raw={r.sass_target_instrs_O0}), "
                   f"+{r.sass_extra_regs_O0} regs -> {r.verdict}")
 
     if review_cases:
@@ -482,11 +1000,19 @@ def print_summary(results: list[AnalysisResult]):
         for r in fail_cases:
             print(f"    [{r.batch}] {r.case_id} {r.mnemonic}")
 
+    if unsupported_cases:
+        print("\n  UNSUPPORTED_BY_PTX_ISA negative-test cases:")
+        for r in unsupported_cases:
+            print(f"    [{r.batch}] {r.case_id} {r.mnemonic}: {r.notes.rstrip('; ')}")
+
     print("\n" + "=" * 60)
 
     # 最终结论建议
     one_to_one = sum(1 for r in results if r.verdict in ("1:1", "1:1_FORMAT"))
-    total_valid = sum(1 for r in results if r.verdict != "COMPILE_FAIL")
+    total_valid = sum(
+        1 for r in results
+        if r.verdict not in ("COMPILE_FAIL", "UNSUPPORTED_BY_PTX_ISA")
+    )
     if total_valid > 0:
         ratio = 100.0 * one_to_one / total_valid
         print(f"\n  1:1 Mapping Rate: {one_to_one}/{total_valid} ({ratio:.1f}%)")
@@ -552,8 +1078,12 @@ def main():
             "1:1_FORMAT": "[OK]",
             "EXPAND_ARCH": "[!!]",
             "EXPAND_OPT": "[!?]",
+            "1:N": "[!!]",
+            "ELIMINATED": "[--]",
+            "NO_CORE_SASS": "[0C]",
             "NEEDS_REVIEW": "[??]",
             "COMPILE_FAIL": "[XX]",
+            "UNSUPPORTED_BY_PTX_ISA": "[NA]",
             "UNKNOWN": "[--]",
         }.get(result.verdict, "[--]")
 

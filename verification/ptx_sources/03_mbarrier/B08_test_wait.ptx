@@ -1,13 +1,22 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 .shared .align 8 .u64 smem_mbar;
 
 .visible .entry test_mbarrier_test_wait() {
     .reg .pred %result;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     mbarrier.test_wait.parity.shared::cta.b64 %result, [smem_mbar], 0;
+    // === end target instruction ===
+    .loc 1 200 0
+    @%result st.global.u32 [__ptx_sink+0], 1;
+    @!%result st.global.u32 [__ptx_sink+0], 0;
+    .loc 1 300 0
 
     ret;
 }

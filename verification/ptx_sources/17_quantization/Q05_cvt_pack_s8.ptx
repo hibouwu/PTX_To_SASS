@@ -1,8 +1,10 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 
-// Q05: cvt.pack.sat.s8.s32 (INT8 pack)
+// Q05: cvt.pack.sat.s8.s32.b32 (INT8 pack)
 .visible .entry test_cvt_pack_s8() {
     .reg .s32 %r0, %r1;
     .reg .b32 %r2;
@@ -10,8 +12,14 @@
     mov.s32 %r0, 42;
 mov.s32 %r1, -10;
 
-    // === 待测指令 ===
-    cvt.pack.sat.s8.s32 %r2, %r0, %r1, 0;
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
+    cvt.pack.sat.s8.s32.b32 %r2, %r0, %r1, 0;
+    // === end target instruction ===
+    .loc 1 200 0
+    st.global.b32 [__ptx_sink+0], %r2;
+    .loc 1 300 0
 
     ret;
 }

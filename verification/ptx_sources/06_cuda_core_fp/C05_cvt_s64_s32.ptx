@@ -1,6 +1,8 @@
-.version 9.3
+.version 8.7
 .target sm_100a
 .address_size 64
+.file 1 "ptx_mapping_case.ptx"
+.global .align 16 .b8 __ptx_sink[256];
 
 // C05: cvt.s64.s32 (sign extend)
 .visible .entry test_cvt_s64_s32() {
@@ -9,8 +11,14 @@
 
     mov.s32 %r0, -42;
 
-    // === 待测指令 ===
+    .loc 1 10 0
+    // === target instruction ===
+    .loc 1 100 0
     cvt.s64.s32 %rd0, %r0;
+    // === end target instruction ===
+    .loc 1 200 0
+    st.global.b64 [__ptx_sink+0], %rd0;
+    .loc 1 300 0
 
     ret;
 }
