@@ -114,17 +114,9 @@ static void runTranspose(CUfunction fn) {
                                     CU_TENSOR_MAP_INTERLEAVE_NONE, CU_TENSOR_MAP_SWIZZLE_NONE,
                                     CU_TENSOR_MAP_L2_PROMOTION_NONE, CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE));
 
-    CUdeviceptr inMapDev = 0;
-    CUdeviceptr outMapDev = 0;
-    CHECK_CU(cuMemAlloc(&inMapDev, sizeof(CUtensorMap)));
-    CHECK_CU(cuMemAlloc(&outMapDev, sizeof(CUtensorMap)));
-    CHECK_CU(cuMemcpyHtoD(inMapDev, &inMap, sizeof(CUtensorMap)));
-    CHECK_CU(cuMemcpyHtoD(outMapDev, &outMap, sizeof(CUtensorMap)));
-    void *args[] = {&inMapDev, &outMapDev};
+    void *args[] = {&inMap, &outMap};
     CHECK_CU(cuLaunchKernel(fn, 1, 1, 1, 128, 1, 1, 0, nullptr, args, nullptr));
     syncAndReport("transpose");
-    CHECK_CU(cuMemFree(inMapDev));
-    CHECK_CU(cuMemFree(outMapDev));
     CHECK_CU(cuMemFree(in));
     CHECK_CU(cuMemFree(out));
 }
