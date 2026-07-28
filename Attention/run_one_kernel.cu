@@ -157,17 +157,45 @@ static std::string baseName(const char *path) {
 }
 
 int main(int argc, char **argv) {
-    if (argc != 3) {
-        std::fprintf(stderr, "usage: %s <cubin> <kernel-name>\n", argv[0]);
+    if (argc != 3 && argc != 4) {
+        std::fprintf(stderr, "usage: %s <cubin> <kernel-name> [device-ordinal]\n", argv[0]);
         return 2;
     }
 
     const char *cubinPath = argv[1];
     const char *kernelName = argv[2];
+    int deviceOrdinal = 0;
+    if (argc == 4) {
+        char *end = nullptr;
+        long parsed = std::strtol(argv[3], &end, 10);
+        if (!end || *end != '\0' || parsed < 0) {
+            std::fprintf(stderr, "invalid device ordinal: %s\n", argv[3]);
+            return 2;
+        }
+        deviceOrdinal = static_cast<int>(parsed);
+    }
 
     CHECK_CU(cuInit(0));
     CUdevice dev;
-    CHECK_CU(cuDeviceGet(&dev, 0));
+    CHECK_CU(cuDeviceGet(&dev, deviceOrdinal));
+    char deviceName[256] = {};
+    int major = 0;
+    int minor = 0;
+    CHECK_CU(cuDeviceGetName(deviceName, sizeof(deviceName), dev));
+    CHECK_CU(cuDeviceGetAttribute(
+        &major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, dev));
+    CHECK_CU(cuDeviceGetAttribute(
+        &minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, dev));
+    if (major != 11 || minor != 0) {
+        std::fprintf(stderr,
+                     "device %d is %s with compute capability %d.%d; "
+                     "sm_110f requires compute capability 11.0\n",
+                     deviceOrdinal, deviceName, major, minor);
+        return 2;
+    }
+    std::printf("[DEVICE OK] %d: %s (compute capability %d.%d)\n",
+                deviceOrdinal, deviceName, major, minor);
+
     CUcontext ctx;
     CHECK_CU(cuCtxCreate(&ctx, nullptr, 0, dev));
 
