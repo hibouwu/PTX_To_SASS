@@ -1,0 +1,212 @@
+// ============================================================================
+// Reference PTX skeleton: multi-warp softmax (C1)
+//
+// Target: sm_110f | PTX ISA 9.3
+// Config: n=1024 elements, 4 warps (128 threads), single CTA
+//
+// Algorithm stages (annotated inline):
+//   [S1] Thread identification
+//   [S2] Address computation (64-bit global pointer arithmetic)
+//   [S3] Local max (8 strided elements, compile-time unroll)
+//   [S4] Warp reduction  max (5 rounds shfl.sync.down)
+//   [S5] Cross-warp reduction  max (SMEM partials + bar.sync)
+//   [S6] Local exp + sum (ex2.approx with log2(e) scaling)
+//   [S7] Warp reduction  sum
+//   [S8] Cross-warp reduction  sum
+//   [S9] Normalize + store
+//
+// This skeleton must compile with `ptxas -arch=sm_110f`.
+// Data values are irrelevant; instruction forms are authoritative.
+// ============================================================================
+
+.version 9.0
+.target sm_110f
+.address_size 64
+
+.visible .entry softmax_mt(
+    .param .u64 x_ptr,
+    .param .u64 y_ptr
+)
+{
+    .reg .b32 %r<100>;
+    .reg .b64 %rd<20>;
+    .reg .f32 %f<100>;
+    .reg .pred %p<10>;
+
+    .shared .align 4 .b8 partials_max[16];   // 4 warps * 4 bytes
+    .shared .align 4 .b8 partials_sum[16];
+
+    // === [S1] Thread identification ================================
+    mov.u32 %r0, %tid.x;          // thread_id in [0, 127]
+    mov.u32 %r1, %ntid.x;         // block_size = 128
+
+    // warp_id = tid / 32; lane_id = tid % 32
+    shr.u32 %r2, %r0, 5;          // warp_id
+    and.b32 %r3, %r0, 31;         // lane_id
+    shl.b32 %r4, %r2, 2;          // warp_byte_offset = warp_id * 4
+    mov.u32 %r90, partials_max;
+    add.u32 %r91, %r90, %r4;
+    mov.u32 %r92, partials_sum;
+    add.u32 %r93, %r92, %r4;
+
+    // === [S2] Address computation ==================================
+    ld.param.u64 %rd0, [x_ptr];
+    ld.param.u64 %rd1, [y_ptr];
+
+    // byte_offset = tid * 8 elements * 4 bytes = tid * 32
+    // But we use per-element offset: elem_base = tid (strided by nthreads)
+    // addr_i = x_ptr + (tid + i*128) * 4
+    cvt.u64.u32 %rd2, %r0;        // (u64)tid
+    mad.wide.u32 %rd3, %r0, 4, %rd0;  // x_ptr + tid*4 (first element addr)
+
+    // === [S3] Local max (8 strided elements, unrolled) =============
+    // Element i is at offset (tid + i*128)*4 from x_ptr
+    // Precompute: stride_bytes = 128*4 = 512
+    ld.global.f32 %f0, [%rd3+0];      // x[tid + 0*128]
+    ld.global.f32 %f1, [%rd3+512];    // x[tid + 1*128]
+    ld.global.f32 %f2, [%rd3+1024];   // x[tid + 2*128]
+    ld.global.f32 %f3, [%rd3+1536];   // x[tid + 3*128]
+    ld.global.f32 %f4, [%rd3+2048];   // x[tid + 4*128]
+    ld.global.f32 %f5, [%rd3+2560];   // x[tid + 5*128]
+    ld.global.f32 %f6, [%rd3+3072];   // x[tid + 6*128]
+    ld.global.f32 %f7, [%rd3+3584];   // x[tid + 7*128]
+
+    // Tree-reduce local max
+    max.f32 %f10, %f0, %f1;
+    max.f32 %f11, %f2, %f3;
+    max.f32 %f12, %f4, %f5;
+    max.f32 %f13, %f6, %f7;
+    max.f32 %f14, %f10, %f11;
+    max.f32 %f15, %f12, %f13;
+    max.f32 %f16, %f14, %f15;     // local_max
+
+    // === [S4] Warp reduction  max (5 rounds) ======================
+    // U6 adjudicated: shfl.sync.down.b32 accepts %f registers directly
+    // (bit-size .b32 compatible with any same-width register type).
+    shfl.sync.down.b32 %f17, %f16, 16, 31, 0xffffffff;
+    max.f32 %f16, %f16, %f17;
+
+    shfl.sync.down.b32 %f17, %f16, 8, 31, 0xffffffff;
+    max.f32 %f16, %f16, %f17;
+
+    shfl.sync.down.b32 %f17, %f16, 4, 31, 0xffffffff;
+    max.f32 %f16, %f16, %f17;
+
+    shfl.sync.down.b32 %f17, %f16, 2, 31, 0xffffffff;
+    max.f32 %f16, %f16, %f17;
+
+    shfl.sync.down.b32 %f17, %f16, 1, 31, 0xffffffff;
+    max.f32 %f16, %f16, %f17;     // warp_max (valid in all lanes)
+
+    // === [S5] Cross-warp reduction  max ===========================
+    // Lane 0 of each warp writes warp_max to SMEM
+    setp.eq.u32 %p0, %r3, 0;      // predicate: am I lane 0?
+    @%p0 st.shared.f32 [%r91], %f16;  // partials_max[warp_id]
+
+    bar.sync 0;                    // CTA-wide barrier
+
+    // All threads read 4 partials and reduce
+    ld.shared.f32 %f20, [partials_max + 0];
+    ld.shared.f32 %f21, [partials_max + 4];
+    ld.shared.f32 %f22, [partials_max + 8];
+    ld.shared.f32 %f23, [partials_max + 12];
+    max.f32 %f24, %f20, %f21;
+    max.f32 %f25, %f22, %f23;
+    max.f32 %f26, %f24, %f25;     // global_max
+
+    // === [S6] Local exp + sum ======================================
+    // exp(x - max) = ex2.approx((x - max) * log2(e))
+    // log2(e) = 0F3FB8AA3B (hex float)
+    sub.f32 %f30, %f0, %f26;
+    mul.f32 %f30, %f30, 0F3FB8AA3B;
+    ex2.approx.f32 %f30, %f30;    // e[0]
+
+    sub.f32 %f31, %f1, %f26;
+    mul.f32 %f31, %f31, 0F3FB8AA3B;
+    ex2.approx.f32 %f31, %f31;    // e[1]
+
+    sub.f32 %f32, %f2, %f26;
+    mul.f32 %f32, %f32, 0F3FB8AA3B;
+    ex2.approx.f32 %f32, %f32;    // e[2]
+
+    sub.f32 %f33, %f3, %f26;
+    mul.f32 %f33, %f33, 0F3FB8AA3B;
+    ex2.approx.f32 %f33, %f33;    // e[3]
+
+    sub.f32 %f34, %f4, %f26;
+    mul.f32 %f34, %f34, 0F3FB8AA3B;
+    ex2.approx.f32 %f34, %f34;    // e[4]
+
+    sub.f32 %f35, %f5, %f26;
+    mul.f32 %f35, %f35, 0F3FB8AA3B;
+    ex2.approx.f32 %f35, %f35;    // e[5]
+
+    sub.f32 %f36, %f6, %f26;
+    mul.f32 %f36, %f36, 0F3FB8AA3B;
+    ex2.approx.f32 %f36, %f36;    // e[6]
+
+    sub.f32 %f37, %f7, %f26;
+    mul.f32 %f37, %f37, 0F3FB8AA3B;
+    ex2.approx.f32 %f37, %f37;    // e[7]
+
+    // Local sum
+    add.f32 %f40, %f30, %f31;
+    add.f32 %f41, %f32, %f33;
+    add.f32 %f42, %f34, %f35;
+    add.f32 %f43, %f36, %f37;
+    add.f32 %f44, %f40, %f41;
+    add.f32 %f45, %f42, %f43;
+    add.f32 %f46, %f44, %f45;     // local_sum
+
+    // === [S7] Warp reduction  sum (5 rounds) ======================
+    shfl.sync.down.b32 %f47, %f46, 16, 31, 0xffffffff;
+    add.f32 %f46, %f46, %f47;
+
+    shfl.sync.down.b32 %f47, %f46, 8, 31, 0xffffffff;
+    add.f32 %f46, %f46, %f47;
+
+    shfl.sync.down.b32 %f47, %f46, 4, 31, 0xffffffff;
+    add.f32 %f46, %f46, %f47;
+
+    shfl.sync.down.b32 %f47, %f46, 2, 31, 0xffffffff;
+    add.f32 %f46, %f46, %f47;
+
+    shfl.sync.down.b32 %f47, %f46, 1, 31, 0xffffffff;
+    add.f32 %f46, %f46, %f47;     // warp_sum
+
+    // === [S8] Cross-warp reduction  sum ===========================
+    @%p0 st.shared.f32 [%r93], %f46;
+
+    bar.sync 0;
+
+    ld.shared.f32 %f50, [partials_sum + 0];
+    ld.shared.f32 %f51, [partials_sum + 4];
+    ld.shared.f32 %f52, [partials_sum + 8];
+    ld.shared.f32 %f53, [partials_sum + 12];
+    add.f32 %f54, %f50, %f51;
+    add.f32 %f55, %f52, %f53;
+    add.f32 %f56, %f54, %f55;     // global_sum
+
+    // === [S9] Normalize + store ====================================
+    rcp.approx.f32 %f60, %f56;    // inv_sum = 1/global_sum
+
+    mul.f32 %f70, %f30, %f60;     // y[0] = e[0] * inv_sum
+    mul.f32 %f71, %f31, %f60;
+    mul.f32 %f72, %f32, %f60;
+    mul.f32 %f73, %f33, %f60;
+    mul.f32 %f74, %f34, %f60;
+    mul.f32 %f75, %f35, %f60;
+    mul.f32 %f76, %f36, %f60;
+    mul.f32 %f77, %f37, %f60;
+
+    st.global.f32 [%rd3+0], %f70;
+    st.global.f32 [%rd3+512], %f71;
+    st.global.f32 [%rd3+1024], %f72;
+    st.global.f32 [%rd3+1536], %f73;
+    st.global.f32 [%rd3+2048], %f74;
+    st.global.f32 [%rd3+2560], %f75;
+    st.global.f32 [%rd3+3072], %f76;
+    st.global.f32 [%rd3+3584], %f77;
+
+    ret;
+}

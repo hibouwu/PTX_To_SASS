@@ -1,0 +1,137 @@
+// ============================================================================
+// Reference PTX skeleton: fused element-wise add+gelu+quantize (C4)
+//
+// Target: sm_110f | PTX ISA 9.3
+// Config: tile=256, 4 warps (128 threads), buffers=2 (double-buffer)
+//
+// Algorithm stages:
+//   [S1] Thread identification + grid-stride setup
+//   [S2] Runtime loop header (bra + label + guard)
+//   [S3] Load tile from GMEM  SMEM slot (staging)
+//   [S4] bar.sync (staging complete)
+//   [S5] Compute: add bias  GELU  fake-quant (from SMEM, back to SMEM)
+//   [S6] bar.sync (compute complete, slot reuse switch)
+//   [S7] Store tile from SMEM  GMEM
+//   [S8] Loop back-edge
+//
+// Key framework mechanisms exercised:
+//   - A3: bra/label/guard (runtime loop)
+//   - C3: SMEM reuse group (in/out share physical slot, bar.sync switch)
+//   - A2: tanh.approx.f32, cvt.rni.f32.f32 (new data entries)
+// ============================================================================
+
+.version 9.0
+.target sm_110f
+.address_size 64
+
+.visible .entry fused_ew(
+    .param .u64 x_ptr,
+    .param .u64 bias_ptr,
+    .param .u64 y_ptr,
+    .param .u32 n,
+    .param .f32 scale
+)
+{
+    .reg .b32 %r<100>;
+    .reg .b64 %rd<20>;
+    .reg .f32 %f<100>;
+    .reg .pred %p<10>;
+
+    // Two SMEM slots (double-buffer); each holds tile=256 f32 = 1024 bytes.
+    // Within each slot, in/out share the same physical region (reuse group).
+    .shared .align 128 .b8 slot_0[1024];
+    .shared .align 128 .b8 slot_1[1024];
+
+    // === [S1] Thread identification + grid-stride setup ============
+    mov.u32 %r0, %tid.x;           // threadIdx.x
+    mov.u32 %r1, %ntid.x;          // blockDim.x
+    mov.u32 %r2, %ctaid.x;         // blockIdx.x
+    mov.u32 %r3, %nctaid.x;        // gridDim.x
+
+    // start = blockIdx.x * blockDim.x + threadIdx.x
+    mad.lo.s32 %r4, %r2, %r1, %r0;
+    // stride = gridDim.x * blockDim.x
+    mul.lo.s32 %r5, %r3, %r1;
+
+    ld.param.u64 %rd0, [x_ptr];
+    ld.param.u64 %rd1, [bias_ptr];
+    ld.param.u64 %rd2, [y_ptr];
+    ld.param.u32 %r6, [n];
+    ld.param.f32 %f0, [scale];
+
+    // Loop variable: %r7 = current global element index
+    mov.b32 %r7, %r4;
+
+    // === [S2] Runtime loop header ==================================
+    // while (i < n) { ... i += stride; }
+L_loop_header:
+    setp.ge.s32 %p1, %r7, %r6;    // p1 = (i >= n)
+    @%p1 bra L_exit;               // guard: exit if done
+
+    // === [S3] Load from GMEM  SMEM slot_0 (staging) ==============
+    // Simplified: each thread loads 2 elements (tile/threads = 256/128 = 2)
+    mad.wide.u32 %rd3, %r7, 4, %rd0;   // x_addr = x_ptr + i*4
+    ld.global.f32 %f10, [%rd3+0];       // x[i]
+    ld.global.f32 %f11, [%rd3+4];       // x[i+1] (simplified; real: strided)
+
+    mad.wide.u32 %rd4, %r7, 4, %rd1;   // bias_addr
+    ld.global.f32 %f12, [%rd4+0];       // bias[i]
+    ld.global.f32 %f13, [%rd4+4];       // bias[i+1]
+
+    // Store to SMEM slot_0 (staging area)
+    // Use tid-based offset within slot: tid*4
+    shl.b32 %r10, %r0, 2;              // smem_byte_offset = tid * 4
+    mov.u32 %r90, slot_0;
+    add.u32 %r91, %r90, %r10;
+    st.shared.f32 [%r91], %f10;
+    st.shared.f32 [%r91+4], %f11;
+
+    // === [S4] Barrier (staging complete) ===========================
+    bar.sync 0;
+
+    // === [S5] Compute: add + GELU + quant =========================
+    // Read from SMEM slot_0 (in region)
+    ld.shared.f32 %f20, [%r91];
+    ld.shared.f32 %f21, [%r91+4];
+
+    // --- Element 0: t = x + bias ---
+    add.f32 %f30, %f20, %f12;          // t = x + bias
+
+    // --- GELU(t) = 0.5*t*(1 + tanh(sqrt(2/pi)*(t + 0.044715*t^3))) ---
+    mul.f32 %f31, %f30, %f30;          // t^2
+    mul.f32 %f32, %f31, %f30;          // t^3
+    mul.f32 %f33, %f32, 0F3D371690;    // 0.044715 * t^3
+    add.f32 %f34, %f30, %f33;          // t + 0.044715*t^3
+    mul.f32 %f35, %f34, 0F3FA2E42E;    // sqrt(2/pi) * (...)
+    tanh.approx.f32 %f36, %f35;        // tanh (PTX ISA 7.0+, sm_75+)
+    add.f32 %f37, %f36, 0F3F800000;    // 1 + tanh(...)  [0F3F800000 = 1.0f]
+    mul.f32 %f38, %f30, 0F3F000000;    // 0.5 * t        [0F3F000000 = 0.5f]
+    mul.f32 %f39, %f38, %f37;          // gelu = 0.5*t*(1+tanh(...))
+
+    // --- Fake quantize: y = round(clamp(gelu*s, -127, 127)) / s ---
+    mul.f32 %f40, %f39, %f0;           // gelu * scale
+    min.f32 %f41, %f40, 0F42FE0000;    // clamp upper: min(x, 127.0)  [0F42FE0000 = 127.0f]
+    max.f32 %f42, %f41, 0FC2FE0000;    // clamp lower: max(x, -127.0) [0FC2FE0000 = -127.0f]
+    cvt.rni.f32.f32 %f43, %f42;        // round to nearest integer (f32f32)
+    rcp.approx.f32 %f44, %f0;          // 1/scale
+    mul.f32 %f45, %f43, %f44;          // y = round(...) / scale
+
+    // Write result back to SMEM slot_0 (out region = same physical address, reuse group)
+    st.shared.f32 [%r91], %f45;
+
+    // (Element 1 follows same pattern, omitted for skeleton brevity)
+
+    // === [S6] Barrier (compute complete, reuse switch) =============
+    bar.sync 0;
+
+    // === [S7] Store from SMEM  GMEM ==============================
+    ld.shared.f32 %f50, [%r91];
+    st.global.f32 [%rd3+0], %f50;
+
+    // === [S8] Loop back-edge =======================================
+    add.s32 %r7, %r7, %r5;         // i += stride
+    bra L_loop_header;              // unconditional back-jump
+
+L_exit:
+    ret;
+}

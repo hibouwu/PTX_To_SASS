@@ -1,0 +1,86 @@
+// ============================================================================
+// Reference PTX skeleton: TMA 1d bulk copy + mbarrier round-trip (C5a)
+//
+// Target: sm_110f | PTX ISA 9.3
+// Config: 128 f32 elements (512 bytes), single warp
+//
+// Algorithm: GMEM →(TMA 1d bulk)→ SMEM →(register +1)→ SMEM →(direct st)→ GMEM
+//
+// mbarrier 7-step sequence (annotated):
+//   [M1] mbarrier.init (initialize barrier, 1 expected arrival)
+//   [M2] fence.proxy.async (ensure init visible to async proxy)
+//   [M3] bar.sync (all threads see initialized barrier)
+//   [M4] mbarrier.arrive.expect_tx (set expected byte count)
+//   [M5] cp.async.bulk (TMA 1d, GMEM→SMEM, mbarrier completion)
+//   [M6] mbarrier.try_wait.parity + retry loop (wait for TMA done)
+//   [M7] Read SMEM data (safe: barrier guarantees visibility)
+//
+// NOTE: This skeleton deliberately bypasses MbarrierArray and calls raw
+// mbarrier primitives directly, per doc/L2_api_qualitative_spec.md §3.2
+// "developer freedom" clause. Purpose: validate the TMA/mbarrier instruction
+// sequence feasibility. Production tcgen05 operators MUST use MbarrierArray.
+// ============================================================================
+
+.version 9.3
+.target sm_110f
+.address_size 64
+
+.visible .entry tma_bulk(
+    .param .u64 in_ptr,
+    .param .u64 out_ptr
+)
+{
+    .reg .b32 %r<100>;
+    .reg .b64 %rd<20>;
+    .reg .f32 %f<100>;
+    .reg .pred %p<10>;
+
+    .shared .align 128 .b8 smem_buf[512];  // 128 f32 = 512 bytes
+    .shared .align 8 .b8 mbar[8];          // mbarrier object (8 bytes)
+
+    // === Thread identification =====================================
+    mov.u32 %r0, %tid.x;
+    ld.param.u64 %rd0, [in_ptr];
+    ld.param.u64 %rd1, [out_ptr];
+
+    // === [M1] Initialize mbarrier ================================
+    // Only thread 0 initializes (single init, all threads arrive later)
+    setp.eq.u32 %p0, %r0, 0;
+    @%p0 mbarrier.init.shared::cta.b64 [mbar], 1;  // expect 1 arrival
+
+    // === [M2] Fence (init visibility to async proxy) =============
+    fence.proxy.async.shared::cta;
+
+    // === [M3] Barrier (all threads see initialized mbar) =========
+    bar.sync 0;
+
+    // === [M4] Set expected TX byte count =========================
+    // Thread 0 arrives and sets expect_tx = 512 bytes
+    @%p0 mbarrier.arrive.expect_tx.shared::cta.b64 %rd10, [mbar], 512;
+
+    // === [M5] TMA 1d bulk copy: GMEM → SMEM =====================
+    // Thread 0 issues the TMA (single-thread TMA is valid)
+    @%p0 cp.async.bulk.shared::cluster.global.mbarrier::complete_tx::bytes [smem_buf], [%rd0], 512, [mbar];
+
+    // === [M6] Wait for TMA completion (try_wait + retry loop) ====
+L_wait_top:
+    mbarrier.try_wait.parity.shared::cta.b64 %p1, [mbar], 0;  // phase 0
+    @!%p1 bra L_wait_top;   // retry if not complete
+
+    // === [M7] Read SMEM, compute (+1), write back ===============
+    // All threads can now safely read SMEM (barrier guarantees visibility)
+    // Each thread processes one element (128 threads, 128 elements)
+    shl.b32 %r10, %r0, 2;              // byte_offset = tid * 4
+    ld.shared.f32 %f0, [smem_buf + %r10];
+    add.f32 %f1, %f0, 0F3F800000;      // +1.0f
+    st.shared.f32 [smem_buf + %r10], %f1;
+
+    bar.sync 0;                         // ensure all writes complete
+
+    // === Store result to GMEM (direct, no TMA store) ============
+    ld.shared.f32 %f2, [smem_buf + %r10];
+    mad.wide.u32 %rd2, %r0, 4, %rd1;   // out_addr = out_ptr + tid*4
+    st.global.f32 [%rd2], %f2;
+
+    ret;
+}

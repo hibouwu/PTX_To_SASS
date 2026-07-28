@@ -1,0 +1,164 @@
+// ============================================================================
+// Reference PTX skeleton: multi-warp layernorm (C2)
+//
+// Target: sm_110f | PTX ISA 9.3
+// Config: n=1024 elements, 4 warps (128 threads), single CTA
+//
+// Algorithm: single-pass (sum + sumsq), then affine
+//   [S1] Thread identification
+//   [S2] Address computation
+//   [S3] Local sum + sumsq (8 strided elements, unrolled)
+//   [S4] Warp reduction  sum (5 rounds)
+//   [S5] Cross-warp reduction  sum
+//   [S6] Warp reduction  sumsq (5 rounds)
+//   [S7] Cross-warp reduction  sumsq
+//   [S8] Compute mean + inv_std
+//   [S9] Normalize + affine (gamma/beta) + store
+//
+// Reduction pattern reuses softmax_mt's shuffle+SMEM structure.
+// ============================================================================
+
+.version 9.0
+.target sm_110f
+.address_size 64
+
+.visible .entry layernorm(
+    .param .u64 x_ptr,
+    .param .u64 y_ptr,
+    .param .u64 gamma_ptr,
+    .param .u64 beta_ptr
+)
+{
+    .reg .b32 %r<100>;
+    .reg .b64 %rd<20>;
+    .reg .f32 %f<120>;
+    .reg .pred %p<10>;
+
+    .shared .align 4 .b8 partials_sum[16];
+    .shared .align 4 .b8 partials_sumsq[16];
+
+    // === [S1] Thread identification ================================
+    mov.u32 %r0, %tid.x;
+    mov.u32 %r1, %ntid.x;
+    shr.u32 %r2, %r0, 5;          // warp_id
+    and.b32 %r3, %r0, 31;         // lane_id
+    shl.b32 %r4, %r2, 2;          // warp_byte_offset
+    mov.u32 %r90, partials_sum;
+    add.u32 %r91, %r90, %r4;
+    mov.u32 %r92, partials_sumsq;
+    add.u32 %r93, %r92, %r4;
+
+    // === [S2] Address computation ==================================
+    ld.param.u64 %rd0, [x_ptr];
+    ld.param.u64 %rd1, [y_ptr];
+    ld.param.u64 %rd2, [gamma_ptr];
+    ld.param.u64 %rd3, [beta_ptr];
+
+    mad.wide.u32 %rd4, %r0, 4, %rd0;  // x_addr = x_ptr + tid*4
+    mad.wide.u32 %rd5, %r0, 4, %rd2;  // gamma_addr
+    mad.wide.u32 %rd6, %r0, 4, %rd3;  // beta_addr
+
+    // === [S3] Local sum + sumsq (8 elements, unrolled) =============
+    ld.global.f32 %f0, [%rd4+0];
+    ld.global.f32 %f1, [%rd4+512];
+    ld.global.f32 %f2, [%rd4+1024];
+    ld.global.f32 %f3, [%rd4+1536];
+    ld.global.f32 %f4, [%rd4+2048];
+    ld.global.f32 %f5, [%rd4+2560];
+    ld.global.f32 %f6, [%rd4+3072];
+    ld.global.f32 %f7, [%rd4+3584];
+
+    // sum = x0 + x1 + ... + x7
+    add.f32 %f10, %f0, %f1;
+    add.f32 %f11, %f2, %f3;
+    add.f32 %f12, %f4, %f5;
+    add.f32 %f13, %f6, %f7;
+    add.f32 %f14, %f10, %f11;
+    add.f32 %f15, %f12, %f13;
+    add.f32 %f16, %f14, %f15;     // local_sum
+
+    // sumsq = x0^2 + x1^2 + ... + x7^2
+    mul.f32 %f20, %f0, %f0;
+    fma.rn.f32 %f20, %f1, %f1, %f20;
+    fma.rn.f32 %f20, %f2, %f2, %f20;
+    fma.rn.f32 %f20, %f3, %f3, %f20;
+    fma.rn.f32 %f20, %f4, %f4, %f20;
+    fma.rn.f32 %f20, %f5, %f5, %f20;
+    fma.rn.f32 %f20, %f6, %f6, %f20;
+    fma.rn.f32 %f20, %f7, %f7, %f20;  // local_sumsq
+
+    // === [S4] Warp reduction  sum =================================
+    shfl.sync.down.b32 %f17, %f16, 16, 31, 0xffffffff;
+    add.f32 %f16, %f16, %f17;
+    shfl.sync.down.b32 %f17, %f16, 8, 31, 0xffffffff;
+    add.f32 %f16, %f16, %f17;
+    shfl.sync.down.b32 %f17, %f16, 4, 31, 0xffffffff;
+    add.f32 %f16, %f16, %f17;
+    shfl.sync.down.b32 %f17, %f16, 2, 31, 0xffffffff;
+    add.f32 %f16, %f16, %f17;
+    shfl.sync.down.b32 %f17, %f16, 1, 31, 0xffffffff;
+    add.f32 %f16, %f16, %f17;     // warp_sum
+
+    // === [S5] Cross-warp reduction  sum ===========================
+    setp.eq.u32 %p0, %r3, 0;
+    @%p0 st.shared.f32 [%r91], %f16;
+    bar.sync 0;
+    ld.shared.f32 %f30, [partials_sum + 0];
+    ld.shared.f32 %f31, [partials_sum + 4];
+    ld.shared.f32 %f32, [partials_sum + 8];
+    ld.shared.f32 %f33, [partials_sum + 12];
+    add.f32 %f34, %f30, %f31;
+    add.f32 %f35, %f32, %f33;
+    add.f32 %f36, %f34, %f35;     // global_sum
+
+    // === [S6] Warp reduction  sumsq ===============================
+    shfl.sync.down.b32 %f21, %f20, 16, 31, 0xffffffff;
+    add.f32 %f20, %f20, %f21;
+    shfl.sync.down.b32 %f21, %f20, 8, 31, 0xffffffff;
+    add.f32 %f20, %f20, %f21;
+    shfl.sync.down.b32 %f21, %f20, 4, 31, 0xffffffff;
+    add.f32 %f20, %f20, %f21;
+    shfl.sync.down.b32 %f21, %f20, 2, 31, 0xffffffff;
+    add.f32 %f20, %f20, %f21;
+    shfl.sync.down.b32 %f21, %f20, 1, 31, 0xffffffff;
+    add.f32 %f20, %f20, %f21;     // warp_sumsq
+
+    // === [S7] Cross-warp reduction  sumsq =========================
+    @%p0 st.shared.f32 [%r93], %f20;
+    bar.sync 0;
+    ld.shared.f32 %f40, [partials_sumsq + 0];
+    ld.shared.f32 %f41, [partials_sumsq + 4];
+    ld.shared.f32 %f42, [partials_sumsq + 8];
+    ld.shared.f32 %f43, [partials_sumsq + 12];
+    add.f32 %f44, %f40, %f41;
+    add.f32 %f45, %f42, %f43;
+    add.f32 %f46, %f44, %f45;     // global_sumsq
+
+    // === [S8] Compute mean + inv_std ===============================
+    // mean = global_sum / n; var = global_sumsq/n - mean^2
+    // inv_std = rsqrt(var + eps)
+    // n = 1024, eps = 1e-5 (0F3727C5AC as hex float approx)
+    div.rn.f32 %f50, %f36, 0F44800000;   // mean = sum / 1024.0f
+    div.rn.f32 %f51, %f46, 0F44800000;   // mean_sq = sumsq / 1024.0f
+    mul.f32 %f52, %f50, %f50;            // mean^2
+    sub.f32 %f53, %f51, %f52;            // var = mean_sq - mean^2
+    add.f32 %f54, %f53, 0F3727C5AC;      // var + eps
+    rsqrt.approx.f32 %f55, %f54;         // inv_std
+
+    // === [S9] Normalize + affine + store ===========================
+    // y[i] = (x[i] - mean) * inv_std * gamma[i] + beta[i]
+    ld.global.f32 %f60, [%rd5+0];       // gamma[tid+0*128]
+    ld.global.f32 %f61, [%rd6+0];       // beta[tid+0*128]
+    sub.f32 %f70, %f0, %f50;
+    mul.f32 %f70, %f70, %f55;
+    fma.rn.f32 %f70, %f70, %f60, %f61;  // y = norm*gamma + beta (fma)
+    // NOTE: fma.rn.f32 d, a, b, c computes d = a*b + c
+    // So: y = (x-mean)*inv_std * gamma + beta
+
+    st.global.f32 [%rd4+0], %f70;
+
+    // (elements 1-7 follow same pattern, omitted for brevity in skeleton)
+    // In the real implementation, all 8 elements are fully unrolled.
+
+    ret;
+}
