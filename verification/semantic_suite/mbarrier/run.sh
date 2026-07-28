@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================================
-# CTA mbarrier semantic suite for B200
+# CTA + cluster mbarrier semantic suite for B200
 #
-# Builds a composed PTX protocol, disassembles it, and executes all three entries
-# through the CUDA Driver API.  This is intentionally separate from
+# Builds CTA and cluster composed PTX protocols, disassembles them, and executes
+# every entry through the CUDA Driver API.  This is intentionally separate from
 # verification/ptx_sources, whose files are STATIC_MAPPING evidence only.
 #
 # Usage:
@@ -81,6 +81,7 @@ PTXAS="${PTXAS:-$CUDA_HOME/bin/ptxas}"
 NVDISASM="${NVDISASM:-$CUDA_HOME/bin/nvdisasm}"
 NVCC="${NVCC:-$CUDA_HOME/bin/nvcc}"
 PTX_FILE="$SCRIPT_DIR/mbarrier_semantic.ptx"
+CLUSTER_PTX_FILE="$SCRIPT_DIR/mbarrier_cluster_remote_semantic.ptx"
 if [[ -n "$OUT_DIR" ]]; then
     BUILD_DIR="$OUT_DIR/build"
     CUBIN_DIR="$OUT_DIR/cubin"
@@ -91,6 +92,7 @@ else
     SASS_DIR="$SCRIPT_DIR/sass"
 fi
 RUNNER="$BUILD_DIR/run_mbarrier"
+CLUSTER_RUNNER="$BUILD_DIR/run_mbarrier_cluster"
 
 for tool in "$PTXAS" "$NVCC"; do
     if [[ ! -x "$tool" ]]; then
@@ -111,30 +113,48 @@ mkdir -p "$BUILD_DIR" "$CUBIN_DIR" "$SASS_DIR"
 # clears unrelated files that happen to be in the chosen parent directory.
 rm -f "$CUBIN_DIR/mbarrier_semantic_O0.cubin" \
       "$CUBIN_DIR/mbarrier_semantic_O3.cubin" \
+      "$CUBIN_DIR/mbarrier_cluster_remote_semantic_O0.cubin" \
+      "$CUBIN_DIR/mbarrier_cluster_remote_semantic_O3.cubin" \
       "$SASS_DIR/mbarrier_semantic_O0.sass" \
       "$SASS_DIR/mbarrier_semantic_O0_gp.sass" \
       "$SASS_DIR/mbarrier_semantic_O3.sass" \
       "$SASS_DIR/mbarrier_semantic_O3_gp.sass" \
+      "$SASS_DIR/mbarrier_cluster_remote_semantic_O0.sass" \
+      "$SASS_DIR/mbarrier_cluster_remote_semantic_O0_gp.sass" \
+      "$SASS_DIR/mbarrier_cluster_remote_semantic_O3.sass" \
+      "$SASS_DIR/mbarrier_cluster_remote_semantic_O3_gp.sass" \
       "$BUILD_DIR/runtime_results_O0.txt" \
-      "$BUILD_DIR/runtime_results_O3.txt"
+      "$BUILD_DIR/runtime_results_O3.txt" \
+      "$BUILD_DIR/runtime_cluster_results_O0.txt" \
+      "$BUILD_DIR/runtime_cluster_results_O3.txt"
 
 echo "Using: $($PTXAS --version 2>&1 | head -1)"
 echo "Target architecture: $ARCH"
 echo "Output directory: ${OUT_DIR:-$SCRIPT_DIR}"
 
-for opt in O0 O3; do
-    cubin="$CUBIN_DIR/mbarrier_semantic_${opt}.cubin"
-    echo "[compile] $opt"
-    "$PTXAS" -arch="$ARCH" "-$opt" -lineinfo -o "$cubin" "$PTX_FILE"
+compile_ptx_suite() {
+    local stem="$1"
+    local ptx_file="$2"
+    local opt cubin
 
-    if ! $SKIP_DISASM; then
-        echo "[disasm] $opt"
-        "$NVDISASM" -g "$cubin" >"$SASS_DIR/mbarrier_semantic_${opt}.sass"
-        "$NVDISASM" -gp "$cubin" >"$SASS_DIR/mbarrier_semantic_${opt}_gp.sass"
-    fi
-done
+    for opt in O0 O3; do
+        cubin="$CUBIN_DIR/${stem}_${opt}.cubin"
+        echo "[compile] ${stem} $opt"
+        "$PTXAS" -arch="$ARCH" "-$opt" -lineinfo -o "$cubin" "$ptx_file"
+
+        if ! $SKIP_DISASM; then
+            echo "[disasm] ${stem} $opt"
+            "$NVDISASM" -g "$cubin" >"$SASS_DIR/${stem}_${opt}.sass"
+            "$NVDISASM" -gp "$cubin" >"$SASS_DIR/${stem}_${opt}_gp.sass"
+        fi
+    done
+}
+
+compile_ptx_suite "mbarrier_semantic" "$PTX_FILE"
+compile_ptx_suite "mbarrier_cluster_remote_semantic" "$CLUSTER_PTX_FILE"
 
 "$NVCC" -std=c++17 -O2 -o "$RUNNER" "$SCRIPT_DIR/run_mbarrier.cpp" -lcuda
+"$NVCC" -std=c++17 -O2 -o "$CLUSTER_RUNNER" "$SCRIPT_DIR/run_mbarrier_cluster.cpp" -lcuda
 
 if $COMPILE_ONLY; then
     echo "Compilation complete."
@@ -147,9 +167,12 @@ if ! command -v nvidia-smi >/dev/null 2>&1; then
 fi
 
 for opt in O0 O3; do
-    echo "[run] $opt"
+    echo "[run] CTA $opt"
     "$RUNNER" "$CUBIN_DIR/mbarrier_semantic_${opt}.cubin" "$DEVICE" \
         | tee "$BUILD_DIR/runtime_results_${opt}.txt"
+    echo "[run] cluster/remote $opt"
+    "$CLUSTER_RUNNER" "$CUBIN_DIR/mbarrier_cluster_remote_semantic_${opt}.cubin" "$DEVICE" \
+        | tee "$BUILD_DIR/runtime_cluster_results_${opt}.txt"
 done
 
-echo "PASS: mbarrier semantic suite completed for O0 and O3."
+echo "PASS: CTA and cluster/remote mbarrier semantic suites completed for O0 and O3."

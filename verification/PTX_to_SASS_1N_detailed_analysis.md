@@ -24,6 +24,15 @@
 映射的 N**。现有 CSV 的 `verdict` 尚未按这个新口径重算，不能继续把 75 当成严格
 1:N 的数量。
 
+### XP6 读法
+
+本文保留 `R2UR`、`S2UR`、`ELECT`、`WARPSYNC` 等名称，是为了如实记录 B200 的原始
+lowering。XP6 不设 `UR`：R→UR 路由、只服务于 `UR/UP` 的准备链和纯 warp-SIMT 发射
+协议都不进入 XP6 的 1:N；但 descriptor、地址、CTA/cluster context、barrier state 与
+async 依赖仍须以 XP6 的方式表达。`S2R/MOV/LEA/IMAD`、普通谓词和分支只能按 def-use
+链判断，不能按名称一并删掉。XP6 统计表见
+[`PTX to SASS mapping.md`](PTX%20to%20SASS%20mapping.md#xp6-统计口径)。
+
 旧“1:N”候选在本文中分为以下五种处理状态：
 
 | 标记 | 含义 | 能否直接证明 L0 必须生成多条语义 SASS |

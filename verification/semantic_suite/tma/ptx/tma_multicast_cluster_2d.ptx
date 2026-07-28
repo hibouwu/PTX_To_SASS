@@ -1,0 +1,83 @@
+.version 8.7
+.target sm_100a
+.address_size 64
+.file 1 "tma_multicast_cluster_2d.ptx"
+
+// A two-CTA cluster prepares one local completion barrier per CTA.  Both
+// target CTAs arrive.expect_tx before rank 0 issues one multicast transaction;
+// each CTA then waits for its own local completion and exports its copy.
+.shared .align 128 .b8 smem_tile[1024];
+.shared .align 8 .b64 smem_bar;
+
+.visible .entry semantic_tma_multicast_cluster_2d(
+    .param .u64 p_desc,
+    .param .u64 p_output,
+    .param .u64 p_status
+)
+.reqnctapercluster 2
+{
+    .reg .pred %p<5>;
+    .reg .u16 %h<1>;
+    .reg .u32 %r<9>;
+    .reg .u64 %rd<6>;
+
+    mov.u32 %r0, %tid.x;
+    mov.u32 %r1, %cluster_ctarank;
+    setp.eq.u32 %p0, %r0, 0;
+    setp.eq.u32 %p1, %r1, 0;
+    and.pred %p2, %p0, %p1;
+
+    // Each destination CTA owns a local completion barrier.  Publish every
+    // one to the async proxy before the issuing CTA starts the multicast;
+    // publishing only CTA 0 would leave CTA 1's completion target implicit.
+    @%p0 mbarrier.init.shared::cta.b64 [smem_bar], 1;
+    @%p0 fence.proxy.async.shared::cta;
+    @%p0 fence.mbarrier_init.release.cluster;
+    barrier.cluster.arrive;
+    barrier.cluster.wait;
+
+    // Every multicast destination owns a barrier and joins its expected-byte
+    // phase before the issuing CTA starts the TMA operation.
+    @%p0 mbarrier.arrive.expect_tx.release.cta.shared::cta.b64 %rd0, [smem_bar], 1024;
+    barrier.cluster.arrive;
+    barrier.cluster.wait;
+
+    @!%p2 bra TMA_MC_WAIT_OR_SYNC;
+    ld.param.u64 %rd1, [p_desc];
+    fence.proxy.tensormap::generic.acquire.sys [%rd1], 128;
+    mov.u32 %r2, 0;
+    mov.u16 %h0, 3;
+    cp.async.bulk.tensor.2d.shared::cluster.global.mbarrier::complete_tx::bytes.multicast::cluster
+        [smem_tile], [%rd1, {%r2, %r2}], [smem_bar], %h0;
+
+TMA_MC_WAIT_OR_SYNC:
+    @!%p0 bra TMA_MC_AFTER_COPY;
+TMA_MC_WAIT:
+    mbarrier.try_wait.acquire.cluster.shared::cta.b64 %p3, [smem_bar], %rd0;
+    @!%p3 bra TMA_MC_WAIT;
+
+    ld.param.u64 %rd2, [p_output];
+    mul.wide.u32 %rd3, %r1, 1024;
+    add.u64 %rd2, %rd2, %rd3;
+    mov.u32 %r3, 0;
+TMA_MC_COPY:
+    mul.lo.u32 %r4, %r3, 4;
+    cvta.shared.u64 %rd4, smem_tile;
+    cvt.u64.u32 %rd5, %r4;
+    add.u64 %rd4, %rd4, %rd5;
+    ld.shared.u32 %r5, [%rd4];
+    add.u64 %rd4, %rd2, %rd5;
+    st.global.u32 [%rd4], %r5;
+    add.u32 %r3, %r3, 1;
+    setp.lt.u32 %p4, %r3, 256;
+    @%p4 bra TMA_MC_COPY;
+
+TMA_MC_AFTER_COPY:
+    barrier.cluster.arrive;
+    barrier.cluster.wait;
+    @%p2 ld.param.u64 %rd1, [p_status];
+    @%p2 mov.u32 %r8, 0xAC125001;
+    @%p2 st.global.u32 [%rd1], %r8;
+    @%p0 mbarrier.inval.shared::cta.b64 [smem_bar];
+    ret;
+}

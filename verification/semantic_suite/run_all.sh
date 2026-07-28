@@ -6,9 +6,9 @@
 # STATIC_MAPPING corpus and composed runtime protocols have different source
 # scopes, artifacts, and claims of evidence.
 #
-# Runtime families use the common ABI documented in README.md. tcgen05 never
-# launches a cubin, but it accepts --out-dir so the dispatcher preserves a
-# separate structural-evidence directory per invocation.
+# Runtime families use the common ABI documented in README.md.  tcgen05 first
+# collects retained raw-PTX structural evidence, then runs CuTe-generated
+# real-descriptor numerical cases in its own evidence directory.
 # =============================================================================
 
 set -euo pipefail
@@ -48,7 +48,7 @@ Options:
 Registered families:
   mbarrier  runtime-capable
   tma       runtime-capable (TMA and cp.async)
-  tcgen05   structural-only; never counted as a runtime PASS
+  tcgen05   runtime-capable; retained structural PTX plus CuTe numerical oracle
 EOF
 }
 
@@ -143,7 +143,7 @@ if $LIST_ONLY; then
     printf '%-12s %-28s %s\n' "FAMILY" "EVIDENCE_MODE" "RUNNER"
     printf '%-12s %-28s %s\n' "mbarrier" "RUNTIME_CAPABLE" "mbarrier/run.sh"
     printf '%-12s %-28s %s\n' "tma" "RUNTIME_CAPABLE" "tma/run.sh"
-    printf '%-12s %-28s %s\n' "tcgen05" "STRUCTURAL_COMPILE_ONLY" "tcgen05/run_structural.sh"
+    printf '%-12s %-28s %s\n' "tcgen05" "RUNTIME_CAPABLE" "tcgen05/run.sh"
     exit 0
 fi
 
@@ -227,45 +227,18 @@ run_runtime_family() {
     return 1
 }
 
-run_tcgen05_structural() {
-    local runner="$SCRIPT_DIR/tcgen05/run_structural.sh"
-    local log="$OUT_DIR/logs/tcgen05.log"
-    local -a command=(bash "$runner" --arch "$ARCH" --out-dir "$OUT_DIR/tcgen05")
-
-    if [[ ! -f "$runner" ]]; then
-        echo "ERROR: tcgen05 structural runner missing: $runner" | tee "$log" >&2
-        printf '%s\t%s\t%s\t%s\n' "tcgen05" "STRUCTURAL_COMPILE_ONLY" "MISSING_RUNNER" "logs/tcgen05.log" >>"$SUMMARY"
-        return 1
-    fi
-
-    echo "================================================================"
-    echo "[tcgen05] STRUCTURAL_COMPILE_ONLY: ${command[*]}"
-    echo "================================================================"
-    if CUDA_HOME="$CUDA_HOME_VALUE" "${command[@]}" 2>&1 | tee "$log"; then
-        printf '%s\t%s\t%s\t%s\n' "tcgen05" "STRUCTURAL_COMPILE_ONLY" "STRUCTURAL_COMPILE_PASS" "logs/tcgen05.log" >>"$SUMMARY"
-        return 0
-    fi
-
-    printf '%s\t%s\t%s\t%s\n' "tcgen05" "STRUCTURAL_COMPILE_ONLY" "FAIL" "logs/tcgen05.log" >>"$SUMMARY"
-    return 1
-}
-
 failed=false
 for family in "${FAMILIES[@]}"; do
     if ! family_will_run "$family"; then
         printf '%s\t%s\t%s\t%s\n' \
             "$family" \
-            "$([[ "$family" == tcgen05 ]] && echo STRUCTURAL_COMPILE_ONLY || echo RUNTIME_CAPABLE)" \
+            "RUNTIME_CAPABLE" \
             "SKIPPED" \
             "-" >>"$SUMMARY"
         continue
     fi
 
-    if [[ "$family" == "tcgen05" ]]; then
-        run_tcgen05_structural || failed=true
-    else
-        run_runtime_family "$family" || failed=true
-    fi
+    run_runtime_family "$family" || failed=true
 
     if $failed && ! $KEEP_GOING; then
         echo "Stopping after failure (use --keep-going to continue)." >&2

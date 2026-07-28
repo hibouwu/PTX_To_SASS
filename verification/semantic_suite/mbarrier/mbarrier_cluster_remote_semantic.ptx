@@ -1,0 +1,96 @@
+// SPDX-License-Identifier: MIT
+//
+// Two-CTA cluster semantic test for remote mbarrier arrival and DSMEM access.
+//
+// Launch contract: one 2 x 1 x 1 CTA cluster, each CTA 32 x 1 x 1 threads.
+// The companion host runner uses cuLaunchKernelEx with an explicit 2-CTA
+// cluster dimension.  A normal cuLaunchKernel launch is intentionally invalid
+// for this test because its shared::cluster addresses have no cluster scope.
+
+.version 8.7
+.target sm_100a
+.address_size 64
+
+.file 1 "mbarrier_cluster_remote_semantic.ptx"
+
+.shared .align 8 .u64 smem_cluster_bar;
+.shared .align 4 .u32 smem_payload;
+
+// CTA 0 owns the mbarrier and initializes it for every thread in both CTAs.
+// CTA 1's lane 0 publishes a value in its local shared memory.  Every cluster
+// thread then maps CTA 0's barrier through DSMEM and arrives remotely.  CTA 0
+// waits with acquire.cluster and subsequently reads CTA 1's payload through a
+// separate DSMEM mapping.  No cluster barrier occurs between the producer
+// store and the acquire wait, so the observable payload relies on the remote
+// mbarrier's release->acquire edge rather than on barrier.cluster visibility.
+.visible .entry test_mbarrier_cluster_remote(
+    .param .u64 p_out
+)
+.reqnctapercluster 2, 1, 1
+{
+    .reg .pred %p_tid0, %p_rank0, %p_rank1, %p_rank0_tid0, %p_rank1_tid0;
+    .reg .pred %p_done;
+    .reg .u32 %r_tid, %r_rank, %r_count, %r_zero, %r_one, %r_magic;
+    .reg .u32 %r_remote_bar, %r_remote_payload, %r_observed, %r_status;
+    .reg .b64 %rd_out, %rd_out1;
+
+    ld.param.u64 %rd_out, [p_out];
+    add.u64 %rd_out1, %rd_out, 4;
+    mov.u32 %r_tid, %tid.x;
+    mov.u32 %r_rank, %cluster_ctarank;
+    mov.u32 %r_zero, 0;
+    mov.u32 %r_one, 1;
+    setp.eq.u32 %p_tid0, %r_tid, 0;
+    setp.eq.u32 %p_rank0, %r_rank, 0;
+    setp.eq.u32 %p_rank1, %r_rank, 1;
+    and.pred %p_rank0_tid0, %p_rank0, %p_tid0;
+    and.pred %p_rank1_tid0, %p_rank1, %p_tid0;
+
+    // The object is local to CTA 0; mbarrier.init has no shared::cluster form.
+    @!%p_rank0_tid0 bra C_INIT_DONE;
+    mov.u32 %r_count, 64;
+    mbarrier.init.shared::cta.b64 [smem_cluster_bar], %r_count;
+C_INIT_DONE:
+    // CTA-local ordering makes CTA 0's init precede its fence.  The fence and
+    // this first cluster barrier publish the initialized object to CTA 1.
+    bar.sync 0;
+    @%p_rank0_tid0 fence.mbarrier_init.release.cluster;
+    barrier.cluster.arrive;
+    barrier.cluster.wait;
+
+    // This store is intentionally not followed by a cluster barrier before
+    // CTA 0 observes it.  Its release is the remote mbarrier arrive below.
+    mov.u32 %r_magic, 0xC1A57E01;
+    @%p_rank1_tid0 st.shared.u32 [smem_payload], %r_magic;
+
+    // Translate the barrier symbol to the rank-0 CTA's DSMEM address.  The
+    // same instruction is used by both CTAs; at rank 0 it addresses the local
+    // copy through shared::cluster, and at rank 1 it is a true remote address.
+    mapa.shared::cluster.u32 %r_remote_bar, smem_cluster_bar, %r_zero;
+    mbarrier.arrive.release.cluster.shared::cluster.b64 _, [%r_remote_bar];
+
+    @!%p_rank0_tid0 bra C_CONSUMED;
+C_WAIT_LOOP:
+    // Phase parity starts at zero after init and flips when all 64 arrivals
+    // complete.  acquire.cluster makes CTA 1's release-published payload
+    // observable before the DSMEM load below.
+    mbarrier.try_wait.parity.acquire.cluster.shared::cta.b64 %p_done, [smem_cluster_bar], %r_zero;
+    @!%p_done bra C_WAIT_LOOP;
+
+    mapa.shared::cluster.u32 %r_remote_payload, smem_payload, %r_one;
+    ld.shared::cluster.u32 %r_observed, [%r_remote_payload];
+    st.global.u32 [%rd_out], %r_observed;
+    setp.eq.u32 %p_done, %r_observed, %r_magic;
+    selp.u32 %r_status, 0xC1A57E02, 0xBAD0C1A5, %p_done;
+    st.global.u32 [%rd_out1], %r_status;
+
+C_CONSUMED:
+    // Keep both CTA shared-memory allocations live until CTA 0 has consumed
+    // the remote payload.  This barrier is deliberately after the load.
+    barrier.cluster.arrive;
+    barrier.cluster.wait;
+    @!%p_rank0_tid0 bra C_EXIT;
+    mbarrier.inval.shared::cta.b64 [smem_cluster_bar];
+C_EXIT:
+    ret;
+}

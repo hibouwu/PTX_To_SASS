@@ -1,0 +1,49 @@
+.version 8.7
+.target sm_100a
+.address_size 64
+.file 1 "tma_reduce_add_2d.ptx"
+
+// TMA reduction store: initialize a shared 16 x 16 tile, add it to an
+// initialized global tile, commit the bulk group, and wait before reporting.
+.shared .align 128 .b8 smem_tile[1024];
+
+.visible .entry semantic_tma_reduce_add_2d(
+    .param .u64 p_desc,
+    .param .u64 p_status
+) {
+    .reg .pred %p<2>;
+    .reg .u32 %r<6>;
+    .reg .u64 %rd<4>;
+
+    mov.u32 %r0, %tid.x;
+    setp.eq.u32 %p0, %r0, 0;
+    @!%p0 bra TMA_REDUCE_DONE;
+
+    ld.param.u64 %rd0, [p_desc];
+    ld.param.u64 %rd1, [p_status];
+    mov.u32 %r1, 0;
+TMA_REDUCE_FILL:
+    mul.lo.u32 %r2, %r1, 4;
+    add.u32 %r3, %r1, 1;
+    cvta.shared.u64 %rd2, smem_tile;
+    cvt.u64.u32 %rd3, %r2;
+    add.u64 %rd2, %rd2, %rd3;
+    st.shared.u32 [%rd2], %r3;
+    add.u32 %r1, %r1, 1;
+    setp.lt.u32 %p1, %r1, 256;
+    @%p1 bra TMA_REDUCE_FILL;
+
+    fence.proxy.async.shared::cta;
+    fence.proxy.tensormap::generic.acquire.sys [%rd0], 128;
+    mov.u32 %r0, 0;
+    cp.reduce.async.bulk.tensor.2d.global.shared::cta.add.bulk_group
+        [%rd0, {%r0, %r0}], [smem_tile];
+    cp.async.bulk.commit_group;
+    cp.async.bulk.wait_group 0;
+
+    mov.u32 %r5, 0xADD2D001;
+    st.global.u32 [%rd1], %r5;
+
+TMA_REDUCE_DONE:
+    ret;
+}

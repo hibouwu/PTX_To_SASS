@@ -9,6 +9,10 @@
 SASS 单元格只显示 mnemonic 顺序，完整谓词、寄存器、立即数和地址操作数见
 [`mapping_report.csv`](results/mapping_report.csv) 以及 `sass_dumps/`。
 
+本表是 B200 原始证据，不是 XP6 的指令成本。XP6 不设 `UR`，其 `R2UR/S2UR` 与纯
+warp-SIMT 包络的过滤规则见
+[`PTX to SASS mapping.md`](PTX%20to%20SASS%20mapping.md#xp6-统计口径)。
+
 “解释”列不重复 PTX 的功能定义，而是说明：为何后端不能（或没有）用一条 SASS
 完成该语义，以及这些 SASS 按什么大致顺序协作。SASS 中的 MOV、R2UR 等仅在它们参与
 该流程时提及；它们不自动等同于核心语义展开。

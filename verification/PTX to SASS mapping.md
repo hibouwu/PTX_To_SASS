@@ -1,8 +1,18 @@
 # PTX to SASS mapping
 
+## 分析口径
+
+本文为比较 B200 反汇编，采用以下分类：核心 opcode 是直接表达目标 PTX primitive 的 SASS
+opcode；辅助指令负责 operand routing、谓词、issuer selection、控制流、同步包络或内存顺序；
+完整 lowering 是核心 opcode 加上实现完整 PTX 语义所需的辅助序列。该分类只服务本文统计，
+不是唯一的 ISA 分类方式。
+
+反汇编可直接支持 opcode 及其相对位置。具体用途若只可由 mnemonic 或位置判断，本文使用
+“表明”“可能”或“本文将其视为”等表述，不将其写成已由这段 SASS 严格证明的硬件事实。
+
 # 正例
 
-首先看一个1：1的完整例子
+先看一个 1:1 例子。
 
 ```Assembly language
 .version 8.7                                     // PTX ISA 8.7
@@ -190,29 +200,21 @@ test_tcgen05_mma_cg1_tf32:
 .L_x_2:
 ```
 
-可以看到，一条 PTX `tcgen05.mma` 在 lowering 到 SASS 后，并不只对应一条 `UTCHMMA`，而是生成了一段完整的控制与操作数准备序列（代码内的红底部分），包括：
-
-- `LDCU / UMOV`：加载或构造 uniform operand。例如，`UMOV UR4, URZ` 将零值写入 uniform register `UR4`；
-
-- `UISETP / PLOP3.LUT`：生成并维护 uniform predicate，用于实现 PTX 中的 enable predicate，以及后续的选举与循环控制；
-
-- `ELECT`：在线程集合中选出负责执行当前控制路径的线程；
+反汇编显示，O0 在 `UTCHMMA` 前以 `R2UR` 写入 `UR4`–`UR15`，随后出现 `VOTEU`、
+`ELECT`、`PLOP3.LUT` 和回跳 `BRA.U.ANY`。O3 将部分准备改为 `LDCU`、`UMOV`、`UISETP`，
+仍保留 `ELECT`、`PLOP3.LUT` 及回跳。`UTCHMMA` 在两版序列中各出现一次，是其中直接表达
+MMA primitive 的 opcode；其余指令位于操作数准备或控制链上。`UMOV UR4, URZ` 直接显示
+零值被写入 `UR4`；`ELECT`、谓词和回跳的具体分工则只能由位置和 mnemonic 推断。
 
 ![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NzVlMjU4ZTExNzAxMjlmZDgyNTVhOTM3MTc2NDZkN2NfZDUyMjZlODlmMzQxM2U5YWU3MDlmNTM0Njk5MTRkZjhfSUQ6NzY2NTUzMjUxNzM0ODc0MDA2OF8xNzg1MTM0MjEyOjE3ODUyMjA2MTJfVjM)
 
-- `BRA.U.ANY`：根据选举结果和谓词状态维持控制循环；
+按本文口径，`UTCHMMA` 是核心 opcode，uniform operand 准备和 predicate/控制序列属于完整
+lowering 的辅助部分；该样例的核心 opcode 映射为 1:1，完整 lowering 不是 1:1。反汇编
+没有显示 MMA 被拆成多条数值算术 SASS；能否在其他目标上融合，仍须看该目标的后端产物。
 
-- `UTCHMMA`：lowering 序列中唯一显式执行 Tensor Core MMA 运算的 SASS 指令。
-
-因此，该 PTX 指令的 lowering 结果可以看作：`uniform operand 准备 + 谓词与选举控制 + UTCHMMA 指令本体`。
-
-与整数除法等软件展开型指令不同，`tcgen05.mma` 的核心数值计算没有在 SASS 层面展开为多条算术指令，而是由单条 `UTCHMMA` 表达。不过，完整的 PTX 语义仍需要外围的 uniform operand 准备、谓词处理、线程选举和循环控制代码共同实现。
-
-因此，更准确地说，`tcgen05.mma` 的核心 MMA 运算在 SASS opcode 层面呈现近似 `1:1` 映射，而整条 PTX 指令的完整 lowering 并不是严格的 `1:1` 映射。
-
-根据上面的 `tcgen05.mma` 例子，可以明确：在统计一条 PTX 指令对应的 SASS 指令数量时，允许将为实现该 PTX 语义而生成的辅助控制指令计入完整 lowering 序列；但在判断核心计算语义是否发生软件展开时，应只考察实际执行数值计算的 SASS 指令。
-
-类似指令：**tcgen05\.cp（UTCCP）、tcgen05\.ld（LDTM）、tcgen05\.st（STTM）（注意这三个不是 single thread issue 指令，因此展开 SASS 除了mma 的几个 SASS 指令还有 ****`WARPSYNC.ALL`****，因为要满足同 warp 内隐含的同步语义）**
+`tcgen05.cp`（`UTCCP`）、`tcgen05.ld`（`LDTM`）和 `tcgen05.st`（`STTM`）的样例还出现
+`WARPSYNC.ALL`。反汇编可确认它位于相关序列中；按后文 XP6 统计口径，纯 warp 内包络不计入
+1:N。
 
 # 反例
 
@@ -317,35 +319,28 @@ O3
 .L_x_3:
 ```
 
-可以看到，一条 PTX `barrier.cluster.arrive` 在 lowering 到 SASS 后，并不只对应一条 `UCGABAR_ARV`，而是生成了一段完整的路径分派、warp 协同和到达前状态处理序列，包括：
+反汇编显示，`barrier.cluster.arrive` 的 O0 路径为
+`LDC → ISETP.EQ → @!P0 BRA → MOV → WARPSYNC.COLLECTIVE.ALL → MEMBAR.ALL.GPU → ERRBAR → CGAERRBAR → UCGABAR_ARV → ENDCOLLECTIVE`；
+另一分支只保留 `MOV/WARPSYNC/ENDCOLLECTIVE`。O3 保留 `LDC/ISETP/BRA` 和
+`MEMBAR.ALL.GPU → ERRBAR → CGAERRBAR → UCGABAR_ARV`，去掉了 O0 的 warp collective
+包络。`LDC` 的结果参与比较和分支，表明这里按该值选择路径；仅从该段 SASS 不能确定该值或
+`ERRBAR/CGAERRBAR` 的全部硬件含义。
 
-- `LDC / ISETP.EQ / @!P0 BRA`：`LDC` 从 constant memory 中读取运行时的 cluster 相关配置，`ISETP` 根据该值设置谓词，随后 `BRA` 在 cluster 路径和兼容路径之间进行分派。
+按本文分类，`UCGABAR_ARV` 是直接表达 arrive primitive 的核心 opcode。路径选择、O0 的
+collective 包络，以及位于它前面的顺序相关指令属于完整 lowering 的辅助序列；核心 opcode
+层面为 1:1，完整 lowering 不为 1:1。
 
-- `WARPSYNC.COLLECTIVE(.ALL) / ENDCOLLECTIVE`：在 O0 lowering 中包围 barrier 操作，保证 warp 内参与线程以 collective 方式执行；
+反汇编显示，`barrier.cluster.wait` 的 O0 含 `UCGABAR_WAIT → CCTL.IVALL` 的路径，另一条
+路径含 `SHF → LOP3.LUT → BAR.SYNC.DEFER_BLOCKING → SHF`；两条路径前均有
+`LDC → ISETP.EQ → @!P0 BRA`，O0 还在两侧放置 `WARPSYNC.COLLECTIVE(.ALL)` 和
+`ENDCOLLECTIVE`。O3 将前一路径压缩为 `UCGABAR_WAIT → CCTL.IVALL`，另一条压缩为
+`BAR.SYNC.DEFER_BLOCKING 0x0`；兼容路径没有被删除。`CCTL.IVALL` 紧随
+`UCGABAR_WAIT`，本文只据其位置将其记为 wait 后的辅助操作，不从 mnemonic 推定更细的
+硬件效果。
 
-- `MEMBAR.ALL.GPU`：对此前的内存访问建立顺序约束，使 arrive 之前产生的内存操作在 barrier 到达被发布前完成必要的排序。
-
-- `ERRBAR + CGAERRBAR`：位于 `UCGABAR_ARV` 之前，完成到达操作所需的内存顺序及 cluster 相关状态处理；
-
-- `UCGABAR_ARV`：lowering 序列中实际执行 cluster barrier arrive 的 SASS 指令；
-
-- `MOV / BRA`：负责 collective mask 的构造及控制流汇合。
-
-因此，`barrier.cluster.arrive` 的完整 lowering 可概括为：`配置分派 + collective 协同 + 到达前状态处理 + UCGABAR_ARV`。其中，核心同步动作由单条 `UCGABAR_ARV` 表达；其余指令用于实现 PTX 的作用域、顺序和执行协同语义。
-
-对于 `barrier.cluster.wait`，lowering 同样不只包含一条无条件的 wait 指令，而是包含两类执行路径：
-
-- `UCGABAR_WAIT`：cluster 路径中实际等待参与 CTA 到达 barrier 的 SASS 指令；其后的 `CCTL.IVALL` 用于完成 wait 后所需的缓存状态处理；
-
-- `SHF / LOP3.LUT + BAR.SYNC.DEFER_BLOCKING`：兼容路径中先构造普通 barrier 的操作数，再执行可延后阻塞的 CTA barrier；（O3中被直接优化掉）
-
-- `LDC / ISETP.EQ / BRA`：根据运行时 cluster 配置在上述两条路径之间分派；
-
-- `WARPSYNC.COLLECTIVE(.ALL) / ENDCOLLECTIVE`、`MOV` 和 `BRA`：用于 warp 内 collective 协同、参数路由和控制流汇合。
-
-所以，`barrier.cluster.wait` 的完整 lowering 是：`配置分派 + collective 协同 + UCGABAR_WAIT/CCTL.IVALL cluster 路径 + BAR.SYNC.DEFER_BLOCKING 兼容路径`。`UCGABAR_WAIT` 是 cluster 路径中的核心等待操作，但完整 PTX 语义仍依赖外围的配置判断、缓存状态处理和兼容路径代码。
-
-与 `tcgen05.mma` 一样，这两条指令的核心硬件操作在 SASS opcode 层面均近似为 `1:1` 映射；不过，若按完整 lowering 统计，则它们都不是严格的 `1:1` 映射。不同之处在于，外围指令并非数值计算的软件展开，而是同步语义所需的控制、顺序和协同机制。
+按本文分类，`UCGABAR_WAIT` 是 cluster wait 路径中直接表达目标 primitive 的核心 opcode；
+分支、O0 的 collective 包络、兼容路径和紧随其后的 `CCTL.IVALL` 计入完整 lowering。两种
+计数不能混用。
 
 # 统计
 
@@ -400,7 +395,7 @@ O3
 
 # 指令联合编译
 
-这里把一段完整的 `mbarrier` 生命周期放进同一个 kernel，看 B200 生成的整段 SASS。
+本节把一段完整的 `mbarrier` 生命周期放进同一个 kernel，记录 B200 生成的整段 SASS。
 
 以 `mbarrier` 为例，一个完整生命周期可以包含：
 
@@ -409,30 +404,75 @@ init → expect_tx / arrive.expect_tx → arrive → complete_tx
      → try_wait.acquire（循环等待）→ arrive_drop（可选，改变下一 phase 的参与者）→ inval
 ```
 
-XP6 的 1:N 统计以 SIMD 执行组为单位。组内的 lane mask、谓词合成、重汇聚和 `WARPSYNC` 都归入一条 SIMD 指令，不单独计数。寄存器搬运只保留有效操作数搬运：`R2UR`、`S2R/S2UR` 或非 identity `MOV` 的结果直接供 barrier、TMEM 或 TMA 的地址、state、token 使用；死值搬运和只服务于 warp 控制流的搬运剔除。
+## 每个 case 在做什么
 
-跨执行组的同步计入 mapping：`mbarrier` 的到达和等待、`arrive_drop` 后的计数变化、事务完成、release/acquire 可见性，以及 CTA 级 `bar.sync`。
+下表列出完整协议；`1:N 源行`只标出后表统计的 PTX。未标出的 arrive、wait、commit、
+`bar.sync` 或 `inval` 仍属于该协议，只是按本节 XP6 口径不构成 1:N。
 
-## XP6 口径下出现 1:N 的指令
+|目录 / case|参与者与数据|完整 PTX 协议（源行）|完成条件 / B200 状态|1:N 源行|
+|---|---|---|---|---|
+|mbarrier / `test_mbarrier_arrive_wait`|`mbarrier_semantic.ptx`，`<<<1,32>>>`；每个 lane 写 `tid+1` 到 shared。`smem_bar` 承担可见性，`smem_control_bar` 只确认 32 次主 arrive 已发出。|L45–46 初始化两个 barrier → L49 发布初始化 → L60 `arrive.release` ×32 → L68 control `arrive.relaxed` ×32 → L72 control `try_wait.relaxed` → L76 main `try_wait.acquire` → L87–92 读取并求和 → L95–96 关闭。|lane 0 的和必须为 `528`。O0、O3 已在 B200 runtime 通过。|L45 main init。|
+|mbarrier / `test_mbarrier_expect_tx_complete_tx`|`mbarrier_semantic.ptx`，`<<<1,32>>>`；lane 0 在任意 arrival 前额外打开一个 transaction。|L125–126 初始化 → L128 发布 → L133 `expect_tx(1)` → L135 保证它先于 arrival → L138 arrive ×32 → L141 control arrive ×32 → L148 `test_wait` → L154 `complete_tx(1)` → L157 acquire wait → L164–165 关闭。|arrival count 已归零时，L148 仍必须为 false；L154 后 wait 才成功。输出为 `1` 和 `0xC0DEC0DE`。O0、O3 已 runtime 通过。|L125 main init。|
+|mbarrier / `test_mbarrier_arrive_expect_tx_complete_tx`|`mbarrier_semantic.ptx`，`<<<1,32>>>`；lane 0 将自己的 arrival 与一个 transaction 合并，其他 31 个 lane 普通 arrival。|L194–195 初始化 → L198 发布 → L201 leader `arrive.expect_tx(1)`，L202 其余 31 个 `arrive.release` → L206 control arrive → L214 `test_wait` → L218 `complete_tx(1)` → L221 acquire wait → L226–227 关闭。|验证合并的 arrive/expect_tx 与分开的 expect_tx 使用同一完成计数。输出为 `1` 和 `0xB03B03B0`。O0、O3 已 runtime 通过。|L194 main init。|
+|mbarrier / `test_mbarrier_arrive_drop_next_phase`|`mbarrier_semantic.ptx`，`<<<1,32>>>`；lane 31 在 phase 0 退出，phase 1 只剩 31 个参与者。|L255 初始化 → L257 `bar.sync 0` 发布 → L262 lane 31 `arrive_drop`，L263 其余 31 个 arrive → L268 `bar.sync 1` → L271 phase-0 acquire wait → L274 `bar.sync 2` → L279 仅 31 个 lane phase-1 arrive → L282 phase-1 acquire wait → L287 关闭。|phase 1 只在 expected-arrival count 已由 32 变为 31 时完成。输出为 `0x0A441D04`。O0、O3 已 runtime 通过。|L255 init。|
+|tcgen05 / `tcgen05_mma_lifecycle_structural`|`tcgen05_mma_lifecycle_structural.ptx`，`.reqntid 32`；所有 lane 做 TMEM alloc/ld/dealloc，只有 lane 0 issue MMA 与 commit。A/B descriptor 和 `idesc` 是 raw 参数。|L45 init(1) → L47 `bar.sync 0` → L50 alloc 32 columns → L51 `bar.sync 1` → L57 async-proxy fence → L66–67 MMA → L68 commit/arrive::one → L71 wait → L76 `bar.sync 2` → L77 post-thread fence → L80 ld、L81 wait::ld → L88 dealloc → L89 归还 permit → L93 `bar.sync 3` → L94 inval。|只验证这条生命周期能以 `sm_100a` 编译、反汇编且 marker 齐全；没有 launch，不能声称 MMA 数值正确。|L45、L50、L57、L88–89。|
+|tma / `semantic_cp_async_group`|`cp_async_group.ptx`，`<<<1,1>>>`；两个 16-byte classic `cp.async` 将 8 个 `u32` 搬到 shared。|L31 `cp.async.ca` → L32 `cp.async.cg` → L33 `commit_group` → L34 `wait_group 0` → L37–52 shared→global copy。|host 逐项比较 8 个 `u32`。O0、O3 已在 B200 runtime 通过。|—（XP6 过滤后均为 1:1）。|
+|tma / `semantic_tma_mbarrier_load_2d`|`tma_mbarrier_load_2d.ptx`，`<<<1,32>>>`；thread 0 发起 TMA load。host 构造无 swizzle 的 16×16 `u32` tensor map，TMA 向 shared 写 1024 B。|L31 init(1) → L32 CTA 发布 → L41 tensormap acquire fence → L44 async-proxy fence → L48–49 TMA load（`complete_tx::bytes`）→ L52 `arrive.expect_tx(1024)` → L55 acquire wait → L61–72 逐元素拷出 → L79 inval。|host 比较完整 16×16 tile，而非 checksum。O0、O3 已 runtime 通过。|L31、L41、L44。|
+|tma / `semantic_tma_bulk_store_2d`|`tma_bulk_store_2d.ptx`，`<<<1,1>>>`；先在 shared 填满 16×16 `u32`，值为 `0xA5000000 | index`，再由 TMA 写 global。|L27–38 填 shared tile → L42 async-proxy fence → L45 tensormap acquire fence → L47–48 TMA bulk-group store → L49 bulk commit → L50 bulk wait。|host 比较全部 256 个 global 元素。O0、O3 已在 B200 runtime 通过。|L42、L45、L50。|
 
-下表只保留跨执行组状态、async proxy 或 TMEM 分配相关的 SASS。有效操作数搬运保留；lane mask、冗余搬运、warp 内重汇聚和 `WARPSYNC` 已剔除。某行只要 O0 或 O3 有 1:N 展开就列入表中。
+## XP6 统计口径
 
-|目录 / case|PTX（源行）|O0 SASS（计数）|O3 SASS（计数）|
+按本文对 B200 operand path 的解读，`R2UR` 把组内一致的值从普通寄存器 `R` 写入
+warp-SIMT 的统一寄存器 `UR`。XP6 以 SIMD 执行组发射，不设 `UR`，也不采用这条
+`R→UR` 通路。按本文 XP6 统计口径，`R2UR`、`S2UR` 以及 def-use 链只为写入 `UR/UP` 而
+存在的 `LDCU`、`UMOV`、`ULEA`、`UIADD3`、`USHF`、`UIMAD`、`UPRMT`、`UISETP`、`ULOP3`、
+`UFLO` 不计入 1:N。
+
+这只改变计数，不删除数据依赖。descriptor、坐标、地址、barrier state、token 和
+CTA/cluster context 若为运行时值，仍须由 XP6 的 operand 或地址表达承接。`S2R`、`MOV`、
+`LEA`、`IMAD` 不能按 mnemonic 一概删除；只有纯 UR staging、死值、identity move 或纯
+warp 控制流链路才剔除。以 `U` 开头的 SASS 也不能一概删除；按本文分类，`UTCHMMA`、
+`UTMALDG`、`UTMASTG`、`UTCBAR`、`UTCATOMSWS` 和 `UCGABAR_*` 属于核心 opcode 或跨执行组
+状态，不是 `UR` 搬运。
+
+下表是本文的 XP6 过滤规则，不是对 B200 指令微架构作用的逐条证明。
+
+|B200 中的类别|XP6 处理|边界|
+|---|---|---|
+|`R2UR`、`S2UR` 与仅为 `UR/UP` 准备的 uniform 链|不计入；按 XP6 operand/地址输入重写|运行时 descriptor、地址、坐标和 CTA/cluster context 仍要有|
+|`S2R SR_CgaCtaId`、`SR_SWINHI` 等 cluster/remote context|不将 B200 的 special-register→UR 路由计数|保留 CTA rank、shared-window base 和 remote 地址这一输入依赖|
+|`ELECT`、`VOTEU`，以及只服务于 single-thread issue 的 `PLOP3/ISETP/BRA.U.ANY`|不计入|显式 PTX `vote`/`elect`，或真正的程序谓词/分支，仍须 lower 成 SIMD mask、reduction 或分支|
+|`WARPSYNC.*`、`ENDCOLLECTIVE`、只为重汇聚的 `BSSY/BSYNC`|不计入|仅限 warp 内包络；跨 SIMD 执行组的同步不在此列|
+|`SR_LANEID`、`SR_TID.X`、lane mask|仅在它们只用于 lane-0 issuer 或 NVIDIA lane ownership 时不计入|若上层语义需要 element shuffle、vote、match 或 reduction，必须保留等价 SIMD 操作|
+|`SHFL`、`VOTE`、`MATCH`、`REDUX/CREDUX`|不继承 NVIDIA warp 指令形式|若 PTX 本身要求跨 element 的置换、投票、匹配或归约，须 lower 成 XP6 SIMD permute/reduce，不能静默删除|
+|`mbarrier`、`bar.sync`、cluster barrier、release/acquire、async completion|计入|它们表达跨 SIMD 执行组的状态和同步|
+|`MEMBAR`、`FENCE`、`DEPBAR`、`CCTL`、`ERRBAR`、`CGAERRBAR`|保留对应的内存模型、async 或 scoreboard 语义|XP6 可融合编码，但不能因 SIMD 直接删除|
+|TMEM allocator 的 `UTCATOMSWS`、`ATOMS`、retry、`NANOSLEEP`|保留资源分配/释放语义|只有 XP6 另行采用静态分配时才可用另一套实现替换|
+
+本文按 PTX 的参与者范围判断同步是否计入，不按这次 B200 测试恰好启动了多少线程判断。
+`WARPSYNC` 是单个 NVIDIA warp 内的包络，不计入；`mbarrier.shared::cta`、`bar.sync` 和
+cluster/remote barrier 在 producer/consumer 可落到不同 XP6 SIMD 执行组时计入。后端若能
+证明参与者始终在同一执行组，才可改成 local 形式并从 1:N 中去掉。
+
+## XP6 口径下仍为 1:N 的指令
+
+B200 SASS 只作为 XP6 lowering 的参考证据，不能直接等同于 XP6 最终指令数。下表从 B200
+O0/O3 源行证据中剔除 UR 路由和 warp-SIMT 包络后得到。括号里的 N 是仍须完成的独立语义
+动作数，不是已经确定的 XP6 二进制指令数；若 XP6 ISA 能把这些动作融合，必须以 XP6 后端
+产物重新确认。CTA/cluster context 作为输入依赖单列，不把 B200 的 `S2R/S2UR/R2UR` 逐条
+搬运计数。表按 PTX opcode 去重；同一 opcode 在多个 case 的源行合并到一行。某行只要 O0 或
+O3 仍有 1:N 才列入。
+
+完整 B200 SASS 以
+`verification/semantic_suite/artifacts/b200_20260727T093435Z_full_semantic_final/*/sass/*_gp.sass`
+为准；该反汇编保留 PTX 源行标记。
+
+|目录 / case|PTX（源行）|B200 O0（按 XP6 过滤）|B200 O3（按 XP6 过滤）|
 |---|---|---|---|
-|mbarrier / mbarrier_semantic|L45：mbarrier.init.shared::cta.b64 [smem_bar], %r_count;|R2UR（state/address）×3 → FENCE.VIEW.ASYNC.S → SYNCS.EXCH.64（5）|S2UR（CTA id）→ SYNCS.EXCH.64（2）|
-|tcgen05 / tcgen05_mma_lifecycle_structural|L50：tcgen05.alloc.cta_group::1.sync.aligned.shared::cta.b32 [smem_taddr], %r3;|R2UR（allocation operand）→ DEPBAR.LE → UTCATOMSWS.FIND_AND_SET.ALIGN（retry）→ ATOMS.OR → STS（5+）|DEPBAR.LE → UTCATOMSWS.FIND_AND_SET.ALIGN（retry）→ ATOMS.OR → STS（4+）|
-|tcgen05 / tcgen05_mma_lifecycle_structural|L57：fence.proxy.async.shared::cta;|MEMBAR.ALL.CTA → FENCE.VIEW.ASYNC.S（2）|MEMBAR.ALL.CTA → FENCE.VIEW.ASYNC.S（2）|
-|tcgen05 / tcgen05_mma_lifecycle_structural|L66–67：tcgen05.mma.cta_group::1.kind::tf32 ...;|R2UR（MMA operands）×11 → UTCHMMA（12）|UMOV（TMEM offset）→ UTCHMMA（2）|
-|tcgen05 / tcgen05_mma_lifecycle_structural|L68：tcgen05.commit.cta_group::1.mbarrier::arrive::one.shared::cluster.b64 [smem_mbar];|R2UR（mbarrier address）→ UTCBAR（2）|UTCBAR（1）|
-|tcgen05 / tcgen05_mma_lifecycle_structural|L80：tcgen05.ld.sync.aligned.16x64b.x1.b32 {%r9}, [%r4];|R2UR（TMEM address）→ LDTM.16dp64bit（2）|LDTM.16dp64bit（1）|
-|tcgen05 / tcgen05_mma_lifecycle_structural|L88：tcgen05.dealloc.cta_group::1.sync.aligned.b32 %r4, %r3;|R2UR（allocation mask）→ DEPBAR.LE → UTCATOMSWS.AND → ATOMS.AND（4）|R2UR（allocation mask）→ UTCATOMSWS.AND → ATOMS.AND（3）|
-|tcgen05 / tcgen05_mma_lifecycle_structural|L89：tcgen05.relinquish_alloc_permit.cta_group::1.sync.aligned;|S2R（CTA id）→ UVIRTCOUNT.DEALLOC.SMPOOL → STS.U8（3）|S2UR（CTA id）→ UVIRTCOUNT.DEALLOC.SMPOOL → STS.U8（3）|
-|tma / cp_async_group|L31：cp.async.ca.shared.global [smem_words], [%rd0], 16;|R2UR（global descriptor）×2 → LDGSTS.E.128（3）|LDGSTS.E.128（1）|
-|tma / cp_async_group|L32：cp.async.cg.shared.global [smem_words+16], [%rd3], 16;|R2UR（global descriptor）×2 → LDGSTS.E.BYPASS.128（3）|LDGSTS.E.BYPASS.128（1）|
-|tma / tma_mbarrier_load_2d、tma_bulk_store_2d|L41 / L45：fence.proxy.tensormap::generic.acquire.sys [%rd0], 128;|R2UR（descriptor operand）×2 → DEPBAR {5,4,3,2,1,0} → CCTL.E.C.LDCU.IV.DEEP → UTMACCTL.IV（5）|DEPBAR {5,4,3,2,1,0} → CCTL.E.C.LDCU.IV.DEEP → UTMACCTL.IV（3）|
-|tma / tma_mbarrier_load_2d、tma_bulk_store_2d|L44 / L42：fence.proxy.async.shared::cta;|MEMBAR.ALL.CTA → FENCE.VIEW.ASYNC.S（2）|MEMBAR.ALL.CTA → FENCE.VIEW.ASYNC.S（2）|
-|tma / tma_mbarrier_load_2d|L48–49：cp.async.bulk.tensor.2d.shared::cta.global.tile.mbarrier::complete_tx::bytes ...;|R2UR（TMA descriptor、coordinates、shared/barrier address）×6 → UTMALDG.2D（7）|UTMALDG.2D（1）|
-|tma / tma_bulk_store_2d|L47–48：cp.async.bulk.tensor.2d.global.shared::cta.tile.bulk_group ...;|R2UR（TMA descriptor、coordinates、shared address）×5 → UTMASTG.2D（6）|UTMASTG.2D（1）|
-|tma / tma_bulk_store_2d|L50：cp.async.bulk.wait_group 0;|DEPBAR.LE SB0, 0x0 → CCTL.IVALL（2）|DEPBAR.LE SB0, 0x0 → CCTL.IVALL（2）|
-
-未列出的 `mbarrier.arrive`、`mbarrier.try_wait`、`mbarrier.inval`、`tcgen05.wait::ld`、`cp.async.*.commit_group` 和 classic `cp.async.wait_group`，在去掉无效搬运后只剩一条核心操作。
+|mbarrier / test_mbarrier_arrive_wait、test_mbarrier_expect_tx_complete_tx、test_mbarrier_arrive_expect_tx_complete_tx、test_mbarrier_arrive_drop_next_phase；tcgen05 / tcgen05_mma_lifecycle_structural；tma / semantic_tma_mbarrier_load_2d|mbarrier.init.shared::cta.b64；mbarrier_semantic.ptx L45/L125/L194/L255：[smem_bar], %r_count；tcgen05_mma_lifecycle_structural.ptx L45：[smem_mbar], %r2；tma_mbarrier_load_2d.ptx L31：[smem_bar], 1|FENCE.VIEW.ASYNC.S → SYNCS.EXCH.64（2）|SYNCS.EXCH.64（1）|
+|tcgen05 / tcgen05_mma_lifecycle_structural|tcgen05_mma_lifecycle_structural.ptx L50：tcgen05.alloc.cta_group::1.sync.aligned.shared::cta.b32 [smem_taddr], %r3;|DEPBAR.LE → UTCATOMSWS.FIND_AND_SET.ALIGN（retry）→ ATOMS.OR → STS（4+）|DEPBAR.LE → UTCATOMSWS.FIND_AND_SET.ALIGN（retry）→ ATOMS.OR → STS（4+）|
+|tcgen05 / tcgen05_mma_lifecycle_structural；tma / semantic_tma_mbarrier_load_2d、semantic_tma_bulk_store_2d|tcgen05_mma_lifecycle_structural.ptx L57；tma_mbarrier_load_2d.ptx L44；tma_bulk_store_2d.ptx L42：fence.proxy.async.shared::cta;|MEMBAR.ALL.CTA → FENCE.VIEW.ASYNC.S（2）|MEMBAR.ALL.CTA → FENCE.VIEW.ASYNC.S（2）|
+|tcgen05 / tcgen05_mma_lifecycle_structural|tcgen05_mma_lifecycle_structural.ptx L88：tcgen05.dealloc.cta_group::1.sync.aligned.b32 %r4, %r3;|DEPBAR.LE → UTCATOMSWS.AND → ATOMS.AND（3）|UTCATOMSWS.AND → ATOMS.AND（2）|
+|tcgen05 / tcgen05_mma_lifecycle_structural|tcgen05_mma_lifecycle_structural.ptx L89：tcgen05.relinquish_alloc_permit.cta_group::1.sync.aligned;|UVIRTCOUNT.DEALLOC.SMPOOL → STS.U8（2；CTA context 为输入依赖）|UVIRTCOUNT.DEALLOC.SMPOOL → STS.U8（2；CTA context 为输入依赖）|
+|tma / semantic_tma_mbarrier_load_2d、semantic_tma_bulk_store_2d|tma_mbarrier_load_2d.ptx L41；tma_bulk_store_2d.ptx L45：fence.proxy.tensormap::generic.acquire.sys [%rd0], 128;|DEPBAR {5,4,3,2,1,0} → CCTL.E.C.LDCU.IV.DEEP → UTMACCTL.IV（3）|DEPBAR {5,4,3,2,1,0} → CCTL.E.C.LDCU.IV.DEEP → UTMACCTL.IV（3）|
+|tma / semantic_tma_bulk_store_2d|tma_bulk_store_2d.ptx L50：cp.async.bulk.wait_group 0;|DEPBAR.LE SB0, 0x0 → CCTL.IVALL（2）|DEPBAR.LE SB0, 0x0 → CCTL.IVALL（2）|

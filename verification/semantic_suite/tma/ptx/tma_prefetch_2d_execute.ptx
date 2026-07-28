@@ -1,0 +1,32 @@
+.version 8.7
+.target sm_100a
+.address_size 64
+.file 1 "tma_prefetch_2d_execute.ptx"
+
+// Prefetch has no functional payload.  This case proves that a valid tensor
+// map reaches the instruction at runtime; its status is deliberately not a
+// claim about cache residency or performance.
+.visible .entry semantic_tma_prefetch_2d_execute(
+    .param .u64 p_desc,
+    .param .u64 p_status
+) {
+    .reg .pred %p<1>;
+    .reg .u32 %r<4>;
+    .reg .u64 %rd<3>;
+
+    mov.u32 %r0, %tid.x;
+    setp.eq.u32 %p0, %r0, 0;
+    @!%p0 bra TMA_PREFETCH_DONE;
+
+    ld.param.u64 %rd0, [p_desc];
+    ld.param.u64 %rd1, [p_status];
+    fence.proxy.tensormap::generic.acquire.sys [%rd0], 128;
+    mov.u32 %r1, 0;
+    mov.u32 %r2, 0;
+    cp.async.bulk.prefetch.tensor.2d.L2.global [%rd0, {%r1, %r2}];
+    mov.u32 %r3, 0xFE7C4001;
+    st.global.u32 [%rd1], %r3;
+
+TMA_PREFETCH_DONE:
+    ret;
+}

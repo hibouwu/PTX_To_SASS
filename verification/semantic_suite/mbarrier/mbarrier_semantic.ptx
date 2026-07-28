@@ -6,7 +6,7 @@
 //   initialize -> publish initialization -> arrive/expect transaction
 //   -> wait for the completed phase -> observe a result -> invalidate.
 //
-// Launch contract for all three entries: exactly one CTA of 32 x 1 x 1 threads.
+// Launch contract for all five entries: exactly one CTA of 32 x 1 x 1 threads.
 // The host runner in this directory enforces that contract.
 
 .version 8.7
@@ -286,5 +286,86 @@ AD_PHASE1_WAIT:
     st.global.u32 [%rd_out], %r_magic;
     mbarrier.inval.shared::cta.b64 [smem_bar];
 AD_EXIT:
+    ret;
+}
+
+// ---------------------------------------------------------------------------
+// Test 5: re-use one mbarrier across four consecutive phases.
+//
+// mbarrier automatically re-arms after a completed phase; it must not be
+// re-initialized between phases.  Every lane writes a phase-distinct payload,
+// performs a release arrival, and lane 0 consumes it after an acquire wait.
+// A CTA barrier occurs only *after* that consumption, so it protects the next
+// write/re-use from racing the reader; it is not the visibility edge used for
+// the payload.  Expected sums are 528, 3728, 6928 and 10128.
+// ---------------------------------------------------------------------------
+.visible .entry test_mbarrier_multi_phase_reuse(
+    .param .u64 p_out
+) {
+    .reg .pred %p_tid0, %p_done, %p_sum_end, %p_more;
+    .reg .u32 %r_tid, %r_count, %r_phase, %r_phase_base;
+    .reg .u32 %r_offset, %r_value, %r_index, %r_sum;
+    .reg .u32 %r_smem_base, %r_smem_addr;
+    .reg .b64 %rd_out, %rd_phase_out, %rd_offset, %rd_state;
+
+    ld.param.u64 %rd_out, [p_out];
+    mov.u32 %r_tid, %tid.x;
+    setp.eq.u32 %p_tid0, %r_tid, 0;
+
+    @!%p_tid0 bra MP_INIT_DONE;
+    mov.u32 %r_count, 32;
+    mbarrier.init.shared::cta.b64 [smem_bar], %r_count;
+MP_INIT_DONE:
+    // Publish initialization before phase 0 starts.
+    bar.sync 0;
+
+    mov.u32 %r_smem_base, smem_values;
+    mov.u32 %r_phase, 0;
+MP_PHASE_LOOP:
+    // The phase number makes stale data distinguishable from a correct reuse.
+    mul.lo.u32 %r_phase_base, %r_phase, 100;
+    add.u32 %r_value, %r_phase_base, %r_tid;
+    add.u32 %r_value, %r_value, 1;
+    shl.b32 %r_offset, %r_tid, 2;
+    add.u32 %r_smem_addr, %r_smem_base, %r_offset;
+    st.shared.u32 [%r_smem_addr], %r_value;
+
+    mbarrier.arrive.release.cta.shared::cta.b64 %rd_state, [smem_bar];
+    @!%p_tid0 bra MP_CONSUMED;
+
+MP_WAIT_LOOP:
+    mbarrier.try_wait.acquire.cta.shared::cta.b64 %p_done, [smem_bar], %rd_state;
+    @!%p_done bra MP_WAIT_LOOP;
+
+    // The acquire wait is the sole release->acquire edge before this load.
+    mov.u32 %r_index, 0;
+    mov.u32 %r_sum, 0;
+MP_SUM_LOOP:
+    setp.ge.u32 %p_sum_end, %r_index, 32;
+    @%p_sum_end bra MP_SUM_DONE;
+    shl.b32 %r_offset, %r_index, 2;
+    add.u32 %r_smem_addr, %r_smem_base, %r_offset;
+    ld.shared.u32 %r_value, [%r_smem_addr];
+    add.u32 %r_sum, %r_sum, %r_value;
+    add.u32 %r_index, %r_index, 1;
+    bra MP_SUM_LOOP;
+MP_SUM_DONE:
+    shl.b32 %r_offset, %r_phase, 2;
+    cvt.u64.u32 %rd_offset, %r_offset;
+    add.u64 %rd_phase_out, %rd_out, %rd_offset;
+    st.global.u32 [%rd_phase_out], %r_sum;
+
+MP_CONSUMED:
+    // This is a reuse guard only.  It follows the acquire and the shared
+    // loads, so it cannot become the payload's synchronization mechanism.
+    bar.sync 1;
+    add.u32 %r_phase, %r_phase, 1;
+    setp.lt.u32 %p_more, %r_phase, 4;
+    @%p_more bra MP_PHASE_LOOP;
+
+    // Every worker has passed its final mbarrier use before lane 0 invalidates.
+    @!%p_tid0 bra MP_EXIT;
+    mbarrier.inval.shared::cta.b64 [smem_bar];
+MP_EXIT:
     ret;
 }

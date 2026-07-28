@@ -1,0 +1,62 @@
+.version 8.7
+.target sm_100a
+.address_size 64
+.file 1 "tma_mbarrier_load_3d.ptx"
+
+// Rank-3 TMA load with the same completion protocol as the rank-2 case.
+// The tensor map describes 16 x 16 x 2 u32 = 2048 bytes.
+.shared .align 128 .b8 smem_tile[2048];
+.shared .align 8 .b64 smem_bar;
+
+.visible .entry semantic_tma_mbarrier_load_3d(
+    .param .u64 p_desc,
+    .param .u64 p_output,
+    .param .u64 p_status
+) {
+    .reg .pred %p<3>;
+    .reg .u32 %r<9>;
+    .reg .u64 %rd<5>;
+
+    mov.u32 %r0, %tid.x;
+    setp.eq.u32 %p0, %r0, 0;
+    @%p0 mbarrier.init.shared::cta.b64 [smem_bar], 1;
+    bar.sync 0;
+    @!%p0 bra TMA_3D_DONE;
+
+    ld.param.u64 %rd0, [p_desc];
+    ld.param.u64 %rd1, [p_output];
+    ld.param.u64 %rd2, [p_status];
+    fence.proxy.tensormap::generic.acquire.sys [%rd0], 128;
+    fence.proxy.async.shared::cta;
+
+    mov.u32 %r1, 0;
+    mov.u32 %r2, 0;
+    mov.u32 %r3, 0;
+    cp.async.bulk.tensor.3d.shared::cta.global.mbarrier::complete_tx::bytes
+        [smem_tile], [%rd0, {%r1, %r2, %r3}], [smem_bar];
+    mbarrier.arrive.expect_tx.release.cta.shared::cta.b64 %rd3, [smem_bar], 2048;
+
+TMA_3D_WAIT:
+    mbarrier.try_wait.acquire.cta.shared::cta.b64 %p1, [smem_bar], %rd3;
+    @!%p1 bra TMA_3D_WAIT;
+
+    mov.u32 %r3, 0;
+TMA_3D_COPY_OUT:
+    mul.lo.u32 %r4, %r3, 4;
+    cvta.shared.u64 %rd3, smem_tile;
+    cvt.u64.u32 %rd4, %r4;
+    add.u64 %rd3, %rd3, %rd4;
+    ld.shared.u32 %r5, [%rd3];
+    add.u64 %rd3, %rd1, %rd4;
+    st.global.u32 [%rd3], %r5;
+    add.u32 %r3, %r3, 1;
+    setp.lt.u32 %p2, %r3, 512;
+    @%p2 bra TMA_3D_COPY_OUT;
+
+    mov.u32 %r8, 0xA11CE003;
+    st.global.u32 [%rd2], %r8;
+    mbarrier.inval.shared::cta.b64 [smem_bar];
+
+TMA_3D_DONE:
+    ret;
+}

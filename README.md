@@ -29,6 +29,17 @@ tcgen05.mma.cta_group::1.kind::tf32  ->  UTCHMMA
 [PTX ISA 8.7](https://docs.nvidia.com/cuda/archive/12.8.0/parallel-thread-execution/index.html)
 和 [CUTLASS tcgen05 execution model](https://docs.nvidia.com/cutlass/latest/media/docs/pythonDSL/cute_dsl_api/cute_nvgpu_tcgen05.html)。
 
+## XP6 统计口径
+
+B200 的 `R2UR` 是把组内一致的值从普通寄存器 `R` 送到 warp-SIMT 的统一寄存器 `UR`。
+XP6 是 SIMD，不设 `UR`，也不需要这条 `R→UR` 发送通路。因此 `R2UR`、`S2UR` 和仅为
+`UR/UP` 服务的 B200 搬运不计入 XP6 的 1:N。
+
+这不删除数据依赖：descriptor、地址、barrier state、token 和 CTA/cluster context 若为
+运行时值，仍须由 XP6 的普通 SIMD 操作数或目标自己的地址计算提供。跨执行组同步、
+fence、async 完成与资源状态仍计入；只服务于 NVIDIA warp-SIMT 的选举、重汇聚和
+warp 内同步不计入。
+
 ## 实验数据
 
 当前采集环境为 CUDA 12.8 / PTX ISA 8.7 / B200 `sm_100a`：
@@ -74,8 +85,9 @@ bash scripts/run_all.sh --arch sm_100a
 - [旧 1:N 候选逐条重新归因](verification/PTX_to_SASS_1N_detailed_analysis.md)
 - [1:N PTX→SASS 对应表](verification/PTX_to_SASS_1N_mapping_table.md)
 - [BT07/BT09 动态 A/B 复核](verification/experiments/BT07_BT09/README.md)
-- [composed semantic suite](verification/semantic_suite/README.md)：独立验证 mbarrier、
-  TMA/cp.async 等完整运行时生命周期；不会改写静态映射证据。
+- [composed semantic suite](verification/semantic_suite/README.md)：独立验证 mbarrier 的
+  cluster/remote 与连续 phase、TMA 的 3D/multicast/reduce/layout/swizzle/prefetch，以及
+  CuTe 真实 descriptor 的 tcgen05 数值路径；不会改写静态映射证据。
 
 下一步是把分析器改为分别输出核心 opcode、操作数布置和编译器协议，然后在 B200 上
 重跑并更新最终 1:1 / 1:N 分布。

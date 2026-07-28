@@ -1,106 +1,112 @@
-# B200 tcgen05 composed lifecycle suite
+# B200 tcgen05 composed semantic suite
 
-`verification/ptx_sources/01_tcgen05/` 保持为 **STATIC_MAPPING** 证据：每个文件只回答一条
-PTX 如何由 `ptxas` lower 到 SASS。本目录是独立的 composed semantic suite，不修改、也不混入那些
-单指令样例。
+`verification/ptx_sources/01_tcgen05/` 是 **STATIC_MAPPING** 证据：一个 PTX 文件只看一条
+指令怎样被 `ptxas` lower。本目录做另一件事：把真实 shared-memory descriptor、TMEM、completion
+barrier、load/wait/dealloc 放进可运行的 GEMM，再用 host reference 检查结果。
 
-## 当前状态：`STRUCTURAL_COMPILE_ONLY`
+这里不从 host 传入 A/B descriptor 或 `idesc`。这类值与 CTA 内 shared-memory layout 绑定，随手构造
+一个 bit pattern 即使被 PTX 接受，也不能说明 `tcgen05.mma` 正确执行。
 
-`tcgen05_mma_lifecycle_structural.ptx` 把下列生命周期写进**同一个** PTX entry：
+## 两层证据
+
+- `run_structural.sh`：保留 raw PTX 生命周期。它只编译和反汇编，不能 launch。
+- `run.sh`：先跑 structural，再编译、反汇编并运行下面的 CuTe numerical cases。`run.sh` 是顶层
+  semantic-suite 应调用的入口。
+
+| case | CuTe source | MMA / descriptor path | GEMM problem | oracle |
+| --- | --- | --- | --- | --- |
+| `f16_cg1` | CUTLASS tutorial `01_mma_sm100.cu` | `SM100_MMA_F16BF16_SS`, CTA group 1, 128x256x16 | 512x1024x256 | CPU `reference_gemm` |
+| `bf16_cg1` | tutorial 01 的受限 BF16 variant | `SM100_MMA_F16BF16_SS`, CTA group 1, 128x256x16 | 256x512x128 | CPU `reference_gemm` |
+| `tf32_cg1` | tutorial 01 的受限 TF32 variant | `SM100_MMA_TF32_SS`, CTA group 1, 128x256x8 | 256x512x128 | CPU `reference_gemm` |
+| `f16_cg2` | CUTLASS tutorial `04_mma_tma_2sm_sm100.cu` | `SM100_MMA_F16BF16_2x1SM_SS`, CTA group 2, 256x256x16 | 512x1024x256 | CPU `reference_gemm` |
+
+`f16_cg2` 同时经过 2SM cluster 和 TMA/multicast 的 tutorial 路径。它不是把同一个 CG1 case 改个
+launch 参数：MMA instruction shape 从 128x256x16 变为 256x256x16。
+
+BF16 和 TF32 variant 在运行目录的 `runtime/generated/` 中生成；它们只替换 tutorial 01 的 A/B
+element type 与 `TiledMMA` atom，并插入相应 CUTLASS type header。`make_fragment_A/B`、instruction
+descriptor、shared-memory swizzle、TMEM allocator、completion barrier、`tcgen05.ld/wait`、以及 host
+reference 都仍是固定版本的 upstream CuTe 实现。脚本会检查替换后的 atom 名称，避免在上游源变化后
+静默生成未知代码。
+
+TF32 case 使用 tutorial 原本的整数值初始化（每个输入在 `[-2, 2]`），这些值可由 TF32 精确表示，
+所以 `reference_gemm` 可以做零误差比较。它验证 descriptor、instruction shape、TMEM 生命周期和结果
+路径；它不是测量一般浮点输入下的 TF32 舍入误差上界。
+
+## 运行
+
+这套 runtime case 固定使用 **CUTLASS v4.2.1**，commit
+`f3fde58372d33e9a5650ba7b80fc48b3b49d40c8`。B200 收集机的默认位置是
+`/workspace/PTX_To_SASS/third_party/cutlass`；也可以用 `CUTLASS_ROOT` 或 `--cutlass-root` 覆盖。
+
+```bash
+# 首次准备固定依赖；third_party 不应作为本仓库的采集证据提交。
+git clone --depth 1 --branch v4.2.1 https://github.com/NVIDIA/cutlass.git \
+  /workspace/PTX_To_SASS/third_party/cutlass
+
+CUDA_HOME=/usr/local/cuda-12.8 \
+  bash verification/semantic_suite/tcgen05/run.sh \
+  --out-dir verification/semantic_suite/artifacts/b200_<UTC>/tcgen05
+```
+
+常用选项：
+
+```bash
+# 只采集 O0/O3 cubin + SASS，不 launch numerical kernels。
+bash verification/semantic_suite/tcgen05/run.sh --compile-only
+
+# 指定 CUDA-visible device 和非默认的 pinned checkout。
+bash verification/semantic_suite/tcgen05/run.sh \
+  --device 0 --cutlass-root /workspace/PTX_To_SASS/third_party/cutlass
+```
+
+每个 case 都会以 `nvcc -O0 -Xptxas=-O0` 和 `nvcc -O3 -Xptxas=-O3` 单独生成 executable、cubin、
+`nvdisasm -g`、`nvdisasm -gp`。仅当该 optimization 的运行日志包含 CUTLASS 的
+`Execution is successful.`，它才写入 `runtime/summary.tsv` 为 `RUNTIME_PASS`。
+
+输出目录结构：
 
 ```text
-单线程 mbarrier.init(1)
-  → 全 warp tcgen05.alloc(32 columns)
-  → 单线程 tcgen05.mma
-  → 单线程 tcgen05.commit(...mbarrier::arrive::one)
-  → 单线程 mbarrier.try_wait 循环
-  → CTA handoff
-  → 全 warp tcgen05.fence::after_thread_sync
-  → 全 warp tcgen05.ld + tcgen05.wait::ld
-  → 全 warp tcgen05.dealloc + relinquish_alloc_permit
-  → 全 warp quiescence + 单线程 mbarrier.inval
+tcgen05/
+  structural/{cubin,sass}/       # raw PTX 生命周期结构证据
+  runtime/
+    bin/                         # 每个 case 的 O0/O3 host executable
+    cubin/                       # 每个 case 的 O0/O3 cubin
+    sass/                        # nvdisasm -g 和 -gp
+    generated/                   # BF16/TF32 的受限 tutorial variant
+    logs/                         # build、cubin、host oracle logs
+    summary.tsv
 ```
 
-这是真实 PTX 8.7 / `sm_100a` 的编译和反汇编结构测试，但**不是**数值正确性测试，且本目录没有
-launch runner。不要以任意 host 参数启动该 entry。
+CUDA 12.8 / CUTLASS v4.2.1 的 tutorial CMake target 在这台 B200 image 上没有把
+`tools/util/include` 加到 include path。`run.sh` 不依赖该 target，而是显式加入这条上游所需的 include
+path 后直接调用 `nvcc`；这不改变 tutorial 的 device-side descriptor construction。
 
-原因是 `tcgen05.mma` 的 A/B operand 是描述本 CTA shared memory 布局的硬件 descriptor，`p_idesc`
-也是匹配 `kind::tf32`、shape、layout 的 instruction descriptor。它们不能由 host 随意伪造；错误的
-descriptor、未初始化 shared-memory 输入或错误的 layout 都会使执行无定义。`p_sink` 仅用于让
-`tcgen05.ld` 在 SASS 中保持可见，写出的值不是 pass/fail 结果。
+## B200 record — 2026-07-27
 
-这一区分是刻意的：本 suite 验证“缺失的 commit/wait/fence/dealloc 指令能否同处一个可编译控制流”，
-不把“`ptxas` 接受 raw descriptor”误报为“B200 算出了正确矩阵”。
+- GPU：NVIDIA B200，UUID `GPU-57763773-1c85-4260-7159-cacae400a77d`，driver `580.105.08`，CC 10.0。
+- Toolchain：CUDA / ptxas `12.8.93`，CUTLASS `v4.2.1`
+  (`f3fde58372d33e9a5650ba7b80fc48b3b49d40c8`)。
+- Latest unified evidence：`artifacts/b200_20260727T093435Z_full_semantic_final/tcgen05/`。
+  首次独立采集保留在 `artifacts/b200_20260727T092000Z_tcgen05_runtime/`。
+- `run_structural.sh` 的 raw PTX lifecycle 在 O0/O3 都通过；四个 numerical case 的 O0/O3 共 8 次
+  host oracle 也全部通过，日志均为 `Relative error: 0.000000e+00`。
 
-## B200 CUDA 12.8 结构验证
+`nvdisasm -gp` 中的 `UTCHMMA` 数量可作为本次编译产物的快速索引：CG1 的 F16/BF16/TF32 分别为
+O0 4 条、O3 8 条；CG2 F16 为 O0 12 条、O3 24 条。这是整个 CuTe GEMM kernel 的 SASS 数量，不能
+倒推为某一条 PTX 的静态 1:N mapping；静态 mapping 仍以 `ptx_sources/01_tcgen05/` 为准。
 
-在 B200 上运行：
+## Raw PTX lifecycle retained for mapping
 
-```bash
-CUDA_HOME=/usr/local/cuda-12.8 \
-  bash verification/semantic_suite/tcgen05/run_structural.sh --arch sm_100a
+`tcgen05_mma_lifecycle_structural.ptx` 仍是 launch 禁止的结构样例：
+
+```text
+init → alloc → one-thread mma → commit → mbarrier wait
+     → CTA handoff → fence → collective ld → wait::ld
+     → dealloc → relinquish_alloc_permit → mbarrier.inval
 ```
 
-它会以 `ptxas -O0` 和 `ptxas -O3` 编译，再以 `nvdisasm -g/-gp` 反汇编，并断言每个版本至少含有：
-
-| 生命周期阶段 | 预期 SASS 类别 |
-|---|---|
-| TMEM allocation | `UTCATOMSWS.FIND_AND_SET.ALIGN` |
-| MMA producer | `UTCHMMA` |
-| completion tracking | `UTCBAR` |
-| mbarrier polling | `SYNCS.PHASECHK...TRYWAIT` |
-| collective TMEM load | `LDTM` |
-| TMEM deallocation | `UTCATOMSWS.AND` |
-| allocation-permit relinquish | `UVIRTCOUNT.DEALLOC.SMPOOL` |
-| mbarrier 生命周期关闭 | `SYNCS.CCTL.IV` |
-
-`tcgen05.wait::ld` 也会由脚本直接检查 PTX 源码，但不把它绑定到一个固定的 SASS mnemonic：当前
-工具链会把它 lower 为相邻的 warp-ordering 指令（O0）或 O3 的 `NOP`。因此这里的结构证据是
-“该 wait PTX 存在且 `ptxas` 接受它”，而不是声称某条独立 SASS 必然等于 `wait::ld`。
-
-默认生成的 cubin 和 SASS 位于本目录 `build/`，已由 `.gitignore` 排除。要为每次采集保留独立证据，
-可传入一个新的输出目录：
-
-```bash
-CUDA_HOME=/usr/local/cuda-12.8 \
-  bash verification/semantic_suite/tcgen05/run_structural.sh \
-  --arch sm_100a --out-dir /tmp/ptx_to_sass_tcgen05_run
-```
-
-此时产物位于该目录的 `cubin/`、`sass/` 下。无论哪种方式，它们都不应覆盖
-`verification/cubins`、`verification/sass_dumps` 或 STATIC_MAPPING 产物。
-
-## B200 结构验证记录（2026-07-24）
-
-- GPU：NVIDIA B200，UUID `GPU-90518175-3702-4bfe-31c9-578f1592d5d3`；driver `580.159.03`。
-- 工具链：CUDA / ptxas `12.8.93`，`sm_100a`。O0 和 O3 都完成编译与 `nvdisasm -g/-gp`，并通过
-  生命周期 PTX/SASS marker 检查。
-- 证据目录：`/workspace/PTX_To_SASS/verification/semantic_suite/artifacts/b200_20260724T061600Z_final/tcgen05`。
-- 结论仍为 `STRUCTURAL_COMPILE_ONLY`：没有 launch 该 raw-descriptor kernel，未对 MMA 数值正确性作出声明。
-
-## PTX 语义约束
-
-- `.reqntid 32,1,1` 强制一个完整 warp。`tcgen05.alloc`、`dealloc`、`ld` 和 `wait::ld` 的 `.sync.aligned`
-  形式需要该 warp 的所有 lane 以一致 operand 参与。
-- `tcgen05.mma.cta_group::1` 和 `tcgen05.commit.cta_group::1` 有单线程 issue granularity，所以只有
-  lane 0 发行它们；mbarrier 的 expected-arrival count 因而是 1。
-- `tcgen05.commit` 追踪同一线程此前的 MMA，完成时对 mbarrier 执行 `arrive::one`。等待成功后才让全 warp
-  进入 `fence::after_thread_sync → ld`；`ld` 之后仍必须有 `wait::ld`，才能在 `dealloc` 前退休该异步 load。
-- `fence.proxy.async.shared::cta` 是未来 device-side wrapper 将 generic shared-memory 输入交给 async
-  proxy 所需的结构位置；它本身不填充 A/B 数据，也不构造 descriptor。
-
-上述 ordering 与 issue-granularity 依据 NVIDIA 的 [PTX ISA 8.7 tcgen05 memory-consistency section](https://docs.nvidia.com/cuda/archive/12.8.0/parallel-thread-execution/index.html)。
-
-## 升级为可运行数值测试所需的工作
-
-要把本例从 structural suite 升级为 B200 runtime test，必须额外实现经过审查的 device-side CUDA/CuTe
-wrapper，而不是传入猜测的 raw 值。该 wrapper 至少应：
-
-1. 在此 CTA 的 shared memory 中初始化已知 A/B tile，并按实际 layout 构造 A/B descriptor；
-2. 为同一 MMA shape/type 生成合法 `idesc`，并检查 tile、swizzle、alignment 与 allocated TMEM range；
-3. 固定 `<<<1, 32>>>`，保证唯一 MMA issuer 与全 warp `ld/wait` participation；
-4. 把 `tcgen05.ld` 的结果写出，并由 host 与独立 reference 结果比较；
-5. 在 O0、O3 都通过后，才标记为 `RUNTIME_VALIDATED_B200`。
-
-在这些条件满足前，本目录所有成功信息都只能解读为 **PTX/SASS 生命周期结构完整**，不能解读为 MMA
-数值功能已在 B200 验证。
+其 `p_smem_desc_a`、`p_smem_desc_b`、`p_idesc` 参数只是为了把 PTX/SASS 生命周期固定下来，绝不作为
+runtime descriptor ABI。真正运行的 case 由 CuTe 根据 A/B shared-memory tensor、swizzle、MMA atom
+和 TMEM fragment 生成这些 operand。相关 issue granularity 和 memory-consistency 语义见 NVIDIA
+[PTX ISA 8.7 tcgen05 section](https://docs.nvidia.com/cuda/archive/12.8.0/parallel-thread-execution/index.html)。
