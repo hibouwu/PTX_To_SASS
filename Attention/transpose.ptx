@@ -41,7 +41,6 @@
 
     // === Thread identification =====================================
     mov.u32 %r0, %tid.x;           // tid in [0, 127] (4 warps)
-    mov.u32 %r1, %ntid.x;
 
     // U7: take address of inline tensormap params.
     mov.u64 %rd0, in_tmap;
@@ -49,19 +48,19 @@
 
     // === [T0] mbarrier init (same 7-step as C5a) ==================
     setp.eq.u32 %p0, %r0, 0;
-    @%p0 mbarrier.init.shared::cta.b64 [mbar], %r1;
+    @%p0 mbarrier.init.shared::cta.b64 [mbar], 1;
     fence.proxy.async.shared::cta;
     bar.sync 0;
 
     // === [T1] TMA 2d load: GMEM  SMEM in_buf ====================
     // U4 adjudicated: coordinate {x, y} where x = dim0 = contiguous (col
     // for row-major), y = dim1 = strided (row). Tile at (col=0, row=0).
+    @%p0 mbarrier.arrive.expect_tx.shared::cta.b64 %rd10, [mbar], 4096;
     @%p0 cp.async.bulk.tensor.2d.shared::cluster.global.tile.mbarrier::complete_tx::bytes [in_buf], [%rd0, {0, 0}], [mbar];
-    mbarrier.arrive.shared::cta.b64 %rd10, [mbar], 1;
 
     // Wait for TMA load completion
 L_wait_load:
-    mbarrier.try_wait.shared.b64 %p1, [mbar], %rd10;
+    mbarrier.try_wait.parity.shared::cta.b64 %p1, [mbar], 0;
     @!%p1 bra L_wait_load;
 
     // === [T2] Barrier (load data visible to all threads) ==========
