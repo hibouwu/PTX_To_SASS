@@ -1,0 +1,25 @@
+.version 8.0
+.target sm_80
+.address_size 64
+
+// TEST: constant predicate and branch elimination
+// QUESTION: When is a compile-time branch reduced to its taken arm?
+.visible .entry case_constant_branch(
+    .param .u64 out_ptr
+) {
+    .reg .u64 %out;
+    .reg .u32 %x;
+    .reg .pred %p;
+
+    ld.param.u64 %out, [out_ptr];
+    mov.u32 %x, 0;
+    setp.eq.u32 %p, 4, 4;
+    @%p bra TAKEN;
+    mov.u32 %x, 11;
+    bra DONE;
+TAKEN:
+    mov.u32 %x, 29;
+DONE:
+    st.global.u32 [%out], %x;
+    ret;
+}

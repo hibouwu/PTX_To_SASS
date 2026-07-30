@@ -1,0 +1,24 @@
+.version 8.0
+.target sm_80
+.address_size 64
+
+// TEST: negative control for FP contraction
+// FUSION: mul.rz has an observable intermediate rounding and must not contract
+//         with the following add.rn into FFMA.
+.visible .entry case_fma_blocked_rounding(
+    .param .u64 in_ptr,
+    .param .u64 out_ptr
+) {
+    .reg .u64 %in, %out;
+    .reg .f32 %a, %b, %c, %product, %result;
+
+    ld.param.u64 %in, [in_ptr];
+    ld.param.u64 %out, [out_ptr];
+    ld.global.f32 %a, [%in];
+    ld.global.f32 %b, [%in+4];
+    ld.global.f32 %c, [%in+8];
+    mul.rz.f32 %product, %a, %b;
+    add.rn.f32 %result, %product, %c;
+    st.global.f32 [%out], %result;
+    ret;
+}

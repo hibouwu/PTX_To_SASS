@@ -1,0 +1,23 @@
+.version 8.0
+.target sm_80
+.address_size 64
+
+// TEST: three-input Boolean logic selection
+// FUSION: (a & b) ^ c may select one LOP3.LUT SASS instruction.
+.visible .entry case_boolean_lop3(
+    .param .u64 in_ptr,
+    .param .u64 out_ptr
+) {
+    .reg .u64 %in, %out;
+    .reg .b32 %a, %b, %c, %and_ab, %result;
+
+    ld.param.u64 %in, [in_ptr];
+    ld.param.u64 %out, [out_ptr];
+    ld.global.b32 %a, [%in];
+    ld.global.b32 %b, [%in+4];
+    ld.global.b32 %c, [%in+8];
+    and.b32 %and_ab, %a, %b;
+    xor.b32 %result, %and_ab, %c;
+    st.global.b32 [%out], %result;
+    ret;
+}

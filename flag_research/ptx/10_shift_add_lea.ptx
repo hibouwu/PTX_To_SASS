@@ -1,0 +1,21 @@
+.version 8.0
+.target sm_80
+.address_size 64
+
+// TEST: shift/add address-style instruction selection
+// FUSION: (index << 2) + base may select LEA, SHF+IADD3, or another
+//         architecture-specific address-generation sequence.
+.visible .entry case_shift_add_lea(
+    .param .u64 in_ptr,
+    .param .u64 out_ptr
+) {
+    .reg .u64 %in, %out, %index, %scaled, %result;
+
+    ld.param.u64 %in, [in_ptr];
+    ld.param.u64 %out, [out_ptr];
+    ld.global.u64 %index, [%in];
+    shl.b64 %scaled, %index, 2;
+    add.u64 %result, %scaled, %out;
+    st.global.u64 [%out], %result;
+    ret;
+}
