@@ -1,0 +1,19 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "ctx_commit_cg1_generic.ptx"
+
+
+// LAYER CTX.protocol
+// COORDINATES {"cta_group":1,"family":"commit","multicast":false,"state_space":"generic"}
+.visible .entry ctx_commit_cg1_generic(
+    .param .u64 p_mbar
+)
+{
+    .reg .b64 %mbar;
+    // EFFECT_SLICE_BEGIN
+    ld.param.b64 %mbar, [p_mbar];
+    tcgen05.commit.cta_group::1.mbarrier::arrive::one.b64 [%mbar];
+    // EFFECT_SLICE_END
+    ret;
+}

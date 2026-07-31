@@ -1,0 +1,28 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "ctx_ld_wait.ptx"
+
+
+// LAYER CTX.protocol
+// COORDINATES {"completion":"wait::ld","family":"tmem_io_completion","operation":"ld"}
+.visible .entry ctx_ld_wait(
+    .param .u32 p_taddr,
+    .param .u32 p_r0,
+    .param .u32 p_r1,
+    .param .u64 p_out
+)
+{
+    .reg .b32 %taddr, %r0, %r1;
+    .reg .b64 %out;
+    // EFFECT_SLICE_BEGIN
+    ld.param.b32 %taddr, [p_taddr];
+    ld.param.b32 %r0, [p_r0];
+    ld.param.b32 %r1, [p_r1];
+    tcgen05.ld.sync.aligned.32x32b.x2.b32 {%r0, %r1}, [%taddr];
+    tcgen05.wait::ld.sync.aligned;
+    ld.param.b64 %out, [p_out];
+    st.global.v2.b32 [%out], {%r0, %r1};
+    // EFFECT_SLICE_END
+    ret;
+}

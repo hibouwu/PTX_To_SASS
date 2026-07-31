@@ -1,0 +1,22 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "ctx_alloc_cg2_128_generic.ptx"
+
+.shared .align 4 .b32 alloc_slot;
+
+// LAYER CTX.protocol
+// COORDINATES {"alloc_state_space":"generic","cta_group":2,"family":"allocation_lifecycle","ncols":128}
+.visible .entry ctx_alloc_cg2_128_generic(
+
+)
+{
+    .reg .b32 %taddr;
+    // EFFECT_SLICE_BEGIN
+    tcgen05.alloc.cta_group::2.sync.aligned.b32 [alloc_slot], 128;
+    ld.shared::cta.b32 %taddr, [alloc_slot];
+    tcgen05.dealloc.cta_group::2.sync.aligned.b32 %taddr, 128;
+    tcgen05.relinquish_alloc_permit.cta_group::2.sync.aligned;
+    // EFFECT_SLICE_END
+    ret;
+}

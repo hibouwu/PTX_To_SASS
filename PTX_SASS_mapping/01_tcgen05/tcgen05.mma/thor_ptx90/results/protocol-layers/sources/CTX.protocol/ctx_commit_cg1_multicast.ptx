@@ -1,0 +1,20 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "ctx_commit_cg1_multicast.ptx"
+
+.shared .align 8 .b64 mbar_obj;
+
+// LAYER CTX.protocol
+// COORDINATES {"cta_group":1,"family":"commit","multicast":true,"state_space":"shared_cluster"}
+.visible .entry ctx_commit_cg1_multicast(
+    .param .u16 p_cta_mask
+)
+{
+    .reg .b16 %cta_mask;
+    // EFFECT_SLICE_BEGIN
+    ld.param.b16 %cta_mask, [p_cta_mask];
+    tcgen05.commit.cta_group::1.mbarrier::arrive::one.shared::cluster.multicast::cluster.b64 [mbar_obj], %cta_mask;
+    // EFFECT_SLICE_END
+    ret;
+}
