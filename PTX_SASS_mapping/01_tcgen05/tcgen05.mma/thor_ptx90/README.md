@@ -105,6 +105,15 @@ python3 generate_cases.py --mode expanded --output /tmp/thor-expanded
 python3 check_cases.py --mode expanded --jobs 4
 ```
 
+如果 cubin 已经存在，也可以只重新提取和归属 SASS：
+
+```bash
+python3 extract_core_sass.py \
+    --source-dir /tmp/thor-check/sources \
+    --cubin-dir /tmp/thor-check/cubins \
+    --output-dir /tmp/thor-check/sass
+```
+
 检查 Thor 明确不支持的 qualifier capability probes：
 
 ```bash
@@ -125,9 +134,10 @@ case identity 是确定的。
 生成后会由独立解析器重新读取 manifest 和 PTX，核对非零 source/case 数、
 summary 数量、kernel/CASE marker、逐条 target occurrence、精确目标指令文本、
 guard、lane-0 issuer、producer chain 和 commit。编译检查还要求每个成功任务
-产生非空 cubin。核心 MMA shard 的逐 kernel PTX→SASS occurrence 归属尚未执行，
-报告明确记为 `sass_target_attribution.status=NOT_RUN`，不会把编译 PASS 当成
-SASS 归属 PASS。
+产生非空 cubin，随后调用 `nvdisasm`，按 `.text.<kernel>` 切分 SASS，并按源码
+顺序将每个目标 occurrence 配对到 `UTCHMMA/UTCIMMA/UTCQMMA` 系列核心指令。
+原始结果位于工作目录的 `sass/raw/`，结构化归属位于
+`sass/sass_attribution.jsonl`；任一 kernel 缺失或目标数量不符都会使检查失败。
 
 ## 验证边界
 

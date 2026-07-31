@@ -125,5 +125,8 @@ source/case 数、kernel/CASE marker、逐条 occurrence、精确目标指令、
 lane 0 issuer、producer chain 和 commit。编译成功还必须产生非空 cubin。
 
 `effect_slice` 另用 `nvdisasm` 检查关键 SASS 路径是否保留。核心 MMA shard
-目前没有完成逐 kernel 的 SASS occurrence 归属，报告明确记录为 `NOT_RUN`；
-目标是否保留、融合、移动以及寄存器类别仍需在映射阶段记为 `OBS.*`。
+编译后会按 `.text.<kernel>` 切分 `nvdisasm` 输出，并按源码顺序把每个
+`tcgen05.mma` occurrence 与对应的 `UTCHMMA/UTCIMMA/UTCQMMA` 系列指令配对。
+原始 SASS 保存在工作目录的 `sass/raw/`，逐 occurrence 结果保存在
+`sass/sass_attribution.jsonl`。该归属只覆盖 MMA 核心指令；融合、移动、共享节点、
+操作数准备以及完整效应图仍需在后续映射分析中记为 `OBS.*`。

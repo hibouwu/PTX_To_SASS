@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 
+from extract_core_sass import extract_suite
 from suite_utils import reset_owned_directory
 from validate_generated import validate_directory
 
@@ -59,7 +60,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--jobs", type=int, default=4)
     parser.add_argument("--shard-size", type=int, default=64)
     parser.add_argument("--ptxas", type=Path, default=Path("/usr/local/cuda/bin/ptxas"))
-    parser.add_argument("--work-dir", type=Path, default=Path("/tmp/thor-tcgen05-mma-check"))
+    parser.add_argument(
+        "--nvdisasm", type=Path, default=Path("/usr/local/cuda/bin/nvdisasm")
+    )
+    parser.add_argument(
+        "--work-dir", type=Path, default=Path("/tmp/thor-tcgen05-mma-check")
+    )
     parser.add_argument(
         "--summary-output",
         type=Path,
@@ -128,11 +134,19 @@ def main() -> None:
 
     results.sort(key=lambda item: (item["source"], item["optimization"]))
     failures = [result for result in results if not result["artifact_valid"]]
+    sass_target_attribution = extract_suite(
+        source_dir=source_dir,
+        cubin_dir=cubin_dir,
+        output_dir=work_dir / "sass",
+        nvdisasm=args.nvdisasm,
+        optimizations=args.optimizations,
+        jobs=args.jobs,
+    )
     ptxas_version = subprocess.run(
         [str(args.ptxas), "--version"], text=True, capture_output=True, check=True
     ).stdout
     report = {
-        "schema_version": "thor_tcgen05_mma_compile_report_v2",
+        "schema_version": "thor_tcgen05_mma_compile_report_v3",
         "mode": args.mode,
         "ptx_target": "sm_110a",
         "ptxas_path": str(args.ptxas),
@@ -143,13 +157,7 @@ def main() -> None:
         "compile_pass_count": len(results) - len(failures),
         "compile_failure_count": len(failures),
         "source_validation": source_validation,
-        "sass_target_attribution": {
-            "status": "NOT_RUN",
-            "reason": (
-                "core shard compilation does not yet attribute each PTX target "
-                "occurrence to a per-kernel SASS occurrence"
-            ),
-        },
+        "sass_target_attribution": sass_target_attribution,
         "results": results,
     }
     report_path = work_dir / "compile_report.json"
@@ -157,9 +165,18 @@ def main() -> None:
         json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     if args.summary_output is not None:
+        compact_sass_attribution = {
+            key: value
+            for key, value in sass_target_attribution.items()
+            if key not in {"nvdisasm_path", "raw_sass_directory", "attribution_file"}
+        }
         compact = {
-            "schema_version": "thor_tcgen05_mma_compile_summary_v2",
-            "validation_status": "PASS" if not failures else "FAIL",
+            "schema_version": "thor_tcgen05_mma_compile_summary_v3",
+            "validation_status": (
+                "PASS"
+                if not failures and sass_target_attribution["status"] == "COMPLETE"
+                else "FAIL"
+            ),
             "generation": generated_summary,
             "optimizations": list(args.optimizations),
             "ptxas_sha256": report["ptxas_sha256"],
@@ -169,7 +186,7 @@ def main() -> None:
             "compile_pass_count": len(results) - len(failures),
             "compile_failure_count": len(failures),
             "source_validation": source_validation,
-            "sass_target_attribution": report["sass_target_attribution"],
+            "sass_target_attribution": compact_sass_attribution,
         }
         args.summary_output.parent.mkdir(parents=True, exist_ok=True)
         args.summary_output.write_text(
@@ -180,7 +197,7 @@ def main() -> None:
         f"{report['compile_pass_count']}/{report['compile_attempt_count']} "
         f"compile attempts passed; report: {report_path}"
     )
-    if failures:
+    if failures or sass_target_attribution["status"] != "COMPLETE":
         raise SystemExit(1)
 
 
