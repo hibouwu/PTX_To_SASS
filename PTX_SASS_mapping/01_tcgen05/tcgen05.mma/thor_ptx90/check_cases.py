@@ -63,9 +63,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--nvdisasm", type=Path, default=Path("/usr/local/cuda/bin/nvdisasm")
     )
-    parser.add_argument(
-        "--work-dir", type=Path, default=Path("/tmp/thor-tcgen05-mma-check")
-    )
+    parser.add_argument("--work-dir", type=Path)
     parser.add_argument(
         "--summary-output",
         type=Path,
@@ -78,8 +76,9 @@ def main() -> None:
     args = parse_args()
     if args.jobs < 1:
         raise SystemExit("--jobs must be positive")
+    requested_work_dir = args.work_dir or ROOT / "results" / args.mode
     work_dir = reset_owned_directory(
-        args.work_dir, owner="thor_tcgen05_mma_check", protected=(ROOT,)
+        requested_work_dir, owner="thor_tcgen05_mma_check", protected=(ROOT,)
     )
     source_dir = work_dir / "sources"
     cubin_dir = work_dir / "cubins"
@@ -168,7 +167,13 @@ def main() -> None:
         compact_sass_attribution = {
             key: value
             for key, value in sass_target_attribution.items()
-            if key not in {"nvdisasm_path", "raw_sass_directory", "attribution_file"}
+            if key
+            not in {
+                "nvdisasm_path",
+                "raw_sass_directory",
+                "liveness_sass_directory",
+                "attribution_file",
+            }
         }
         compact = {
             "schema_version": "thor_tcgen05_mma_compile_summary_v3",

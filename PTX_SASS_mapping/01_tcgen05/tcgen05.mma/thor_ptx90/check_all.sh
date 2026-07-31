@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 jobs="${1:-4}"
-work_root="${2:-/tmp/thor-tcgen05-mma-all}"
+work_root="${2:-${script_dir}/results}"
 
 python3 "${script_dir}/suite_utils.py" "${work_root}" >/dev/null
 
@@ -22,7 +22,8 @@ python3 "${script_dir}/check_cases.py" \
 python3 "${script_dir}/compare_context_lowering.py" \
     --source-dir "${work_root}/expanded/sources" \
     --sass-dir "${work_root}/expanded/sass" \
-    --output-dir "${work_root}/context-comparison"
+    --output-dir "${work_root}/context-comparison" \
+    --report-output "${script_dir}/Docs/tcgen05_mma_上下文差分报告.md"
 
 python3 "${script_dir}/check_negative_probes.py" \
     --work-dir "${work_root}/negative-probes" \

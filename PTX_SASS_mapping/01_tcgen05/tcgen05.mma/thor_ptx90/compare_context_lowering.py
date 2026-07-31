@@ -11,7 +11,12 @@ import json
 from pathlib import Path
 import re
 
-from extract_core_sass import sass_instructions, split_text_sections
+from extract_core_sass import (
+    liveness_instructions,
+    liveness_matches_sass,
+    sass_instructions,
+    split_text_sections,
+)
 from suite_utils import reset_owned_directory, stable_hash
 
 
@@ -28,6 +33,10 @@ LABEL_RE = re.compile(r"`?\(\.L_[A-Za-z0-9_.$]+\)|\.L_[A-Za-z0-9_.$]+")
 MNEMONIC_RE = re.compile(
     r"^(?:@[!A-Za-z0-9_.]+\s+)?([A-Z][A-Z0-9_.]*)\b"
 )
+REGISTER_TOKEN_RE = re.compile(r"\b(?:UR\d+|UP\d+|R\d+|P\d+|URZ|UPT|RZ|PT)\b")
+NUMBERED_REGISTER_RE = re.compile(r"^(UR|UP|R|P)(\d+)$")
+GUARD_RE = re.compile(r"^@(!?)(UP\d+|P\d+|UPT|PT)\s+")
+LIVE_REGISTER_CLASSES = ("gpr", "pred", "ugpr", "upred")
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -80,6 +89,121 @@ def operation_mnemonic(operation: str) -> str:
     return match.group(1)
 
 
+def split_operands(operand_text: str) -> list[str]:
+    operands = []
+    start = 0
+    depth = 0
+    for index, character in enumerate(operand_text):
+        if character in "[({":
+            depth += 1
+        elif character in "])}":
+            depth = max(0, depth - 1)
+        elif character == "," and depth == 0:
+            operands.append(operand_text[start:index].strip())
+            start = index + 1
+    if operand_text[start:].strip():
+        operands.append(operand_text[start:].strip())
+    return operands
+
+
+def register_class(register: str) -> str:
+    match = NUMBERED_REGISTER_RE.fullmatch(register)
+    return match.group(1) if match is not None else register
+
+
+def register_placement(operation: str) -> dict:
+    """Describe concrete registers, register routes, and within-op aliasing."""
+    guard_match = GUARD_RE.match(operation)
+    guard = None
+    body = operation
+    if guard_match is not None:
+        guard = {
+            "negated": bool(guard_match.group(1)),
+            "register": guard_match.group(2),
+        }
+        body = operation[guard_match.end() :]
+    parts = body.split(maxsplit=1)
+    operands = split_operands(parts[1]) if len(parts) == 2 else []
+    concrete_operands = [
+        REGISTER_TOKEN_RE.findall(operand) for operand in operands
+    ]
+
+    class_guard = (
+        {
+            "negated": guard["negated"],
+            "register": register_class(guard["register"]),
+        }
+        if guard is not None
+        else None
+    )
+    class_operands = [
+        [register_class(register) for register in registers]
+        for registers in concrete_operands
+    ]
+
+    alias_maps: dict[str, dict[str, int]] = defaultdict(dict)
+
+    def alias(register: str) -> str:
+        register_kind = register_class(register)
+        if NUMBERED_REGISTER_RE.fullmatch(register) is None:
+            return register_kind
+        register_map = alias_maps[register_kind]
+        if register not in register_map:
+            register_map[register] = len(register_map)
+        return f"{register_kind}{{{register_map[register]}}}"
+
+    alias_guard = (
+        {
+            "negated": guard["negated"],
+            "register": alias(guard["register"]),
+        }
+        if guard is not None
+        else None
+    )
+    alias_operands = [
+        [alias(register) for register in registers]
+        for registers in concrete_operands
+    ]
+    return {
+        "concrete": {"guard": guard, "operands": concrete_operands},
+        "classes": {"guard": class_guard, "operands": class_operands},
+        "aliases": {"guard": alias_guard, "operands": alias_operands},
+    }
+
+
+def register_inventory(operations: list[str]) -> dict:
+    registers: dict[str, set[int]] = {
+        register_kind: set() for register_kind in ("R", "P", "UR", "UP")
+    }
+    for operation in operations:
+        for token in REGISTER_TOKEN_RE.findall(operation):
+            match = NUMBERED_REGISTER_RE.fullmatch(token)
+            if match is not None:
+                registers[match.group(1)].add(int(match.group(2)))
+    serialized = {
+        register_kind: sorted(numbers)
+        for register_kind, numbers in registers.items()
+    }
+    return {
+        "referenced_count": {
+            register_kind: len(numbers)
+            for register_kind, numbers in serialized.items()
+        },
+        "max_referenced_index": {
+            register_kind: max(numbers) if numbers else None
+            for register_kind, numbers in serialized.items()
+        },
+        "set_hash": stable_hash(serialized),
+    }
+
+
+def live_register_delta(baseline: dict, treatment: dict) -> dict:
+    return {
+        register_kind: treatment[register_kind] - baseline[register_kind]
+        for register_kind in LIVE_REGISTER_CLASSES
+    }
+
+
 def changed_top_level_groups(baseline: dict, treatment: dict) -> list[str]:
     keys = sorted(set(baseline) | set(treatment))
     return [key for key in keys if baseline.get(key) != treatment.get(key)]
@@ -115,6 +239,16 @@ def kernel_metrics(
         if not sass_path.is_file():
             raise ValueError(f"missing raw SASS: {sass_path}")
         sections = split_text_sections(sass_path.read_text(encoding="utf-8"))
+        liveness_path = (
+            sass_dir
+            / "liveness"
+            / f"{Path(source_shard).stem}_{optimization}.sass"
+        )
+        if not liveness_path.is_file():
+            raise ValueError(f"missing liveness SASS: {liveness_path}")
+        liveness_sections = split_text_sections(
+            liveness_path.read_text(encoding="utf-8")
+        )
         for row in rows:
             kernel = row["kernel"]
             section = sections.get(kernel)
@@ -123,9 +257,32 @@ def kernel_metrics(
             instructions = sass_instructions(section)
             if not instructions:
                 raise ValueError(f"{sass_path}: empty kernel section {kernel}")
+            liveness_section = liveness_sections.get(kernel)
+            if liveness_section is None:
+                raise ValueError(
+                    f"{liveness_path}: missing kernel section {kernel}"
+                )
+            liveness = liveness_instructions(liveness_section)
+            if not liveness_matches_sass(instructions, liveness):
+                raise ValueError(
+                    f"{liveness_path}: analyzed instructions differ for {kernel}"
+                )
             operations = [item["operation"] for item in instructions]
             normalized = normalize_operations(operations)
             mnemonics = [operation_mnemonic(item) for item in operations]
+            inventory = register_inventory(operations)
+            peak_live = {
+                register_kind: max(
+                    item["live_registers"][register_kind] for item in liveness
+                )
+                for register_kind in LIVE_REGISTER_CLASSES
+            }
+            spill_load_count = sum(
+                mnemonic.startswith("LDL") for mnemonic in mnemonics
+            )
+            spill_store_count = sum(
+                mnemonic.startswith("STL") for mnemonic in mnemonics
+            )
             key = (row["source_implementation_id"], optimization)
             if key in metrics:
                 raise ValueError(f"duplicate kernel metrics key: {key}")
@@ -149,6 +306,13 @@ def kernel_metrics(
                 ),
                 "mnemonic_sequence_hash": stable_hash(mnemonics),
                 "mnemonic_counts": dict(sorted(Counter(mnemonics).items())),
+                "peak_live_registers": peak_live,
+                "register_inventory": inventory,
+                "local_memory_indicators": {
+                    "load_instruction_count": spill_load_count,
+                    "store_instruction_count": spill_store_count,
+                    "instruction_count": spill_load_count + spill_store_count,
+                },
             }
     return metrics
 
@@ -184,6 +348,21 @@ def compare_targets(baseline: dict, treatment: dict) -> list[dict]:
             raise ValueError("COMPLETE attribution contains a missing SASS target")
         baseline_normalized = normalize_operation(baseline_sass["operation"])
         treatment_normalized = normalize_operation(treatment_sass["operation"])
+        baseline_placement = register_placement(baseline_sass["operation"])
+        treatment_placement = register_placement(treatment_sass["operation"])
+        physical_register_changed = (
+            baseline_placement["concrete"] != treatment_placement["concrete"]
+        )
+        register_class_changed = (
+            baseline_placement["classes"] != treatment_placement["classes"]
+        )
+        alias_pattern_changed = (
+            baseline_placement["aliases"] != treatment_placement["aliases"]
+        )
+        baseline_live = baseline_sass.get("live_registers")
+        treatment_live = treatment_sass.get("live_registers")
+        if baseline_live is None or treatment_live is None:
+            raise ValueError("COMPLETE attribution contains missing liveness data")
         comparisons.append(
             {
                 "occurrence_index": baseline_item["occurrence_index"],
@@ -210,6 +389,20 @@ def compare_targets(baseline: dict, treatment: dict) -> list[dict]:
                     baseline_sass["encoding_words"]
                     != treatment_sass["encoding_words"]
                 ),
+                "allocation": {
+                    "physical_register_changed": physical_register_changed,
+                    "register_class_changed": register_class_changed,
+                    "alias_pattern_changed": alias_pattern_changed,
+                    "renumber_only": (
+                        physical_register_changed
+                        and not register_class_changed
+                        and not alias_pattern_changed
+                    ),
+                    "live_register_delta": live_register_delta(
+                        baseline_live, treatment_live
+                    ),
+                    "live_registers_changed": baseline_live != treatment_live,
+                },
             }
         )
     return comparisons
@@ -332,6 +525,18 @@ def build_comparisons(
                 target_comparisons = compare_targets(
                     baseline_attribution, treatment_attribution
                 )
+                physical_register_changed = any(
+                    item["allocation"]["physical_register_changed"]
+                    for item in target_comparisons
+                )
+                register_class_changed = any(
+                    item["allocation"]["register_class_changed"]
+                    for item in target_comparisons
+                )
+                alias_pattern_changed = any(
+                    item["allocation"]["alias_pattern_changed"]
+                    for item in target_comparisons
+                )
                 added, removed = counter_delta(
                     baseline_metrics["mnemonic_counts"],
                     treatment_metrics["mnemonic_counts"],
@@ -388,6 +593,18 @@ def build_comparisons(
                                 item["encoding_changed"]
                                 for item in target_comparisons
                             ),
+                            "physical_register_changed": physical_register_changed,
+                            "register_class_changed": register_class_changed,
+                            "alias_pattern_changed": alias_pattern_changed,
+                            "renumber_only": (
+                                physical_register_changed
+                                and not register_class_changed
+                                and not alias_pattern_changed
+                            ),
+                            "target_live_registers_changed": any(
+                                item["allocation"]["live_registers_changed"]
+                                for item in target_comparisons
+                            ),
                             "occurrences": target_comparisons,
                         },
                         "kernel": {
@@ -421,6 +638,52 @@ def build_comparisons(
                             ],
                             "mnemonics_added": added,
                             "mnemonics_removed": removed,
+                            "baseline_peak_live_registers": baseline_metrics[
+                                "peak_live_registers"
+                            ],
+                            "treatment_peak_live_registers": treatment_metrics[
+                                "peak_live_registers"
+                            ],
+                            "peak_live_register_delta": live_register_delta(
+                                baseline_metrics["peak_live_registers"],
+                                treatment_metrics["peak_live_registers"],
+                            ),
+                            "peak_live_registers_changed": (
+                                baseline_metrics["peak_live_registers"]
+                                != treatment_metrics["peak_live_registers"]
+                            ),
+                            "baseline_referenced_registers": {
+                                key: value
+                                for key, value in baseline_metrics[
+                                    "register_inventory"
+                                ].items()
+                                if key != "set_hash"
+                            },
+                            "treatment_referenced_registers": {
+                                key: value
+                                for key, value in treatment_metrics[
+                                    "register_inventory"
+                                ].items()
+                                if key != "set_hash"
+                            },
+                            "referenced_register_set_changed": (
+                                baseline_metrics["register_inventory"][
+                                    "set_hash"
+                                ]
+                                != treatment_metrics["register_inventory"][
+                                    "set_hash"
+                                ]
+                            ),
+                            "baseline_local_memory_indicators": baseline_metrics[
+                                "local_memory_indicators"
+                            ],
+                            "treatment_local_memory_indicators": treatment_metrics[
+                                "local_memory_indicators"
+                            ],
+                            "local_memory_indicators_changed": (
+                                baseline_metrics["local_memory_indicators"]
+                                != treatment_metrics["local_memory_indicators"]
+                            ),
                         },
                     }
                 )
@@ -470,6 +733,21 @@ def summarize(comparisons: list[dict]) -> list[dict]:
                 "core_encoding_changed_count": changed(
                     ("core", "encoding_changed")
                 ),
+                "core_physical_register_changed_count": changed(
+                    ("core", "physical_register_changed")
+                ),
+                "core_renumber_only_count": changed(
+                    ("core", "renumber_only")
+                ),
+                "core_register_class_changed_count": changed(
+                    ("core", "register_class_changed")
+                ),
+                "core_alias_pattern_changed_count": changed(
+                    ("core", "alias_pattern_changed")
+                ),
+                "target_live_registers_changed_count": changed(
+                    ("core", "target_live_registers_changed")
+                ),
                 "kernel_normalized_sequence_changed_count": changed(
                     ("kernel", "normalized_sequence_changed")
                 ),
@@ -478,6 +756,15 @@ def summarize(comparisons: list[dict]) -> list[dict]:
                 ),
                 "kernel_instruction_count_changed_count": sum(
                     row["kernel"]["instruction_count_delta"] != 0 for row in rows
+                ),
+                "kernel_peak_live_registers_changed_count": changed(
+                    ("kernel", "peak_live_registers_changed")
+                ),
+                "kernel_referenced_register_set_changed_count": changed(
+                    ("kernel", "referenced_register_set_changed")
+                ),
+                "kernel_local_memory_indicators_changed_count": changed(
+                    ("kernel", "local_memory_indicators_changed")
                 ),
             }
         )
@@ -515,6 +802,8 @@ def write_markdown(
         "",
         "核心变化忽略指令地址和具体寄存器编号，但保留助记符、修饰、",
         "操作数类别、立即数和操作数结构。kernel 变化比较完整规范化指令序列。",
+        "寄存器表则单独保留具体编号、R/UR/P/UP 类别、同一寄存器复用关系，",
+        "以及 `nvdisasm` 给出的逐指令活跃寄存器计数。",
         "",
         "## 分上下文统计",
         "",
@@ -532,6 +821,32 @@ def write_markdown(
             f"{percent(row['core_normalized_operation_changed_count'], count)} | "
             f"{percent(row['kernel_normalized_sequence_changed_count'], count)} | "
             f"{percent(row['kernel_instruction_count_changed_count'], count)} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## 寄存器分配差分",
+            "",
+            "| 上下文 | 实际改变的 CTX | 优化 | 配对数 | 核心寄存器布局变化 | "
+            "仅重编号 | 类别变化 | 别名关系变化 | 核心处活跃数变化 | "
+            "kernel 峰值活跃数变化 | kernel 引用集合变化 | 本地内存指令变化 |",
+            "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for row in summaries:
+        count = row["comparison_count"]
+        lines.append(
+            f"| `{row['treatment_profile']}` | "
+            f"`{row['changed_context_groups']}` | "
+            f"{row['optimization']} | {count} | "
+            f"{percent(row['core_physical_register_changed_count'], count)} | "
+            f"{percent(row['core_renumber_only_count'], count)} | "
+            f"{percent(row['core_register_class_changed_count'], count)} | "
+            f"{percent(row['core_alias_pattern_changed_count'], count)} | "
+            f"{percent(row['target_live_registers_changed_count'], count)} | "
+            f"{percent(row['kernel_peak_live_registers_changed_count'], count)} | "
+            f"{percent(row['kernel_referenced_register_set_changed_count'], count)} | "
+            f"{percent(row['kernel_local_memory_indicators_changed_count'], count)} |"
         )
     lines.extend(["", "## 处理解释", ""])
     by_profile: dict[str, list[dict]] = defaultdict(list)
@@ -558,6 +873,14 @@ def write_markdown(
             "  操作数准备和完成指令。",
             "- `encoding_changed` 保留具体寄存器编码，不能单独解释为",
             "  指令选择发生变化。",
+            "- `仅重编号` 表示核心 MMA 使用的具体寄存器号改变，但",
+            "  R/UR/P/UP 路径和操作数之间的寄存器复用关系不变。",
+            "- `类别变化` 会区分普通/统一寄存器和谓词路径，也会区分",
+            "  RZ、URZ、PT、UPT 等特殊寄存器。",
+            "- 活跃寄存器数来自 `nvdisasm --life-range-mode count` 的",
+            "  静态数据流结果；kernel 引用过的寄存器集合不等于硬件分配上限。",
+            "- `LDL*`/`STL*` 被记为本地内存指令指标。它能提示潜在 spill，",
+            "  但仅凭指令名不能断言它一定由寄存器溢出造成。",
             "- 本报告是静态代码生成差分，不是运行时语义或性能结论。",
             "",
         ]
@@ -570,6 +893,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-dir", type=Path, required=True)
     parser.add_argument("--sass-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--report-output",
+        type=Path,
+        help="optional path for publishing the final human-readable report",
+    )
     parser.add_argument("--baseline-profile", default="runtime_zero")
     parser.add_argument(
         "--optimizations",
@@ -637,7 +965,7 @@ def main() -> None:
     write_csv(summary_path, summaries)
     report_path = output_dir / "context_report.md"
     metadata = {
-        "schema_version": "thor_tcgen05_context_comparison_v1",
+        "schema_version": "thor_tcgen05_context_comparison_v2",
         "status": "COMPLETE",
         "normalization_schema": NORMALIZATION_SCHEMA,
         "baseline_profile": args.baseline_profile,
@@ -656,6 +984,11 @@ def main() -> None:
         "report_file": report_path.name,
     }
     write_markdown(report_path, summaries, metadata)
+    if args.report_output is not None:
+        published_report_path = args.report_output.expanduser().resolve()
+        published_report_path.parent.mkdir(parents=True, exist_ok=True)
+        if published_report_path != report_path.resolve():
+            write_markdown(published_report_path, summaries, metadata)
     metadata["report_sha256"] = file_sha256(report_path)
     (output_dir / "comparison_report.json").write_text(
         json.dumps(metadata, indent=2, sort_keys=True) + "\n",
@@ -664,6 +997,11 @@ def main() -> None:
     print(
         f"{len(comparisons)}/{expected_comparisons} matched comparisons complete; "
         f"report: {report_path}"
+        + (
+            f"; published: {args.report_output.expanduser().resolve()}"
+            if args.report_output is not None
+            else ""
+        )
     )
 
 

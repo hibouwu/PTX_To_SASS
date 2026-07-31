@@ -70,10 +70,14 @@ TMEM-A 形态中，不能与 block-scaled 或 SMEM-descriptor A 形态做无约�
 ./check_all.sh
 ```
 
-可选参数依次是并行任务数和工作目录，例如
-`./check_all.sh 8 /tmp/thor-mma-check`。cubin 和完整日志保留在工作目录，
-上下文报告位于工作目录的 `context-comparison/`；仓库内只更新紧凑验证摘要
-以及默认 `syntax` 源码。
+默认使用 4 个并行任务，完整运行结果写入本目录的 `results/`。其中包括
+cubin、SASS、活跃寄存器反汇编、逐配对 JSONL 和完整日志；`results/.gitignore`
+会阻止 `.cubin` 和 `.sass` 文件进入 Git。最终适合直接阅读的中文报告同时
+发布到 `Docs/tcgen05_mma_上下文差分报告.md`。
+
+可选参数依次是并行任务数和工作目录。例如 `./check_all.sh 8` 仍写入默认
+`results/`；只有显式执行 `./check_all.sh 8 /path/to/work` 时才改用其他目录。
+无论工作目录在哪里，最终 Markdown 报告都发布到 `Docs/`。
 
 所有会被脚本清理的目录都带 `.tcgen05-suite-owner.json` ownership marker。
 脚本只重建新目录或 owner 匹配的目录，并拒绝 `/`、过短绝对路径、当前目录、
@@ -111,23 +115,33 @@ python3 check_cases.py --mode expanded --jobs 4
 
 ```bash
 python3 extract_core_sass.py \
-    --source-dir /tmp/thor-check/sources \
-    --cubin-dir /tmp/thor-check/cubins \
-    --output-dir /tmp/thor-check/sass
+    --source-dir results/expanded/sources \
+    --cubin-dir results/expanded/cubins \
+    --output-dir results/expanded/sass
 ```
 
 对 expanded 结果进行基线/上下文配对差分：
 
 ```bash
 python3 compare_context_lowering.py \
-    --source-dir /tmp/thor-check/sources \
-    --sass-dir /tmp/thor-check/sass \
-    --output-dir /tmp/thor-check/comparison
+    --source-dir results/expanded/sources \
+    --sass-dir results/expanded/sass \
+    --output-dir results/context-comparison \
+    --report-output Docs/tcgen05_mma_上下文差分报告.md
 ```
 
 差分目录包含逐配对的 `context_differences.jsonl`、汇总表
 `context_summary.csv` 和中文报告 `context_report.md`。默认以 `runtime_zero`
 为基线，按 `semantic_form_id + source_variant_id + optimization` 严格配对。
+报告除了指令选择和完整 kernel 序列，还单独回答：
+
+- 核心 MMA 的具体寄存器布局是否改变；
+- 变化是否只是编号重排，R/UR/P/UP 类别和寄存器复用关系是否改变；
+- 核心指令处和整个 kernel 峰值的 GPR/PRED/UGPR/UPRED 活跃数是否改变；
+- kernel 引用的寄存器集合以及 `LDL*`/`STL*` 本地内存指令是否改变。
+
+活跃数取自 `nvdisasm --life-range-mode count`。`LDL*`/`STL*` 只作为潜在
+spill 指标，不能脱离编译资源信息直接解释为寄存器溢出。
 
 检查 Thor 明确不支持的 qualifier capability probes：
 
@@ -151,8 +165,11 @@ summary 数量、kernel/CASE marker、逐条 target occurrence、精确目标指
 guard、lane-0 issuer、producer chain 和 commit。编译检查还要求每个成功任务
 产生非空 cubin，随后调用 `nvdisasm`，按 `.text.<kernel>` 切分 SASS，并按源码
 顺序将每个目标 occurrence 配对到 `UTCHMMA/UTCIMMA/UTCQMMA` 系列核心指令。
-原始结果位于工作目录的 `sass/raw/`，结构化归属位于
-`sass/sass_attribution.jsonl`；任一 kernel 缺失或目标数量不符都会使检查失败。
+带编码的原始结果位于工作目录的 `sass/raw/`，活跃寄存器反汇编位于
+`sass/liveness/`，结构化归属位于 `sass/sass_attribution.jsonl`。提取器会核对
+两种反汇编中每条被分析指令的 offset 和操作文本，并要求每条目标 MMA 都有
+活跃计数；允许 `nvdisasm` 省略函数尾部仅用于对齐的 padding NOP。任一 kernel
+缺失、目标数量不符或活跃数据错配都会使检查失败。
 
 ## 验证边界
 

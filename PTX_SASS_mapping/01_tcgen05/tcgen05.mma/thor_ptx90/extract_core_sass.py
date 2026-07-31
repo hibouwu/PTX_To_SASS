@@ -25,6 +25,10 @@ INSTRUCTION_RE = re.compile(
     r"/\*\s*(0x[0-9a-fA-F]+)\s*\*/\s*\n\s*"
     r"/\*\s*(0x[0-9a-fA-F]+)\s*\*/"
 )
+LIVENESS_INSTRUCTION_RE = re.compile(
+    r"/\*([0-9a-fA-F]+)\*/\s+(.*?)\s*;\s*//\s*"
+    r"\|\s*(\d*)\s*\|\s*(\d*)\s*\|\s*(\d*)\s*\|\s*(\d*)\s*\|"
+)
 TARGET_MNEMONIC_RE = re.compile(r"\b(UTC[A-Z0-9]*MMA(?:\.[A-Z0-9]+)*)\b")
 
 
@@ -88,37 +92,105 @@ def target_instructions(section: str) -> list[dict]:
     ]
 
 
+def liveness_instructions(section: str) -> list[dict]:
+    """Parse nvdisasm --life-range-mode count output."""
+    return [
+        {
+            "offset": f"0x{match.group(1).lower()}",
+            "operation": match.group(2).strip(),
+            "live_registers": {
+                "gpr": int(match.group(3) or 0),
+                "pred": int(match.group(4) or 0),
+                "ugpr": int(match.group(5) or 0),
+                "upred": int(match.group(6) or 0),
+            },
+        }
+        for match in LIVENESS_INSTRUCTION_RE.finditer(section)
+    ]
+
+
+def liveness_matches_sass(
+    instructions: list[dict], liveness: list[dict]
+) -> bool:
+    """Allow omitted padding NOPs, but reject mismatched analyzed instructions."""
+    return (
+        bool(liveness)
+        and len(liveness) <= len(instructions)
+        and all(
+            sass_item["offset"] == live_item["offset"]
+            and sass_item["operation"] == live_item["operation"]
+            for sass_item, live_item in zip(instructions, liveness)
+        )
+        and all(
+            instruction["operation"] == "NOP"
+            for instruction in instructions[len(liveness) :]
+        )
+    )
+
+
 def disassemble_one(
     nvdisasm: Path,
     cubin: Path,
     sass_output: Path,
+    liveness_output: Path,
 ) -> dict:
-    command = [
+    sass_command = [
         str(nvdisasm),
         "--print-code",
         "--separate-functions",
         "--print-instruction-encoding",
         str(cubin),
     ]
-    completed = subprocess.run(command, text=True, capture_output=True)
-    if completed.returncode == 0:
-        sass_output.write_text(completed.stdout, encoding="utf-8")
-    output_exists = sass_output.is_file()
-    output_size = sass_output.stat().st_size if output_exists else 0
+    liveness_command = [
+        str(nvdisasm),
+        "--print-code",
+        "--separate-functions",
+        "--life-range-mode",
+        "count",
+        str(cubin),
+    ]
+    sass_completed = subprocess.run(sass_command, text=True, capture_output=True)
+    liveness_completed = subprocess.run(
+        liveness_command, text=True, capture_output=True
+    )
+    if sass_completed.returncode == 0:
+        sass_output.write_text(sass_completed.stdout, encoding="utf-8")
+    if liveness_completed.returncode == 0:
+        liveness_output.write_text(liveness_completed.stdout, encoding="utf-8")
+    sass_exists = sass_output.is_file()
+    liveness_exists = liveness_output.is_file()
+    sass_size = sass_output.stat().st_size if sass_exists else 0
+    liveness_size = liveness_output.stat().st_size if liveness_exists else 0
     return {
         "cubin": cubin.name,
         "sass_file": str(sass_output),
-        "command": command,
-        "returncode": completed.returncode,
-        "stderr": completed.stderr,
-        "output_exists": output_exists,
-        "output_size": output_size,
-        "output_sha256": (
+        "liveness_file": str(liveness_output),
+        "sass_command": sass_command,
+        "liveness_command": liveness_command,
+        "sass_returncode": sass_completed.returncode,
+        "liveness_returncode": liveness_completed.returncode,
+        "sass_stderr": sass_completed.stderr,
+        "liveness_stderr": liveness_completed.stderr,
+        "sass_output_exists": sass_exists,
+        "liveness_output_exists": liveness_exists,
+        "sass_output_size": sass_size,
+        "liveness_output_size": liveness_size,
+        "sass_output_sha256": (
             hashlib.sha256(sass_output.read_bytes()).hexdigest()
-            if output_exists
+            if sass_exists
             else None
         ),
-        "artifact_valid": completed.returncode == 0 and output_size > 0,
+        "liveness_output_sha256": (
+            hashlib.sha256(liveness_output.read_bytes()).hexdigest()
+            if liveness_exists
+            else None
+        ),
+        "artifact_valid": (
+            sass_completed.returncode == 0
+            and liveness_completed.returncode == 0
+            and sass_size > 0
+            and liveness_size > 0
+        ),
     }
 
 
@@ -137,7 +209,9 @@ def extract_suite(
         output_dir, owner="thor_tcgen05_mma_sass", protected=(ROOT,)
     )
     raw_dir = output_dir / "raw"
+    liveness_dir = output_dir / "liveness"
     raw_dir.mkdir(parents=True)
+    liveness_dir.mkdir()
 
     manifest_rows = load_manifest(source_dir)
     rows_by_shard: dict[str, list[dict]] = {}
@@ -151,8 +225,17 @@ def extract_suite(
         for optimization in optimizations:
             cubin = cubin_dir / f"{stem}_{optimization}.cubin"
             sass_output = raw_dir / f"{stem}_{optimization}.sass"
+            liveness_output = liveness_dir / f"{stem}_{optimization}.sass"
             if cubin.is_file():
-                tasks.append((source_shard, optimization, cubin, sass_output))
+                tasks.append(
+                    (
+                        source_shard,
+                        optimization,
+                        cubin,
+                        sass_output,
+                        liveness_output,
+                    )
+                )
             else:
                 missing_cubins.append(
                     {
@@ -165,11 +248,23 @@ def extract_suite(
     disassembly_results = []
     with ThreadPoolExecutor(max_workers=jobs) as executor:
         pending = {
-            executor.submit(disassemble_one, nvdisasm, cubin, sass_output): (
+            executor.submit(
+                disassemble_one,
+                nvdisasm,
+                cubin,
+                sass_output,
+                liveness_output,
+            ): (
                 source_shard,
                 optimization,
             )
-            for source_shard, optimization, cubin, sass_output in tasks
+            for (
+                source_shard,
+                optimization,
+                cubin,
+                sass_output,
+                liveness_output,
+            ) in tasks
         }
         for future in as_completed(pending):
             source_shard, optimization = pending[future]
@@ -190,14 +285,39 @@ def extract_suite(
         sections = split_text_sections(
             Path(result["sass_file"]).read_text(encoding="utf-8")
         )
+        liveness_sections = split_text_sections(
+            Path(result["liveness_file"]).read_text(encoding="utf-8")
+        )
         result["text_section_count"] = len(sections)
+        result["liveness_text_section_count"] = len(liveness_sections)
         for manifest_row in rows_by_shard[result["source_shard"]]:
             kernel = manifest_row["kernel"]
             section = sections.get(kernel)
+            liveness_section = liveness_sections.get(kernel)
+            instructions = sass_instructions(section) if section is not None else []
+            liveness = (
+                liveness_instructions(liveness_section)
+                if liveness_section is not None
+                else []
+            )
+            live_by_offset = {
+                instruction["offset"]: instruction["live_registers"]
+                for instruction in liveness
+            }
             sass_targets = target_instructions(section) if section is not None else []
+            for target in sass_targets:
+                target["live_registers"] = live_by_offset.get(target["offset"])
             expected_count = manifest_row["target_occurrence_count"]
             if section is None:
                 status = "MISSING_KERNEL"
+            elif liveness_section is None:
+                status = "MISSING_LIVENESS_KERNEL"
+            elif not liveness_matches_sass(instructions, liveness):
+                status = "LIVENESS_OFFSET_MISMATCH"
+            elif any(
+                target["live_registers"] is None for target in sass_targets
+            ):
+                status = "MISSING_TARGET_LIVENESS"
             elif len(sass_targets) != expected_count:
                 status = "TARGET_COUNT_MISMATCH"
             else:
@@ -231,6 +351,9 @@ def extract_suite(
                     "cubin": result["cubin"],
                     "sass_file": str(
                         Path(result["sass_file"]).relative_to(output_dir)
+                    ),
+                    "liveness_file": str(
+                        Path(result["liveness_file"]).relative_to(output_dir)
                     ),
                     "attribution_method": "KERNEL_SECTION_AND_SOURCE_ORDER",
                     "expected_ptx_occurrence_count": expected_count,
@@ -282,7 +405,7 @@ def extract_suite(
         check=True,
     ).stdout.strip().splitlines()
     summary = {
-        "schema_version": "thor_tcgen05_mma_sass_attribution_v1",
+        "schema_version": "thor_tcgen05_mma_sass_attribution_v2",
         "status": status,
         "attribution_scope": "CORE_MMA_MNEMONIC",
         "attribution_method": "KERNEL_SECTION_AND_SOURCE_ORDER",
@@ -304,6 +427,7 @@ def extract_suite(
         "disassembly_failure_count": len(disassembly_failures),
         "attribution_failure_count": len(attribution_failures),
         "raw_sass_directory": str(raw_dir),
+        "liveness_sass_directory": str(liveness_dir),
         "attribution_file": str(attribution_path),
     }
     report = {

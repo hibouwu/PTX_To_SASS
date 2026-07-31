@@ -14,6 +14,7 @@ from generate_cases import Case, Step, render_kernel
 from suite_utils import reset_owned_directory
 
 
+ROOT = Path(__file__).resolve().parent
 PROBES = (
     (
         "scale_input_d",
@@ -48,7 +49,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--ptxas", type=Path, default=Path("/usr/local/cuda/bin/ptxas"))
     parser.add_argument(
-        "--work-dir", type=Path, default=Path("/tmp/thor-tcgen05-negative-probes")
+        "--work-dir", type=Path, default=ROOT / "results" / "negative-probes"
     )
     parser.add_argument("--summary-output", type=Path)
     return parser.parse_args()
@@ -57,7 +58,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     work_dir = reset_owned_directory(
-        args.work_dir, owner="thor_tcgen05_negative_probes", protected=(Path(__file__).resolve().parent,)
+        args.work_dir,
+        owner="thor_tcgen05_negative_probes",
+        protected=(ROOT,),
     )
 
     results = []

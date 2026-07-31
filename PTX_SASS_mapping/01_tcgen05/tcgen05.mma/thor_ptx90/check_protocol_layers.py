@@ -57,7 +57,9 @@ def main() -> None:
         "--nvdisasm", type=Path, default=Path("/usr/local/cuda/bin/nvdisasm")
     )
     parser.add_argument(
-        "--work-dir", type=Path, default=Path("/tmp/thor-tcgen05-protocol-check")
+        "--work-dir",
+        type=Path,
+        default=ROOT / "results" / "protocol-layers",
     )
     parser.add_argument("--summary-output", type=Path)
     args = parser.parse_args()
