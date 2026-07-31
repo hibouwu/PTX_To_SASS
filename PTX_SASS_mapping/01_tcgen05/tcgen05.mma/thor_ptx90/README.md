@@ -57,7 +57,8 @@ TMEM-A 形态中，不能与 block-scaled 或 SMEM-descriptor A 形态做无约�
 
 ## 使用
 
-一键重新生成并编译以下四层的 O0/O1/O2/O3 四个版本，同时执行阴性探针：
+一键重新生成并编译以下四层的 O0/O1/O2/O3 四个版本，执行 expanded
+上下文配对差分和阴性探针：
 
 - `syntax`：合法 qualifier/operand surface form；
 - `expanded`：surface form 与 8 个静态上下文 profile 的交叉；
@@ -71,7 +72,8 @@ TMEM-A 形态中，不能与 block-scaled 或 SMEM-descriptor A 形态做无约�
 
 可选参数依次是并行任务数和工作目录，例如
 `./check_all.sh 8 /tmp/thor-mma-check`。cubin 和完整日志保留在工作目录，
-仓库内只更新紧凑验证摘要以及默认 `syntax` 源码。
+上下文报告位于工作目录的 `context-comparison/`；仓库内只更新紧凑验证摘要
+以及默认 `syntax` 源码。
 
 所有会被脚本清理的目录都带 `.tcgen05-suite-owner.json` ownership marker。
 脚本只重建新目录或 owner 匹配的目录，并拒绝 `/`、过短绝对路径、当前目录、
@@ -113,6 +115,19 @@ python3 extract_core_sass.py \
     --cubin-dir /tmp/thor-check/cubins \
     --output-dir /tmp/thor-check/sass
 ```
+
+对 expanded 结果进行基线/上下文配对差分：
+
+```bash
+python3 compare_context_lowering.py \
+    --source-dir /tmp/thor-check/sources \
+    --sass-dir /tmp/thor-check/sass \
+    --output-dir /tmp/thor-check/comparison
+```
+
+差分目录包含逐配对的 `context_differences.jsonl`、汇总表
+`context_summary.csv` 和中文报告 `context_report.md`。默认以 `runtime_zero`
+为基线，按 `semantic_form_id + source_variant_id + optimization` 严格配对。
 
 检查 Thor 明确不支持的 qualifier capability probes：
 

@@ -19,6 +19,11 @@ python3 "${script_dir}/check_cases.py" \
     --work-dir "${work_root}/expanded" \
     --summary-output "${script_dir}/validation/expanded_compile_summary.json"
 
+python3 "${script_dir}/compare_context_lowering.py" \
+    --source-dir "${work_root}/expanded/sources" \
+    --sass-dir "${work_root}/expanded/sass" \
+    --output-dir "${work_root}/context-comparison"
+
 python3 "${script_dir}/check_negative_probes.py" \
     --work-dir "${work_root}/negative-probes" \
     --summary-output "${script_dir}/validation/negative_probe_summary.json"
@@ -31,4 +36,4 @@ python3 "${script_dir}/check_protocol_layers.py" \
 python3 "${script_dir}/generate_cases.py"
 python3 "${script_dir}/generate_protocol_layers.py"
 
-echo "PASS: syntax + expanded + CTX.protocol + effect_slice O0/O1/O2/O3"
+echo "PASS: syntax + expanded + context comparison + CTX.protocol + effect_slice O0/O1/O2/O3"

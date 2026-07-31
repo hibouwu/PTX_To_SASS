@@ -54,25 +54,38 @@ def split_text_sections(disassembly: str) -> dict[str, str]:
     }
 
 
-def target_instructions(section: str) -> list[dict]:
-    targets = []
+def sass_instructions(section: str) -> list[dict]:
+    instructions = []
     for match in INSTRUCTION_RE.finditer(section):
         operation = match.group(2).strip()
         mnemonic_match = TARGET_MNEMONIC_RE.search(operation)
-        if mnemonic_match is None:
-            continue
-        targets.append(
+        instructions.append(
             {
                 "offset": f"0x{match.group(1).lower()}",
-                "mnemonic": mnemonic_match.group(1),
                 "operation": operation,
                 "encoding_words": [
                     match.group(3).lower(),
                     match.group(4).lower(),
                 ],
+                "target_mma_mnemonic": (
+                    mnemonic_match.group(1) if mnemonic_match is not None else None
+                ),
             }
         )
-    return targets
+    return instructions
+
+
+def target_instructions(section: str) -> list[dict]:
+    return [
+        {
+            "offset": instruction["offset"],
+            "mnemonic": instruction["target_mma_mnemonic"],
+            "operation": instruction["operation"],
+            "encoding_words": instruction["encoding_words"],
+        }
+        for instruction in sass_instructions(section)
+        if instruction["target_mma_mnemonic"] is not None
+    ]
 
 
 def disassemble_one(
@@ -216,7 +229,9 @@ def extract_suite(
                     "optimization": result["optimization"],
                     "kernel": kernel,
                     "cubin": result["cubin"],
-                    "sass_file": result["sass_file"],
+                    "sass_file": str(
+                        Path(result["sass_file"]).relative_to(output_dir)
+                    ),
                     "attribution_method": "KERNEL_SECTION_AND_SOURCE_ORDER",
                     "expected_ptx_occurrence_count": expected_count,
                     "observed_sass_target_count": len(sass_targets),
