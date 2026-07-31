@@ -72,8 +72,12 @@ TMEM-A 形态中，不能与 block-scaled 或 SMEM-descriptor A 形态做无约�
 
 默认使用 4 个并行任务，完整运行结果写入本目录的 `results/`。其中包括
 cubin、SASS、活跃寄存器反汇编、逐配对 JSONL 和完整日志；`results/.gitignore`
-会阻止 `.cubin` 和 `.sass` 文件进入 Git。最终适合直接阅读的中文报告同时
-发布到 `Docs/tcgen05_mma_上下文差分报告.md`。
+会阻止 `.cubin`、`.sass` 和体积较大的逐记录 `.jsonl` 文件进入 Git。最终
+适合直接阅读的中文报告同时发布到
+`Docs/tcgen05_mma_上下文差分报告.md`。按单个 modifier 或语义维度查规则时，
+从 [`Docs/mapping_rules/README.md`](Docs/mapping_rules/README.md) 进入；需要
+跨维度解释和完整函数级 PTX/SASS 时，阅读
+[`Docs/tcgen05_mma_PTX到SASS映射规则报告.md`](Docs/tcgen05_mma_PTX到SASS映射规则报告.md)。
 
 可选参数依次是并行任务数和工作目录。例如 `./check_all.sh 8` 仍写入默认
 `results/`；只有显式执行 `./check_all.sh 8 /path/to/work` 时才改用其他目录。
