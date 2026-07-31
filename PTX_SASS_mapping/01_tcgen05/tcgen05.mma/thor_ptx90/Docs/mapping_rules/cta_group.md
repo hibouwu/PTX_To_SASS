@@ -122,82 +122,282 @@ group 2 还把 disable-output-lane mask 从 4 个扩展到 8 个。根据 mask �
     → 如果额外 4 个 mask 未被常量折叠，则选择更多 MOV/R2UR/UMOV
 ```
 
-在 `commit_completion` 配对中，O0 展示 mask 如何经过 GPR 和 `R2UR`
-进入 MMA。下面是从完整函数中抽出的相关片段，省略了与 CTA group 无关的
-descriptor load 和同值寄存器重命名。
+下面选四组最有代表性的 group 1/group 2 配对。每组都先给目标 PTX，再给同一
+case 的 O0 和 O3。SASS 只保留与本组结论有关的片段。
 
-group 1 的 `THOR_MMA_000008`，O0：
+### 对比 1：`runtime_zero`——纯核心基线
 
-```sass
-MOV    R2, RZ;
-MOV    R3, RZ;
-MOV    R4, RZ;
-MOV    R5, RZ;
-MOV    R9,  R2;
-MOV    R10, R3;
-MOV    R11, R4;
-MOV    R12, R5;
-R2UR   UR12, R9;
-R2UR   UR13, R10;
-R2UR   UR14, R11;
-R2UR   UR15, R12;
-UTCHMMA gdesc[UR4], gdesc[UR6],
-          tmem[UR10], tmem[UR8], idesc[UR9], UR12, UP0;
-R2UR   UR4, R0;
-UTCBAR [UR4], URZ;
+对应 PTX：
+
+```ptx
+// THOR_MMA_000001，group 1
+mov.b32 %mask0, 0;
+mov.b32 %mask1, 0;
+mov.b32 %mask2, 0;
+mov.b32 %mask3, 0;
+tcgen05.mma.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+
+// THOR_MMA_000417，group 2
+mov.b32 %mask0, 0;
+mov.b32 %mask1, 0;
+mov.b32 %mask2, 0;
+mov.b32 %mask3, 0;
+mov.b32 %mask4, 0;
+mov.b32 %mask5, 0;
+mov.b32 %mask6, 0;
+mov.b32 %mask7, 0;
+tcgen05.mma.cta_group::2.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3,
+     %mask4, %mask5, %mask6, %mask7}, %enable;
 ```
 
-group 2 的 `THOR_MMA_000424`，O0：
+O0：
 
 ```sass
-MOV    R10, RZ;
-MOV    R11, RZ;
-MOV    R12, RZ;
-MOV    R13, RZ;
-MOV    R14, RZ;
-MOV    R15, RZ;
-MOV    R16, RZ;
-MOV    R17, RZ;
-R2UR   UR8,  R10;
-R2UR   UR9,  R11;
-R2UR   UR10, R12;
-R2UR   UR11, R13;
-R2UR   UR12, R14;
-R2UR   UR13, R15;
-R2UR   UR14, R16;
-R2UR   UR15, R17;
+// group 1
+UTCHMMA gdesc[UR4], gdesc[UR6],
+         tmem[UR10], tmem[UR8], idesc[UR9], UR12, UP0;
+
+// group 2
+UTCHMMA.2CTA gdesc[UR4], gdesc[UR6],
+              tmem[UR18], tmem[UR16], idesc[UR17], UR8, UP0;
+```
+
+O3：
+
+```sass
+// group 1
+UTCHMMA gdesc[UR8], gdesc[UR10],
+         tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+
+// group 2
+UTCHMMA.2CTA gdesc[UR8], gdesc[UR10],
+              tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+```
+
+基线说明 `.2CTA` 在 O0/O3 都稳定存在；零 mask 到 O3 已完全折叠。
+
+### 对比 2：`enable_true_mask_ones`——4 个 mask 对 8 个 mask
+
+对应 PTX：
+
+```ptx
+// group 1：THOR_MMA_000003
+setp.eq.u32 %enable, 0, 0;
+mov.b32 %mask0, 0xffffffff;
+mov.b32 %mask1, 0xffffffff;
+mov.b32 %mask2, 0xffffffff;
+mov.b32 %mask3, 0xffffffff;
+tcgen05.mma.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+
+// group 2：THOR_MMA_000419
+setp.eq.u32 %enable, 0, 0;
+mov.b32 %mask0, 0xffffffff;
+mov.b32 %mask1, 0xffffffff;
+mov.b32 %mask2, 0xffffffff;
+mov.b32 %mask3, 0xffffffff;
+mov.b32 %mask4, 0xffffffff;
+mov.b32 %mask5, 0xffffffff;
+mov.b32 %mask6, 0xffffffff;
+mov.b32 %mask7, 0xffffffff;
+tcgen05.mma.cta_group::2.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3,
+     %mask4, %mask5, %mask6, %mask7}, %enable;
+```
+
+O0：
+
+```sass
+// group 1
+MOV  R3, 0xffffffff;
+MOV  R6, 0xffffffff;
+MOV  R7, 0xffffffff;
+MOV  R8, 0xffffffff;
+R2UR UR12, R10;
+R2UR UR13, R11;
+R2UR UR14, R12;
+R2UR UR15, R8;
+UTCHMMA gdesc[UR4], gdesc[UR6],
+         tmem[UR10], tmem[UR8], idesc[UR9], UR12, UP0;
+
+// group 2
+MOV  R4,  0xffffffff;
+MOV  R5,  0xffffffff;
+MOV  R6,  0xffffffff;
+MOV  R7,  0xffffffff;
+MOV  R8,  0xffffffff;
+MOV  R9,  0xffffffff;
+MOV  R10, 0xffffffff;
+MOV  R11, 0xffffffff;
+R2UR UR8,  R13;
+R2UR UR9,  R14;
+R2UR UR10, R15;
+R2UR UR11, R16;
+R2UR UR12, R8;
+R2UR UR13, R9;
+R2UR UR14, R10;
+R2UR UR15, R11;
+UTCHMMA.2CTA gdesc[UR4], gdesc[UR6],
+              tmem[UR18], tmem[UR16], idesc[UR17], UR8, UP0;
+```
+
+O3：
+
+```sass
+// group 1
+UMOV UR12, 0xffffffff;
+UMOV UR13, 0xffffffff;
+UMOV UR14, 0xffffffff;
+UMOV UR15, 0xffffffff;
+UTCHMMA gdesc[UR8], gdesc[UR10],
+         tmem[UR6], tmem[UR4], idesc[UR5], UR12, UPT;
+
+// group 2
+UMOV UR8,  0xffffffff;
+UMOV UR9,  0xffffffff;
+UMOV UR10, 0xffffffff;
+UMOV UR11, 0xffffffff;
+UMOV UR12, 0xffffffff;
+UMOV UR13, 0xffffffff;
+UMOV UR14, 0xffffffff;
+UMOV UR15, 0xffffffff;
+UTCHMMA.2CTA gdesc[UR16], gdesc[UR18],
+              tmem[UR6], tmem[UR4], idesc[UR5], UR8, UPT;
+```
+
+这组最清楚地展示了 mask 的选择过程：O0 是 `MOV→R2UR`，O3 合并为
+4 条或 8 条 `UMOV`。
+
+### 对比 3：`derived_producers`——生产链能否被消去
+
+对应 PTX：
+
+```ptx
+// 两个 group 共用的 identity producer
+add.u32 %d_tmem, %d_tmem, 0;
+add.u32 %a_tmem, %a_tmem, 0;
+xor.b64 %desc_a, %desc_a, 0;
+or.b64  %desc_b, %desc_b, 0;
+xor.b32 %idesc, %idesc, 0;
+
+// group 1：THOR_MMA_000007
+tcgen05.mma.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+
+// group 2：THOR_MMA_000423
+tcgen05.mma.cta_group::2.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3,
+     %mask4, %mask5, %mask6, %mask7}, %enable;
+```
+
+O0：
+
+```sass
+// group 1
+IADD3 R0, PT, PT, R0, RZ, RZ;
+LOP3.LUT R15, R15, RZ, RZ, 0x3c, !PT;
+LOP3.LUT R16, R16, RZ, RZ, 0x3c, !PT;
+LOP3.LUT R13, R13, RZ, RZ, 0xfc, !PT;
+LOP3.LUT R14, R14, RZ, RZ, 0xfc, !PT;
+LOP3.LUT R2,  R2,  RZ, RZ, 0x3c, !PT;
+R2UR  UR4, R4;
+R2UR  UR6, R6;
+R2UR  UR10, R0;
+UTCHMMA gdesc[UR4], gdesc[UR6],
+         tmem[UR10], tmem[UR8], idesc[UR9], UR12, UP0;
+
+// group 2
+IADD3 R0, PT, PT, R0, RZ, RZ;
+LOP3.LUT R19, R19, RZ, RZ, 0x3c, !PT;
+LOP3.LUT R20, R20, RZ, RZ, 0x3c, !PT;
+LOP3.LUT R17, R17, RZ, RZ, 0xfc, !PT;
+LOP3.LUT R18, R18, RZ, RZ, 0xfc, !PT;
+LOP3.LUT R2,  R2,  RZ, RZ, 0x3c, !PT;
+R2UR  UR4,  R4;
+R2UR  UR6,  R6;
+R2UR  UR18, R0;
+UTCHMMA.2CTA gdesc[UR4], gdesc[UR6],
+              tmem[UR18], tmem[UR16], idesc[UR17], UR8, UP0;
+```
+
+O3：
+
+```sass
+// group 1：identity producer 已消去
+UTCHMMA gdesc[UR8], gdesc[UR10],
+         tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+
+// group 2：identity producer 已消去
+UTCHMMA.2CTA gdesc[UR8], gdesc[UR10],
+              tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+```
+
+这组说明 O0 中能看到 `IADD3/LOP3.LUT/R2UR` 生产链，O3 会把恒等运算全部
+消去；CTA group 最终只保留 `.2CTA` 差异。
+
+### 对比 4：`commit_completion`——完成协议选择
+
+对应 PTX：
+
+```ptx
+// group 1：THOR_MMA_000008
+tcgen05.mma.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+tcgen05.commit.cta_group::1.mbarrier::arrive::one.b64 [%mbar];
+
+// group 2：THOR_MMA_000424
+tcgen05.mma.cta_group::2.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3,
+     %mask4, %mask5, %mask6, %mask7}, %enable;
+tcgen05.commit.cta_group::2.mbarrier::arrive::one.b64 [%mbar];
+```
+
+O0：
+
+```sass
+// group 1
+UTCHMMA gdesc[UR4], gdesc[UR6],
+         tmem[UR10], tmem[UR8], idesc[UR9], UR12, UP0;
+R2UR   UR4, R0;
+UTCBAR [UR4], URZ;
+
+// group 2
 UTCHMMA.2CTA gdesc[UR4], gdesc[UR6],
               tmem[UR18], tmem[UR16], idesc[UR17], UR8, UP0;
 R2UR   UR4, R0;
 UTCBAR.2CTA [UR4], URZ;
 ```
 
-这里能直接看到 4 个与 8 个 mask word 选择了不同规模的
-`MOV → R2UR` 序列。
-
-同一对 case 到 O3 后，零 mask 已经被折叠，只剩核心模式和 completion 模式的
-直接区别。group 1：
+O3：
 
 ```sass
-UTCHMMA  gdesc[UR8], gdesc[UR10],
-          tmem[UR6], tmem[UR4], idesc[UR5], UP0;
-LDCU.64  UR4, c[0x0][0x3b8];
-UMOV      UR4, UR4;
-UTCBAR   [UR4], URZ;
+// group 1
+UTCHMMA gdesc[UR8], gdesc[UR10],
+         tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+LDCU.64 UR4, c[0x0][0x3b8];
+UMOV     UR4, UR4;
+UTCBAR  [UR4], URZ;
+
+// group 2
+UTCHMMA.2CTA gdesc[UR8], gdesc[UR10],
+              tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+LDCU.64     UR4, c[0x0][0x3b8];
+UMOV         UR4, UR4;
+UTCBAR.2CTA [UR4], URZ;
 ```
 
-group 2：
-
-```sass
-UTCHMMA.2CTA  gdesc[UR8], gdesc[UR10],
-               tmem[UR6], tmem[UR4], idesc[UR5], UP0;
-LDCU.64       UR4, c[0x0][0x3b8];
-UMOV           UR4, UR4;
-UTCBAR.2CTA   [UR4], URZ;
-```
-
-O0→O3 展示了两个层次：`.2CTA` 和 `UTCBAR.2CTA` 是稳定选择；mask 的
-`MOV/R2UR` 是可优化的准备序列。
+这组把核心与完成协议对应起来：`.cta_group::2` 同时选择
+`UTCHMMA.2CTA` 和 `UTCBAR.2CTA`。
 
 下面的统计说明这些候选指令在哪些优化级被实际保留下来。
 

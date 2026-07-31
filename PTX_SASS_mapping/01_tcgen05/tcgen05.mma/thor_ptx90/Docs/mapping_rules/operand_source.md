@@ -128,7 +128,19 @@ TS
 
 O0 能看到两种来源的原始地址形成过程。SS case `THOR_MMA_000001` 将两个
 64 位 descriptor 分别搬到 uniform register。以下是选指相关片段，省略部分
-同值 `MOV` 和无关 mask 准备：
+同值 `MOV` 和无关 mask 准备。先看两个 case 的目标 PTX：
+
+```ptx
+// SS：A 是 64 位 shared-memory descriptor
+tcgen05.mma.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+
+// TS：A 是 32 位 TMEM address
+tcgen05.mma.cta_group::1.kind::f16
+    [%d_tmem], [%a_tmem], %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+```
 
 ```sass
 MOV      R2, 0x8;

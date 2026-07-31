@@ -96,6 +96,20 @@ mxf8f6f4.block_scale
     → UTCQMMA ..., idesc, tmem[scale-factor], enable
 ```
 
+对应 PTX 是：
+
+```ptx
+// 非 block-scaled：THOR_MMA_000081
+tcgen05.mma.cta_group::1.kind::f8f6f4
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+
+// block-scaled：THOR_MMA_001665
+tcgen05.mma.cta_group::1.kind::mxf8f6f4.block_scale
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    [%scale_a_tmem], [%scale_b_tmem], %enable;
+```
+
 实际 O3 例子：
 
 ```sass
@@ -121,6 +135,12 @@ A/B scale address 的产生方式决定外围选择：
 O0 中，非 block-scaled `THOR_MMA_000081` 没有 scale address 的生产路径。
 以下是选指相关片段，省略部分同值 `MOV` 和无关 mask 准备：
 
+```ptx
+tcgen05.mma.cta_group::1.kind::f8f6f4
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+```
+
 ```sass
 MOV      R2, 0x8;
 LDC.64   R2, c[0x0][R2+0x380];
@@ -141,6 +161,12 @@ UTCQMMA  gdesc[UR4], gdesc[UR6],
 block-scaled `THOR_MMA_001665` 多出两个 32 位 scale address load、两条
 `IADD3`，最后把结果送入 `tmem[UR10]`：
 
+```ptx
+tcgen05.mma.cta_group::1.kind::mxf8f6f4.block_scale
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    [%scale_a_tmem], [%scale_b_tmem], %enable;
+```
+
 ```sass
 MOV      R3, 0x20;
 LDC      R3, c[0x0][R3+0x380];
@@ -158,6 +184,12 @@ UTCQMMA  gdesc[UR4], gdesc[UR6],
 
 到 O3，以上地址形成被合并为 uniform load。非 block-scaled：
 
+```ptx
+tcgen05.mma.cta_group::1.kind::f8f6f4
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+```
+
 ```sass
 LDCU.64  UR8,  c[0x0][0x388];
 LDCU.64  UR10, c[0x0][0x390];
@@ -166,6 +198,12 @@ UTCQMMA  gdesc[UR8], gdesc[UR10],
 ```
 
 启用 block scaling：
+
+```ptx
+tcgen05.mma.cta_group::1.kind::mxf8f6f4.block_scale
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    [%scale_a_tmem], [%scale_b_tmem], %enable;
+```
 
 ```sass
 LDCU.64  UR8,  c[0x0][0x388];
@@ -215,6 +253,39 @@ scale_vec::4X
 
 `scale_vec::4X` 与同 kind 的 `scale_vec::2X` 有 320 个配对，即 1,280 次
 SASS 比较。全部结果都是：
+
+```ptx
+tcgen05.mma.cta_group::1.kind::mxf4nvf4.block_scale.scale_vec::2X
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    [%scale_a_tmem], [%scale_b_tmem], %enable;
+
+tcgen05.mma.cta_group::1.kind::mxf4nvf4.block_scale.scale_vec::4X
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    [%scale_a_tmem], [%scale_b_tmem], %enable;
+```
+
+对应的真实核心 SASS 是：
+
+```sass
+// scale_vec::2X，THOR_MMA_001905
+// O0
+UTCOMMA gdesc[UR4], gdesc[UR6],
+         tmem[UR12], tmem[UR8], idesc[UR9], tmem[UR10], UP0;
+// O3
+UTCOMMA gdesc[UR8], gdesc[UR10],
+         tmem[UR6], tmem[UR4], idesc[UR5], tmem[UR12], UP0;
+
+// scale_vec::4X，THOR_MMA_001945
+// O0
+UTCOMMA.4X gdesc[UR4], gdesc[UR6],
+            tmem[UR12], tmem[UR8], idesc[UR9], tmem[UR10], UP0;
+// O3
+UTCOMMA.4X gdesc[UR8], gdesc[UR10],
+            tmem[UR6], tmem[UR4], idesc[UR5], tmem[UR12], UP0;
+```
+
+这里 O0 与 O3 的寄存器编号会整体重排，但同一优化级内 `2X/4X` 的操作数布局
+相同；指令选择只从 `UTCOMMA` 变为 `UTCOMMA.4X`，外围指令保持相同。
 
 - 完整函数指令数相同；
 - 外围指令类型和排列相同；

@@ -116,7 +116,21 @@ mma.sp
     → 重新选择 metadata 的装载、地址形成和寄存器组合指令
 ```
 
-以同一个 SS、f16、O3 例子表示，核心指令从：
+以同一个 SS、f16、O3 例子表示。对应的 dense 与 sparse PTX 分别是：
+
+```ptx
+// dense：THOR_MMA_000001
+tcgen05.mma.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+
+// sparse：THOR_MMA_000833
+tcgen05.mma.sp.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, [%meta_tmem], %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+```
+
+核心指令从：
 
 ```sass
 UTCHMMA gdesc[UR8], gdesc[UR10],
@@ -147,7 +161,20 @@ UTCHMMA gdesc[UR6], gdesc[UR8],
 
 O0 中，dense case `THOR_MMA_000001` 的 A/B descriptor 和 mask 经过普通
 GPR、`MOV` 与 `R2UR` 后进入核心指令。以下 O0 代码是选指相关片段，省略了
-部分同值 `MOV`：
+部分同值 `MOV`。对应 PTX 仍是上面列出的两条，为避免读者在 SASS 中途回找，
+这里再次贴出：
+
+```ptx
+// dense
+tcgen05.mma.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+
+// sparse：多出 [%meta_tmem]
+tcgen05.mma.sp.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, [%meta_tmem], %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+```
 
 ```sass
 MOV      R2, 0x8;
@@ -260,6 +287,11 @@ mma.ws / mma.ws.sp
 
 同一个无 zero-column-mask 的 WS case `THOR_MMA_004865` 在两个主要观察级为：
 
+```ptx
+tcgen05.mma.ws.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc, %enable;
+```
+
 ```sass
 // O0：辅助零值和 enable 生产尚未折叠
 UTCHMMA.WS gdesc[UR4], gdesc[UR6],
@@ -314,6 +346,17 @@ WS 还可以在末尾增加 zero-column-mask descriptor，用于描述哪些 B �
 
 例如：
 
+```ptx
+// 无 descriptor：THOR_MMA_004865
+tcgen05.mma.ws.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc, %enable;
+
+// 有 descriptor：THOR_MMA_005001
+tcgen05.mma.ws.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    %enable, %zero_mask_desc;
+```
+
 ```sass
 // 无 descriptor
 UTCHMMA.WS ..., idesc[UR5], UP0;
@@ -328,6 +371,11 @@ UTCHMMA.WS ..., idesc[UR5], UR12, UP0;
 
 O0 中，无 descriptor 的 `THOR_MMA_004865` 直接形成一个零值操作数：
 
+```ptx
+tcgen05.mma.ws.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc, %enable;
+```
+
 ```sass
 MOV      R4, RZ;
 MOV      R5, RZ;
@@ -339,6 +387,12 @@ UTCHMMA.WS gdesc[UR4], gdesc[UR6],
 ```
 
 带 descriptor 的 `THOR_MMA_005001` 则实际选择 64 位 load：
+
+```ptx
+tcgen05.mma.ws.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    %enable, %zero_mask_desc;
+```
 
 ```sass
 MOV      R2, 0x28;
@@ -357,6 +411,11 @@ UTCHMMA.WS gdesc[UR4], gdesc[UR6],
 两条 O0 核心指令可以完全相同，差别由 `UR10` 的生产路径表达。到 O3 后，
 区别变得更直接。无 descriptor：
 
+```ptx
+tcgen05.mma.ws.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc, %enable;
+```
+
 ```sass
 LDCU.64   UR8,  c[0x0][0x388];
 LDCU.64   UR10, c[0x0][0x390];
@@ -365,6 +424,12 @@ UTCHMMA.WS gdesc[UR8], gdesc[UR10],
 ```
 
 带 descriptor：
+
+```ptx
+tcgen05.mma.ws.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    %enable, %zero_mask_desc;
+```
 
 ```sass
 LDCU.64   UR8,  c[0x0][0x388];

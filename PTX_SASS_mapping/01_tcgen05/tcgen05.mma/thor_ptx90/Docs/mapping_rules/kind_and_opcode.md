@@ -107,7 +107,32 @@ mxf4 / mxf4nvf4
     → UTCOMMA
 ```
 
-四个核心家族的 O3 代表性 SASS 如下：
+四个核心家族使用的对应 PTX 如下。为突出 `kind`，都使用 CTA group 1 和直接
+参数上下文：
+
+```ptx
+tcgen05.mma.cta_group::1.kind::f16
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+
+tcgen05.mma.cta_group::1.kind::tf32
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+
+tcgen05.mma.cta_group::1.kind::f8f6f4
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+
+tcgen05.mma.cta_group::1.kind::i8
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+
+tcgen05.mma.cta_group::1.kind::mxf4nvf4.block_scale.scale_vec::4X
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    [%scale_a_tmem], [%scale_b_tmem], %enable;
+```
+
+它们的 O3 代表性 SASS 如下：
 
 ```sass
 // kind::f16 或 kind::tf32
@@ -130,6 +155,18 @@ UTCOMMA.4X  gdesc[UR8], gdesc[UR10],
 前三条说明：在操作数契约相同时，kind 直接选择 `UTCHMMA/UTCQMMA/UTCIMMA`
 之一，外围和核心寄存器布局可以保持不变。最后一条多出的 `tmem[UR12]` 来自
 block scaling，不应误归因给 `UTCOMMA` 这个 opcode 名称。
+
+下面专门比较 `f8f6f4` 与 `i8` 在 O0/O3 的稳定性。对应 PTX 是：
+
+```ptx
+tcgen05.mma.cta_group::1.kind::f8f6f4
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+
+tcgen05.mma.cta_group::1.kind::i8
+    [%d_tmem], %desc_a, %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3}, %enable;
+```
 
 O0 与 O3 会重新安排操作数，但不会重新选择 kind 对应的核心家族：
 

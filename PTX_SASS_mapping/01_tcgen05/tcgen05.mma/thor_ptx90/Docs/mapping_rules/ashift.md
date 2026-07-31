@@ -117,6 +117,18 @@ UTC*MMA
 
 所以 `.ashift` 是一个原位编码到 MMA 的 modifier：
 
+```ptx
+tcgen05.mma.cta_group::2.kind::f16
+    [%d_tmem], [%a_tmem], %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3,
+     %mask4, %mask5, %mask6, %mask7}, %enable;
+
+tcgen05.mma.cta_group::2.kind::f16.ashift
+    [%d_tmem], [%a_tmem], %desc_b, %idesc,
+    {%mask0, %mask1, %mask2, %mask3,
+     %mask4, %mask5, %mask6, %mask7}, %enable;
+```
+
 ```sass
 UTCHMMA.2CTA ...
 → UTCHMMA.2CTA.ASHIFT ...
