@@ -23,6 +23,7 @@
 | `.cta_group::2` 如何进入 SASS？ | [`cta_group.md`](cta_group.md) |
 | `.ws`、`.sp`、`.ws.sp` 分别改变什么？ | [`variant.md`](variant.md) |
 | TS/SS、TMEM/SMEM descriptor 如何对应？ | [`operand_source.md`](operand_source.md) |
+| commit、mbarrier、fence、wait 如何组成内存一致性与完成协议？ | [`memory_consistency.md`](memory_consistency.md) |
 | collector 的 fill/use/lastuse/discard 如何映射？ | [`collector.md`](collector.md) |
 | block scaling 和 scale vector 如何体现？ | [`block_scaling.md`](block_scaling.md) |
 | `.ashift` 如何映射，什么组合非法？ | [`ashift.md`](ashift.md) |
@@ -84,6 +85,8 @@ collector
 - `NOP`：调度填充，不直接实现 modifier 语义。
 
 详细配对数量和变化原因写在各维度文档中；联合判断见 [`interactions.md`](interactions.md)。
+
+内存一致性不属于单个 MMA modifier 的核心 opcode 映射；它由 commit、mbarrier、tcgen05 fence、LD/ST wait、scope 和资源生命周期共同构成，见 [`memory_consistency.md`](memory_consistency.md)。
 
 ## 这些影响是怎样检查的
 

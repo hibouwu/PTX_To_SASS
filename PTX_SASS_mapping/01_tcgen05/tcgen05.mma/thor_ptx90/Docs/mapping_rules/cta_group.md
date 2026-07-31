@@ -389,6 +389,8 @@ UTCBAR.2CTA [UR4], URZ;
 
 这组把核心与完成协议对应起来：`.cta_group::2` 同时选择 `UTCHMMA.2CTA` 和 `UTCBAR.2CTA`。
 
+`UTCBAR*` 只说明 tcgen05 异步工作被提交给完成协议；它与 mbarrier、release/acquire、显式 tcgen05 fence 和 LD/ST wait 的完整关系见 [`memory_consistency.md`](memory_consistency.md)。
+
 ### 对比 5：sparse INT8——跨 variant、opcode 与活跃寄存器
 
 对应 PTX：
