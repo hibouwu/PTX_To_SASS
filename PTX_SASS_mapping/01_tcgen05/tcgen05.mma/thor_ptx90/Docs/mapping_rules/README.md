@@ -109,6 +109,15 @@ form、源码变体和上下文保持一致；CTA group、WS 和 block scaling �
 有 1,536 个互不相关的 semantic form。**counterpart** 是除待研究维度外尽可能
 相同的合法对照；**liveness** 是某条指令位置仍保存有效值的寄存器集合。
 
+各条目的主要代码示例统一使用 O0/O3：
+
+- O0 展示尚未合并的 `LDC/MOV/IADD3/R2UR` 等 lowering 过程；
+- O3 展示最终的 uniform load、核心操作数和寄存器布局；
+- O1/O2 用于定位优化从哪一级开始稳定，只保留在统计证据中。
+
+这里把 O0/O3 称为两个主要**观察点**；它们是两次独立编译的结果，不是编译器
+内部 pass 的逐帧快照。
+
 ## 为什么还需要 `interactions.md`
 
 modifier 并不都能彼此独立解释：

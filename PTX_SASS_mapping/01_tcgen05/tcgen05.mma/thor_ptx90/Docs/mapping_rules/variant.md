@@ -143,8 +143,55 @@ UTCHMMA gdesc[UR6], gdesc[UR8],
 最常见的选择变化是用一次 `LDCU.128` 取代较窄的 `LDCU`、`LDCU.64` 和
 `UMOV` 组合。以下计数只是验证这套选择在多少配对中发生。
 
-下面是同一 SS、f16、`runtime_zero` 上下文的真实 O3 片段。dense case 为
-`THOR_MMA_000001`：
+下面是同一 SS、f16、`runtime_zero` 上下文的真实 O0/O3 对照。
+
+O0 中，dense case `THOR_MMA_000001` 的 A/B descriptor 和 mask 经过普通
+GPR、`MOV` 与 `R2UR` 后进入核心指令。以下 O0 代码是选指相关片段，省略了
+部分同值 `MOV`：
+
+```sass
+MOV      R2, 0x8;
+LDC.64   R2, c[0x0][R2+0x380];
+MOV      R15, R2;
+MOV      R16, R3;
+MOV      R2, 0x10;
+LDC.64   R2, c[0x0][R2+0x380];
+MOV      R13, R2;
+MOV      R14, R3;
+R2UR     UR4, R2;
+R2UR     UR5, R3;
+R2UR     UR6, R6;
+R2UR     UR7, R7;
+R2UR     UR12, R10;
+R2UR     UR13, R11;
+R2UR     UR14, R12;
+R2UR     UR15, R8;
+UTCHMMA  gdesc[UR4], gdesc[UR6],
+          tmem[UR10], tmem[UR8], idesc[UR9], UR12, UP0;
+```
+
+sparse case `THOR_MMA_000833` 在 O0 多出 metadata load 和地址形成；最终核心
+助记符仍没有 `.SP`：
+
+```sass
+MOV      R2, 0x18;
+LDC      R2, c[0x0][R2+0x380];
+MOV      R3, 0x1c;
+LDC      R3, c[0x0][R3+0x380];
+IADD3    R2, PT, PT, R2, RZ, RZ;
+MOV      R4, R2;
+MOV      R5, R3;
+R2UR     UR8, R4;
+R2UR     UR9, R5;
+R2UR     UR12, R11;
+R2UR     UR13, R12;
+R2UR     UR14, R8;
+R2UR     UR15, R9;
+UTCHMMA  gdesc[UR4], gdesc[UR6],
+          tmem[UR10], tmem[UR8], idesc[UR9], UR12, UP0;
+```
+
+O3 将上述 GPR 搬运合并为 uniform constant load。dense case：
 
 ```sass
 LDCU     UR4,  c[0x0][0x3b0];
@@ -158,7 +205,7 @@ UTCHMMA   gdesc[UR8], gdesc[UR10],
            tmem[UR6], tmem[UR4], idesc[UR5], UP0;
 ```
 
-对应的 sparse case `THOR_MMA_000833`：
+对应的 sparse case：
 
 ```sass
 LDCU      UR5, c[0x0][0x3b0];
@@ -170,9 +217,9 @@ UTCHMMA    gdesc[UR6], gdesc[UR8],
             tmem[UR4], tmem[UR10], idesc[UR11], UP0;
 ```
 
-这段对照展示了实际映射，而不只是“指令数量变化”：`.sp` 没有选择新的 MMA
-助记符，却让参数装载选择 `LDCU.128`，并重新分配 metadata、`idesc` 和其他
-核心操作数使用的 UR。
+O0 解释 metadata 是怎样形成的，O3 则展示最终选择：`.sp` 没有选择新的 MMA
+助记符，但参数装载合并成 `LDCU.128`，metadata、`idesc` 和其他核心操作数
+使用的 UR 也被重新安排。
 
 将每个 `mma.sp` 与对应的 `mma`、每个 `mma.ws.sp` 与对应的 `mma.ws`
 严格配对，共得到 4,608 个源码/上下文配对，即 18,432 次 O0–O3 比较：
@@ -210,6 +257,21 @@ mma.ws / mma.ws.sp
 因此普通 MMA 为 mask 选择的 `MOV/R2UR/UMOV/LOP3.LUT`，在 WS 中可能被删除；
 如果删除改变了调度间隔，反汇编中可能留下 `NOP`。WS 本身没有固定新增一条
 外围指令，它主要通过取消普通 mask 准备序列来改变选择集合。
+
+同一个无 zero-column-mask 的 WS case `THOR_MMA_004865` 在两个主要观察级为：
+
+```sass
+// O0：辅助零值和 enable 生产尚未折叠
+UTCHMMA.WS gdesc[UR4], gdesc[UR6],
+            tmem[UR12], tmem[UR8], idesc[UR9], UR10, UP0;
+
+// O3：准备序列折叠后的最终形式
+UTCHMMA.WS gdesc[UR8], gdesc[UR10],
+            tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+```
+
+两级都稳定选择 `.WS`；O0 的额外 `UR10` 是尚未折叠的辅助操作数，不是另一个
+WS modifier。
 
 `.ws` 会同时改变 collector 角色和 PTX 操作数契约，不能构造只增加 `.ws`
 字符串、其他操作数完全不变的合法 PTX。这里采用最接近的合法配对：
@@ -264,7 +326,36 @@ UTCHMMA.WS ..., idesc[UR5], UR12, UP0;
 `ISETP/BRA` 与 `UISETP/PLOP3` 之间重新选择控制序列；`NOP` 只反映随后的调度
 调整。
 
-真实 O3 对照如下。无 descriptor 的 `THOR_MMA_004865`：
+O0 中，无 descriptor 的 `THOR_MMA_004865` 直接形成一个零值操作数：
+
+```sass
+MOV      R4, RZ;
+MOV      R5, RZ;
+MOV      R9, R4;
+MOV      R10, R5;
+R2UR     UR10, R9;
+UTCHMMA.WS gdesc[UR4], gdesc[UR6],
+            tmem[UR12], tmem[UR8], idesc[UR9], UR10, UP0;
+```
+
+带 descriptor 的 `THOR_MMA_005001` 则实际选择 64 位 load：
+
+```sass
+MOV      R2, 0x28;
+LDC.64   R2, c[0x0][R2+0x380];
+MOV      R5, R2;
+MOV      R6, R3;
+MOV      R4, R5;
+MOV      R5, R6;
+MOV      R9, R4;
+MOV      R10, R5;
+R2UR     UR10, R9;
+UTCHMMA.WS gdesc[UR4], gdesc[UR6],
+            tmem[UR12], tmem[UR8], idesc[UR9], UR10, UP0;
+```
+
+两条 O0 核心指令可以完全相同，差别由 `UR10` 的生产路径表达。到 O3 后，
+区别变得更直接。无 descriptor：
 
 ```sass
 LDCU.64   UR8,  c[0x0][0x388];
@@ -273,7 +364,7 @@ UTCHMMA.WS gdesc[UR8], gdesc[UR10],
             tmem[UR6], tmem[UR4], idesc[UR5], UP0;
 ```
 
-带 descriptor 的 `THOR_MMA_005001`：
+带 descriptor：
 
 ```sass
 LDCU.64   UR8,  c[0x0][0x388];

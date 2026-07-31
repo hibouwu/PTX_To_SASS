@@ -36,10 +36,19 @@ tcgen05.mma.cta_group::2.kind::f16.ashift
 核心 SASS：
 
 ```sass
+// THOR_MMA_000078，O0
+UTCHMMA.2CTA.ASHIFT
+    tmem[UR17], gdesc[UR4],
+    tmem[UR16], tmem[UR6], idesc[UR7], UR8, UP0;
+
+// THOR_MMA_000078，O3
 UTCHMMA.2CTA.ASHIFT
     tmem[UR7], gdesc[UR8],
     tmem[UR6], tmem[UR4], idesc[UR5], UP0;
 ```
+
+O0 保留了尚未折叠的 mask/辅助操作数 `UR8`，O3 将其折叠并重新编号；两级都
+直接选择 `.ASHIFT`，没有额外 shift 指令。
 
 这里可以分别读出：
 

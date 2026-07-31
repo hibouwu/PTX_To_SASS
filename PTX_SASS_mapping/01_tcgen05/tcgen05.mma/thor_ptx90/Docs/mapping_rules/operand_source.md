@@ -126,8 +126,47 @@ TS
     → LDCU 或 LDC + IADD3
 ```
 
-真实 O3 对照更直观。SS case `THOR_MMA_000001` 为 A、B 各选择一个 64 位
-descriptor load：
+O0 能看到两种来源的原始地址形成过程。SS case `THOR_MMA_000001` 将两个
+64 位 descriptor 分别搬到 uniform register。以下是选指相关片段，省略部分
+同值 `MOV` 和无关 mask 准备：
+
+```sass
+MOV      R2, 0x8;
+LDC.64   R2, c[0x0][R2+0x380];
+MOV      R15, R2;
+MOV      R16, R3;
+MOV      R2, 0x10;
+LDC.64   R2, c[0x0][R2+0x380];
+MOV      R13, R2;
+MOV      R14, R3;
+R2UR     UR4, R2;
+R2UR     UR5, R3;
+R2UR     UR6, R6;
+R2UR     UR7, R7;
+UTCHMMA  gdesc[UR4], gdesc[UR6],
+          tmem[UR10], tmem[UR8], idesc[UR9], UR12, UP0;
+```
+
+TS case `THOR_MMA_000161` 只保留 B 的 64 位 descriptor；A 作为 32 位 TMEM
+address 经过 `IADD3` 和 `R2UR`：
+
+```sass
+MOV      R2, 0x4;
+LDC      R2, c[0x0][R2+0x380];
+MOV      R4, R2;
+MOV      R2, 0x10;
+LDC.64   R2, c[0x0][R2+0x380];
+MOV      R12, R2;
+MOV      R13, R3;
+IADD3    R11, PT, PT, R4, RZ, RZ;
+R2UR     UR4, R4;
+R2UR     UR5, R5;
+R2UR     UR13, R11;
+UTCHMMA  tmem[UR13], gdesc[UR4],
+          tmem[UR12], tmem[UR6], idesc[UR7], UR8, UP0;
+```
+
+到 O3，装载和搬运被合并。SS 为 A、B 各选择一个 64 位 descriptor load：
 
 ```sass
 LDCU      UR6,  c[0x0][0x380];
@@ -137,7 +176,7 @@ UTCHMMA   gdesc[UR8], gdesc[UR10],
            tmem[UR6], tmem[UR4], idesc[UR5], UP0;
 ```
 
-TS case `THOR_MMA_000161` 把相邻的 D/A 两个 32 位 TMEM address 合成一次
+TS 把相邻的 D/A 两个 32 位 TMEM address 合成一次
 `LDCU.64`，只保留 B descriptor：
 
 ```sass
@@ -147,8 +186,8 @@ UTCHMMA   tmem[UR7], gdesc[UR8],
            tmem[UR6], tmem[UR4], idesc[UR5], UP0;
 ```
 
-因此这里的核心映射和外围映射是一致的：`gdesc[UR8] → tmem[UR7]` 的同时，
-A 的独立 `LDCU.64` descriptor load 也从选择集合中消失。
+O0 说明来源差异如何通过 `LDC/LDC.64 + IADD3/MOV/R2UR` 形成；O3 展示最终
+的 `LDCU.64` 合并结果。核心映射始终是 `gdesc → tmem`。
 
 以下统计用于说明这条选择关系在所有合法 variant 和上下文中都存在。
 

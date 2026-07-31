@@ -107,7 +107,7 @@ mxf4 / mxf4nvf4
     → UTCOMMA
 ```
 
-四个核心家族的代表性 SASS 如下：
+四个核心家族的 O3 代表性 SASS 如下：
 
 ```sass
 // kind::f16 或 kind::tf32
@@ -130,6 +130,29 @@ UTCOMMA.4X  gdesc[UR8], gdesc[UR10],
 前三条说明：在操作数契约相同时，kind 直接选择 `UTCHMMA/UTCQMMA/UTCIMMA`
 之一，外围和核心寄存器布局可以保持不变。最后一条多出的 `tmem[UR12]` 来自
 block scaling，不应误归因给 `UTCOMMA` 这个 opcode 名称。
+
+O0 与 O3 会重新安排操作数，但不会重新选择 kind 对应的核心家族：
+
+```sass
+// kind::f8f6f4，O0
+UTCQMMA gdesc[UR4], gdesc[UR6],
+         tmem[UR10], tmem[UR8], idesc[UR9], UR12, UP0;
+
+// kind::f8f6f4，O3
+UTCQMMA gdesc[UR8], gdesc[UR10],
+         tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+
+// kind::i8，O0
+UTCIMMA gdesc[UR4], gdesc[UR6],
+         tmem[UR10], tmem[UR8], idesc[UR9], UR12, UP0;
+
+// kind::i8，O3
+UTCIMMA gdesc[UR8], gdesc[UR10],
+         tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+```
+
+O0 用来观察 descriptor、mask 和 `enable` 如何进入操作数；O3 用来读取最终
+寄存器布局。`UTCQMMA/UTCIMMA` 的选择在两级中保持不变。
 
 对于不带 block scaling 的 `f16/tf32/f8f6f4/i8`，外围指令选择集合不随 kind
 变化：参数仍由同一组 `LDC/LDCU` 装载，谓词和控制仍使用同一组

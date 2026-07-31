@@ -122,8 +122,61 @@ group 2 还把 disable-output-lane mask 从 4 个扩展到 8 个。根据 mask �
     → 如果额外 4 个 mask 未被常量折叠，则选择更多 MOV/R2UR/UMOV
 ```
 
-在 `commit_completion` 的 O3 配对中，可以看到不含其他噪声的直接替换。
-group 1 的 `THOR_MMA_000008`：
+在 `commit_completion` 配对中，O0 展示 mask 如何经过 GPR 和 `R2UR`
+进入 MMA。下面是从完整函数中抽出的相关片段，省略了与 CTA group 无关的
+descriptor load 和同值寄存器重命名。
+
+group 1 的 `THOR_MMA_000008`，O0：
+
+```sass
+MOV    R2, RZ;
+MOV    R3, RZ;
+MOV    R4, RZ;
+MOV    R5, RZ;
+MOV    R9,  R2;
+MOV    R10, R3;
+MOV    R11, R4;
+MOV    R12, R5;
+R2UR   UR12, R9;
+R2UR   UR13, R10;
+R2UR   UR14, R11;
+R2UR   UR15, R12;
+UTCHMMA gdesc[UR4], gdesc[UR6],
+          tmem[UR10], tmem[UR8], idesc[UR9], UR12, UP0;
+R2UR   UR4, R0;
+UTCBAR [UR4], URZ;
+```
+
+group 2 的 `THOR_MMA_000424`，O0：
+
+```sass
+MOV    R10, RZ;
+MOV    R11, RZ;
+MOV    R12, RZ;
+MOV    R13, RZ;
+MOV    R14, RZ;
+MOV    R15, RZ;
+MOV    R16, RZ;
+MOV    R17, RZ;
+R2UR   UR8,  R10;
+R2UR   UR9,  R11;
+R2UR   UR10, R12;
+R2UR   UR11, R13;
+R2UR   UR12, R14;
+R2UR   UR13, R15;
+R2UR   UR14, R16;
+R2UR   UR15, R17;
+UTCHMMA.2CTA gdesc[UR4], gdesc[UR6],
+              tmem[UR18], tmem[UR16], idesc[UR17], UR8, UP0;
+R2UR   UR4, R0;
+UTCBAR.2CTA [UR4], URZ;
+```
+
+这里能直接看到 4 个与 8 个 mask word 选择了不同规模的
+`MOV → R2UR` 序列。
+
+同一对 case 到 O3 后，零 mask 已经被折叠，只剩核心模式和 completion 模式的
+直接区别。group 1：
 
 ```sass
 UTCHMMA  gdesc[UR8], gdesc[UR10],
@@ -133,7 +186,7 @@ UMOV      UR4, UR4;
 UTCBAR   [UR4], URZ;
 ```
 
-group 2 的 `THOR_MMA_000424`：
+group 2：
 
 ```sass
 UTCHMMA.2CTA  gdesc[UR8], gdesc[UR10],
@@ -143,9 +196,8 @@ UMOV           UR4, UR4;
 UTCBAR.2CTA   [UR4], URZ;
 ```
 
-这个例子说明 `.cta_group::2` 同时选择核心 `.2CTA` 和 completion
-`.2CTA`；中间的地址装载序列保持不变。额外 mask 没有被折叠时，才会再出现
-前表中的 `MOV/R2UR/UMOV`。
+O0→O3 展示了两个层次：`.2CTA` 和 `UTCBAR.2CTA` 是稳定选择；mask 的
+`MOV/R2UR` 是可优化的准备序列。
 
 下面的统计说明这些候选指令在哪些优化级被实际保留下来。
 

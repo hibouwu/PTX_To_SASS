@@ -118,7 +118,45 @@ A/B scale address 的产生方式决定外围选择：
 | guard/producer 类别随寄存器重新分配 | `ISETP/BRA` 或 `UISETP/PLOP3` |
 | 调度调整 | `NOP`、`UMOV` |
 
-真实 O3 对照中，非 block-scaled `THOR_MMA_000081` 为：
+O0 中，非 block-scaled `THOR_MMA_000081` 没有 scale address 的生产路径。
+以下是选指相关片段，省略部分同值 `MOV` 和无关 mask 准备：
+
+```sass
+MOV      R2, 0x8;
+LDC.64   R2, c[0x0][R2+0x380];
+MOV      R15, R2;
+MOV      R16, R3;
+MOV      R2, 0x10;
+LDC.64   R2, c[0x0][R2+0x380];
+MOV      R13, R2;
+MOV      R14, R3;
+R2UR     UR4, R2;
+R2UR     UR5, R3;
+R2UR     UR6, R6;
+R2UR     UR7, R7;
+UTCQMMA  gdesc[UR4], gdesc[UR6],
+          tmem[UR10], tmem[UR8], idesc[UR9], UR12, UP0;
+```
+
+block-scaled `THOR_MMA_001665` 多出两个 32 位 scale address load、两条
+`IADD3`，最后把结果送入 `tmem[UR10]`：
+
+```sass
+MOV      R3, 0x20;
+LDC      R3, c[0x0][R3+0x380];
+MOV      R4, R3;
+MOV      R3, 0x24;
+LDC      R3, c[0x0][R3+0x380];
+MOV      R5, R3;
+IADD3    R9,  PT, PT, R4, RZ, RZ;
+IADD3    R10, PT, PT, R5, RZ, RZ;
+R2UR     UR10, R9;
+R2UR     UR11, R10;
+UTCQMMA  gdesc[UR4], gdesc[UR6],
+          tmem[UR12], tmem[UR8], idesc[UR9], tmem[UR10], UP0;
+```
+
+到 O3，以上地址形成被合并为 uniform load。非 block-scaled：
 
 ```sass
 LDCU.64  UR8,  c[0x0][0x388];
@@ -127,7 +165,7 @@ UTCQMMA  gdesc[UR8], gdesc[UR10],
           tmem[UR6], tmem[UR4], idesc[UR5], UP0;
 ```
 
-启用 block scaling 的 `THOR_MMA_001665` 为：
+启用 block scaling：
 
 ```sass
 LDCU.64  UR8,  c[0x0][0x388];
@@ -138,7 +176,8 @@ UTCQMMA  gdesc[UR8], gdesc[UR10],
 ```
 
 这里两条相邻的 32 位 scale address 被一次 `LDCU.64` 装入 `UR12:UR13`，
-核心 MMA 再通过 `tmem[UR12]` 使用这组 scale-factor 地址。
+核心 MMA 再通过 `tmem[UR12]` 使用这组 scale-factor 地址。O0 展示地址如何
+产生，O3 展示最终合并后的选指。
 
 同一个 kind 不能同时拥有 block-scaled 和非 block-scaled 合法形态，因此无法
 做完全同 kind 的单因素配对。最接近的合法对照是

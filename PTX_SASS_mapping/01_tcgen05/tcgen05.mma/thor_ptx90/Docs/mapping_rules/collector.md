@@ -73,7 +73,19 @@ tcgen05.mma.ws.cta_group::1.kind::f16.collector::b2::use
     [%d_tmem], %desc_a, %desc_b, %idesc, %enable;
 ```
 
-对应的两条核心 SASS 是：
+同一个 `THOR_MMA_000620` 在 O0 中为：
+
+```sass
+UTCHMMA.WS gdesc[UR4],
+            gdesc[UR6].B_KEEP.BUFFER2,
+            tmem[UR12], tmem[UR8], idesc[UR9], UR10, UP0;
+
+UTCHMMA.WS gdesc[UR4],
+            gdesc[UR6].B_REUSE.B_KEEP.BUFFER2,
+            tmem[UR12], tmem[UR8], idesc[UR9], UR10, UP0;
+```
+
+到 O3，外围准备和零 mask 被折叠，核心变为：
 
 ```sass
 UTCHMMA.WS gdesc[UR8],
@@ -86,6 +98,8 @@ UTCHMMA.WS gdesc[UR8],
 ```
 
 第一条把 B 装入 B2 并保留；第二条复用 B2 中的值，并继续保留给后续指令。
+O0 与 O3 的寄存器编号和可见辅助操作数不同，但
+`.B_KEEP.BUFFER2 → .B_REUSE.B_KEEP.BUFFER2` 的 collector 状态选择不变。
 完整函数级上下文见[综合报告的附录 A.3](../tcgen05_mma_PTX到SASS映射规则报告.md)。
 
 ## 适用范围和前置条件
