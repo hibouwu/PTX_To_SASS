@@ -126,6 +126,30 @@ TS
     → LDCU 或 LDC + IADD3
 ```
 
+真实 O3 对照更直观。SS case `THOR_MMA_000001` 为 A、B 各选择一个 64 位
+descriptor load：
+
+```sass
+LDCU      UR6,  c[0x0][0x380];
+LDCU.64   UR8,  c[0x0][0x388];
+LDCU.64   UR10, c[0x0][0x390];
+UTCHMMA   gdesc[UR8], gdesc[UR10],
+           tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+```
+
+TS case `THOR_MMA_000161` 把相邻的 D/A 两个 32 位 TMEM address 合成一次
+`LDCU.64`，只保留 B descriptor：
+
+```sass
+LDCU.64   UR6, c[0x0][0x380];
+LDCU.64   UR8, c[0x0][0x390];
+UTCHMMA   tmem[UR7], gdesc[UR8],
+           tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+```
+
+因此这里的核心映射和外围映射是一致的：`gdesc[UR8] → tmem[UR7]` 的同时，
+A 的独立 `LDCU.64` descriptor load 也从选择集合中消失。
+
 以下统计用于说明这条选择关系在所有合法 variant 和上下文中都存在。
 
 会。排除只有 TS 才合法的 `.ashift` 后，将 TS 与对应 SS 设计严格配对，得到

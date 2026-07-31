@@ -118,6 +118,28 @@ A/B scale address 的产生方式决定外围选择：
 | guard/producer 类别随寄存器重新分配 | `ISETP/BRA` 或 `UISETP/PLOP3` |
 | 调度调整 | `NOP`、`UMOV` |
 
+真实 O3 对照中，非 block-scaled `THOR_MMA_000081` 为：
+
+```sass
+LDCU.64  UR8,  c[0x0][0x388];
+LDCU.64  UR10, c[0x0][0x390];
+UTCQMMA  gdesc[UR8], gdesc[UR10],
+          tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+```
+
+启用 block scaling 的 `THOR_MMA_001665` 为：
+
+```sass
+LDCU.64  UR8,  c[0x0][0x388];
+LDCU.64  UR10, c[0x0][0x390];
+LDCU.64  UR12, c[0x0][0x3a0];
+UTCQMMA  gdesc[UR8], gdesc[UR10],
+          tmem[UR6], tmem[UR4], idesc[UR5], tmem[UR12], UP0;
+```
+
+这里两条相邻的 32 位 scale address 被一次 `LDCU.64` 装入 `UR12:UR13`，
+核心 MMA 再通过 `tmem[UR12]` 使用这组 scale-factor 地址。
+
 同一个 kind 不能同时拥有 block-scaled 和非 block-scaled 合法形态，因此无法
 做完全同 kind 的单因素配对。最接近的合法对照是
 `mxf8f6f4 + scale_vec::1X` 与 `f8f6f4`，其余 variant、来源、collector、

@@ -143,6 +143,37 @@ UTCHMMA gdesc[UR6], gdesc[UR8],
 最常见的选择变化是用一次 `LDCU.128` 取代较窄的 `LDCU`、`LDCU.64` 和
 `UMOV` 组合。以下计数只是验证这套选择在多少配对中发生。
 
+下面是同一 SS、f16、`runtime_zero` 上下文的真实 O3 片段。dense case 为
+`THOR_MMA_000001`：
+
+```sass
+LDCU     UR4,  c[0x0][0x3b0];
+LDCU     UR5,  c[0x0][0x39c];
+LDCU     UR6,  c[0x0][0x380];
+LDCU.64  UR8,  c[0x0][0x388];
+LDCU.64  UR10, c[0x0][0x390];
+UISETP.NE.U32.AND UP0, UPT, UR4, URZ, UPT;
+UMOV      UR4, URZ;
+UTCHMMA   gdesc[UR8], gdesc[UR10],
+           tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+```
+
+对应的 sparse case `THOR_MMA_000833`：
+
+```sass
+LDCU      UR5, c[0x0][0x3b0];
+LDCU      UR4, c[0x0][0x380];
+LDCU.64   UR6, c[0x0][0x388];
+LDCU.128  UR8, c[0x0][0x390];
+UISETP.NE.U32.AND UP0, UPT, UR5, URZ, UPT;
+UTCHMMA    gdesc[UR6], gdesc[UR8],
+            tmem[UR4], tmem[UR10], idesc[UR11], UP0;
+```
+
+这段对照展示了实际映射，而不只是“指令数量变化”：`.sp` 没有选择新的 MMA
+助记符，却让参数装载选择 `LDCU.128`，并重新分配 metadata、`idesc` 和其他
+核心操作数使用的 UR。
+
 将每个 `mma.sp` 与对应的 `mma`、每个 `mma.ws.sp` 与对应的 `mma.ws`
 严格配对，共得到 4,608 个源码/上下文配对，即 18,432 次 O0–O3 比较：
 
@@ -232,6 +263,28 @@ UTCHMMA.WS ..., idesc[UR5], UR12, UP0;
 在带 guard 或非 uniform producer 的组合中，还可能在
 `ISETP/BRA` 与 `UISETP/PLOP3` 之间重新选择控制序列；`NOP` 只反映随后的调度
 调整。
+
+真实 O3 对照如下。无 descriptor 的 `THOR_MMA_004865`：
+
+```sass
+LDCU.64   UR8,  c[0x0][0x388];
+LDCU.64   UR10, c[0x0][0x390];
+UTCHMMA.WS gdesc[UR8], gdesc[UR10],
+            tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+```
+
+带 descriptor 的 `THOR_MMA_005001`：
+
+```sass
+LDCU.64   UR8,  c[0x0][0x388];
+LDCU.64   UR10, c[0x0][0x390];
+LDCU.64   UR12, c[0x0][0x3a8];
+UTCHMMA.WS gdesc[UR8], gdesc[UR10],
+            tmem[UR6], tmem[UR4], idesc[UR5], UR12, UP0;
+```
+
+这里可以直接看到 `%zero_mask_desc` 选择了一条额外 `LDCU.64`，其结果以
+`UR12` 的形式进入核心 `UTCHMMA.WS`。
 
 将“存在该 descriptor”与“不存在”配对后，得到 2,176 个源码/上下文设计，
 即 8,704 次 SASS 比较：

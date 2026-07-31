@@ -122,6 +122,31 @@ group 2 还把 disable-output-lane mask 从 4 个扩展到 8 个。根据 mask �
     → 如果额外 4 个 mask 未被常量折叠，则选择更多 MOV/R2UR/UMOV
 ```
 
+在 `commit_completion` 的 O3 配对中，可以看到不含其他噪声的直接替换。
+group 1 的 `THOR_MMA_000008`：
+
+```sass
+UTCHMMA  gdesc[UR8], gdesc[UR10],
+          tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+LDCU.64  UR4, c[0x0][0x3b8];
+UMOV      UR4, UR4;
+UTCBAR   [UR4], URZ;
+```
+
+group 2 的 `THOR_MMA_000424`：
+
+```sass
+UTCHMMA.2CTA  gdesc[UR8], gdesc[UR10],
+               tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+LDCU.64       UR4, c[0x0][0x3b8];
+UMOV           UR4, UR4;
+UTCBAR.2CTA   [UR4], URZ;
+```
+
+这个例子说明 `.cta_group::2` 同时选择核心 `.2CTA` 和 completion
+`.2CTA`；中间的地址装载序列保持不变。额外 mask 没有被折叠时，才会再出现
+前表中的 `MOV/R2UR/UMOV`。
+
 下面的统计说明这些候选指令在哪些优化级被实际保留下来。
 
 会，但不是每个上下文都会改变。把 group 2 与同一合法设计的 group 1 配对后，
