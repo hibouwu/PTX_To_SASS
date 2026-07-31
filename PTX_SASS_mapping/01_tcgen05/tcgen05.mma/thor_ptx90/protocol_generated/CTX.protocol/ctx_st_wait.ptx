@@ -1,0 +1,24 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "ctx_st_wait.ptx"
+
+
+// LAYER CTX.protocol
+// COORDINATES {"completion":"wait::st","family":"tmem_io_completion","operation":"st"}
+.visible .entry ctx_st_wait(
+    .param .u32 p_taddr,
+    .param .u32 p_r0,
+    .param .u32 p_r1
+)
+{
+    .reg .b32 %taddr, %r0, %r1;
+    // EFFECT_SLICE_BEGIN
+    ld.param.b32 %taddr, [p_taddr];
+    ld.param.b32 %r0, [p_r0];
+    ld.param.b32 %r1, [p_r1];
+    tcgen05.st.sync.aligned.32x32b.x2.b32 [%taddr], {%r0, %r1};
+    tcgen05.wait::st.sync.aligned;
+    // EFFECT_SLICE_END
+    ret;
+}
