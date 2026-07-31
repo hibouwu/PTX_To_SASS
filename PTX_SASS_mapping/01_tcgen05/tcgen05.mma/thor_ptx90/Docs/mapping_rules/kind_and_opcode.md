@@ -2,11 +2,9 @@
 
 ## 这个维度回答什么
 
-`kind` 表示 `tcgen05.mma` 属于哪一类数据格式和计算路径。它首先决定核心
-SASS 使用 `UTCHMMA`、`UTCQMMA`、`UTCIMMA` 还是 `UTCOMMA`。
+`kind` 表示 `tcgen05.mma` 属于哪一类数据格式和计算路径。它首先决定核心 SASS 使用 `UTCHMMA`、`UTCQMMA`、`UTCIMMA` 还是 `UTCOMMA`。
 
-**数据格式** 指矩阵元素如何用二进制表示；**核心 SASS** 指真正触发 Tensor
-Core 数值运算的那条机器指令，不包括参数装载和线程选举。
+**数据格式** 指矩阵元素如何用二进制表示；**核心 SASS** 指真正触发 Tensor Core 数值运算的那条机器指令，不包括参数装载和线程选举。
 
 ## PTX 语法位置
 
@@ -53,21 +51,18 @@ UTCHMMA gdesc[UR8], gdesc[UR10],
          tmem[UR6], tmem[UR4], idesc[UR5], UP0 ;
 ```
 
-如果只把 `kind::f16` 换成 `kind::i8`，主助记符进入 `UTCIMMA` 家族；其他
-modifier 仍由 CTA group、来源模式和 collector 等维度决定。
+如果只把 `kind::f16` 换成 `kind::i8`，主助记符进入 `UTCIMMA` 家族；其他 modifier 仍由 CTA group、来源模式和 collector 等维度决定。
 
 ## 为什么多个 kind 会共享同一个主助记符
 
-`f16` 和 `tf32` 都映射到 `UTCHMMA`，不代表二者机器语义相同。精确 A/B/D
-类型、矩阵 M/N/K 形状和 major 方向还可能由 `idesc` 提供。
+`f16` 和 `tf32` 都映射到 `UTCHMMA`，不代表二者机器语义相同。精确 A/B/D 类型、矩阵 M/N/K 形状和 major 方向还可能由 `idesc` 提供。
 
 - **A/B/D**：两个输入矩阵 A、B 和输出/累加矩阵 D。
 - **M/N/K**：`M×K` 矩阵乘以 `K×N` 矩阵的三个尺寸。
 - **major**：数据以行或列为主要连续方向。
 - **idesc**：instruction descriptor，描述 MMA 类型和形状等信息。
 
-因此，本条目能给出“主 opcode 家族规则”，不能仅凭可见助记符恢复所有
-descriptor 字段。
+因此，本条目能给出“主 opcode 家族规则”，不能仅凭可见助记符恢复所有 descriptor 字段。
 
 ## 与其他维度组合
 
@@ -107,8 +102,7 @@ mxf4 / mxf4nvf4
     → UTCOMMA
 ```
 
-四个核心家族使用的对应 PTX 如下。为突出 `kind`，都使用 CTA group 1 和直接
-参数上下文：
+四个核心家族使用的对应 PTX 如下。为突出 `kind`，都使用 CTA group 1 和直接参数上下文：
 
 ```ptx
 tcgen05.mma.cta_group::1.kind::f16
@@ -152,9 +146,7 @@ UTCOMMA.4X  gdesc[UR8], gdesc[UR10],
              tmem[UR6], tmem[UR4], idesc[UR5], tmem[UR12], UP0;
 ```
 
-前三条说明：在操作数契约相同时，kind 直接选择 `UTCHMMA/UTCQMMA/UTCIMMA`
-之一，外围和核心寄存器布局可以保持不变。最后一条多出的 `tmem[UR12]` 来自
-block scaling，不应误归因给 `UTCOMMA` 这个 opcode 名称。
+前三条说明：在操作数契约相同时，kind 直接选择 `UTCHMMA/UTCQMMA/UTCIMMA` 之一，外围和核心寄存器布局可以保持不变。最后一条多出的 `tmem[UR12]` 来自 block scaling，不应误归因给 `UTCOMMA` 这个 opcode 名称。
 
 下面专门比较 `f8f6f4` 与 `i8` 在 O0/O3 的稳定性。对应 PTX 是：
 
@@ -188,22 +180,15 @@ UTCIMMA gdesc[UR8], gdesc[UR10],
          tmem[UR6], tmem[UR4], idesc[UR5], UP0;
 ```
 
-O0 用来观察 descriptor、mask 和 `enable` 如何进入操作数；O3 用来读取最终
-寄存器布局。`UTCQMMA/UTCIMMA` 的选择在两级中保持不变。
+O0 用来观察 descriptor、mask 和 `enable` 如何进入操作数；O3 用来读取最终寄存器布局。`UTCQMMA/UTCIMMA` 的选择在两级中保持不变。
 
-对于不带 block scaling 的 `f16/tf32/f8f6f4/i8`，外围指令选择集合不随 kind
-变化：参数仍由同一组 `LDC/LDCU` 装载，谓词和控制仍使用同一组
-`UISETP/PLOP3/ELECT/BRA` 指令。变化被限制在核心 MMA 家族内。
+对于不带 block scaling 的 `f16/tf32/f8f6f4/i8`，外围指令选择集合不随 kind 变化：参数仍由同一组 `LDC/LDCU` 装载，谓词和控制仍使用同一组 `UISETP/PLOP3/ELECT/BRA` 指令。变化被限制在核心 MMA 家族内。
 
-特别地，`f16` 和 `tf32` 都选择 `UTCHMMA`。在当前 `idesc` 运行时传入的
-实验中，二者连核心编码也相同；类型区别不由另一个 SASS opcode 表达，而由
-`idesc` 的运行时内容表达。
+特别地，`f16` 和 `tf32` 都选择 `UTCHMMA`。在当前 `idesc` 运行时传入的实验中，二者连核心编码也相同；类型区别不由另一个 SASS opcode 表达，而由 `idesc` 的运行时内容表达。
 
 下面的计数用于确认上述选择关系在全部上下文和优化级中是否稳定。
 
-这里把 `f16` 作为基线，在 kind 之外的 semantic form、源码写法、上下文和
-优化级完全相同的条件下，分别与 `tf32`、`f8f6f4`、`i8` 配对。每组有
-1,504 个源码/上下文配对，乘以 O0–O3 后是 6,016 次 SASS 比较。
+这里把 `f16` 作为基线，在 kind 之外的 semantic form、源码写法、上下文和优化级完全相同的条件下，分别与 `tf32`、`f8f6f4`、`i8` 配对。每组有 1,504 个源码/上下文配对，乘以 O0–O3 后是 6,016 次 SASS 比较。
 
 | kind 对比 | 完整函数指令数变化 | 外围指令类型变化 | 核心活跃寄存器变化 | 核心编码 |
 |---|---:|---:|---:|---|
@@ -211,22 +196,34 @@ O0 用来观察 descriptor、mask 和 `enable` 如何进入操作数；O3 用来
 | `f8f6f4` 对 `f16` | 0/6,016 | 0/6,016 | 0/6,016 | 6,016/6,016 不同 |
 | `i8` 对 `f16` | 0/6,016 | 0/6,016 | 0/6,016 | 6,016/6,016 不同 |
 
-**外围指令**指去掉目标 MMA 后，函数中剩余的参数装载、谓词、选举、分支和完成
-协议指令。**核心活跃寄存器**指执行目标 MMA 时仍保存有效值的寄存器数量。
+**外围指令**指去掉目标 MMA 后，函数中剩余的参数装载、谓词、选举、分支和完成协议指令。**核心活跃寄存器**指执行目标 MMA 时仍保存有效值的寄存器数量。
 
 结论很直接：
 
 - 非 block-scaled kind 不会增加或删除外围 SASS，也不改变外围指令类型；
 - `f8f6f4` 和 `i8` 改变核心 opcode 与编码；
-- 当前运行时 `idesc` 写法下，`f16` 与 `tf32` 生成了完全相同的核心指令文本
-  和编码，二者的具体类型区别由运行时 descriptor 承载；
-- block-scaled kind 还会增加 scale-factor 操作数，不能套用本节结论，见
-  [`block_scaling.md`](block_scaling.md)。
+- 当前运行时 `idesc` 写法下，`f16` 与 `tf32` 生成了完全相同的核心指令文本和编码，二者的具体类型区别由运行时 descriptor 承载；
+- block-scaled kind 还会增加 scale-factor 操作数，不能套用本节结论，见 [`block_scaling.md`](block_scaling.md)。
+
+## 代表性覆盖口径
+
+本页的七个已覆盖 kind 已经全部进入映射表，四个 SASS opcode 家族也都有真实 PTX 与 SASS 见证：
+
+| 主要机制 | 代表内容 |
+|---|---|
+| `f16/tf32 → UTCHMMA` | 最小例子与同编码说明 |
+| `f8f6f4/mxf8f6f4 → UTCQMMA` | O0/O3 对比与 block-scale 交叉引用 |
+| `i8 → UTCIMMA` | O0/O3 对比 |
+| `mxf4/mxf4nvf4 → UTCOMMA` | `.4X` 代表例子 |
+| 同 opcode 不等于同 dtype | `f16/tf32` 与运行时 `idesc` 边界 |
+| 非 block kind 不改变外围序列 | 三组各 6,016 次严格配对 |
+| kind 与 `.2CTA/.WS/.ASHIFT/.4X` 的组合 | modifier 组合段 |
+
+按主要静态 opcode 选择机制计为完整覆盖；考虑 `idesc` 位型尚未逐字段冻结，保守记为 **至少 95% 的主要变化机制**，不把它表述成 dtype/shape 编码位的 95% 覆盖。
 
 ## 证据与边界
 
-- 对 expanded attribution 的 52,736 条目标 occurrence 检查，kind → 主助记符
-  规则反例为 0。
+- 对 expanded attribution 的 52,736 条目标 occurrence 检查，kind → 主助记符规则反例为 0。
 - `ptxas` 和 `nvdisasm` 均来自 CUDA 13.0。
 - 结论适用于 PTX 9.0、`sm_110a`。
 - 尚未逐字段冻结 `idesc`，所以不能据此给出精确 dtype/shape 编码位。

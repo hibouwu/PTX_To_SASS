@@ -6,6 +6,15 @@
 
 覆盖 cluster rank/address mapping、shared::cluster load/store、地址空间转换与判定。
 
+## 具体指令目录
+
+- [`mapa`](mapa/)
+- [`getctarank`](getctarank/)
+- [`cvta`](cvta/)
+- [`isspacep`](isspacep/)
+- [`ld.shared-cluster`](ld.shared-cluster/)
+- [`st.shared-cluster`](st.shared-cluster/)
+
 ## 优先上下文
 
 - local/remote rank、cluster shape 和 launch 属性；
@@ -17,4 +26,3 @@
 ## 跨族依赖
 
 协议可依赖 `03_mbarrier`、`04_fence` 和 `07_lsu`；本目录仍独立生成和验证自己的 testcase。
-

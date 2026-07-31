@@ -10,16 +10,20 @@ verdict、runtime 记录和覆盖率都不是本实验的输入证据。需要�
 
 ## 推荐的族内结构
 
-各族开始实施时按需创建以下内容，不提前创建空目录：
+族目录先按目标 PTX opcode 或不可拆的 opcode 子族建立子目录。类型、位宽、限定符、
+scope 和其他合法语义形态属于该指令目录内的 `SF`，不继续拆成目录。每个指令目录
+至少包含范围说明，因此不创建无说明的空目录：
 
 ```text
 <family>/
 ├── README.md
-├── factors.yaml          # 精确水平、合法性约束和有界范围
-├── cases/                # 本实验生成的 PTX 与 testcase manifest
-├── witnesses/            # 每种 lowering 的最小复现
-├── results/<env-id>/     # 原始产物、日志、fingerprint 和状态账本
-└── notes/                # 人工归属、反例和待证假设
+└── <ptx-opcode>/
+    ├── README.md
+    ├── factors.yaml          # 精确水平、合法性约束和有界范围
+    ├── cases/                # 本实验生成的 PTX 与 testcase manifest
+    ├── witnesses/            # 每种 lowering 的最小复现
+    ├── results/<env-id>/     # 原始产物、日志、fingerprint 和状态账本
+    └── notes/                # 人工归属、反例和待证假设
 ```
 
 ## 统一状态
@@ -67,4 +71,3 @@ SEMANTIC_FAIL
 - 只有穷举冻结后的有限输入空间，才能写为“相对于该输入空间完整”。
 
 族目录可从 [族实验模板.md](族实验模板.md) 复制计划结构。
-

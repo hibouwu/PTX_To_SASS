@@ -7,6 +7,16 @@
 覆盖 warp barrier、nanosleep、grid dependency launch/wait、global prefetch 及长生命周期
 kernel 中的控制协议。
 
+## 具体指令目录
+
+- [`bar.warp.sync`](bar.warp.sync/)
+- [`nanosleep`](nanosleep/)
+- [`griddepcontrol.launch_dependents`](griddepcontrol.launch_dependents/)
+- [`griddepcontrol.wait`](griddepcontrol.wait/)
+- [`prefetch.global`](prefetch.global/)
+- [`clusterlaunchcontrol.try_cancel`](clusterlaunchcontrol.try_cancel/)
+- [`clusterlaunchcontrol.query_cancel`](clusterlaunchcontrol.query_cancel/)
+
 ## 优先上下文
 
 - predicate、循环、退避次数和分支布局；
@@ -18,4 +28,3 @@ kernel 中的控制协议。
 ## 本族完成门槛
 
 明确区分“指令被执行”“协议完成”和“产生性能收益”；三者不能用同一个 PASS 状态表示。
-

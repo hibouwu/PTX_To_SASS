@@ -2,9 +2,7 @@
 
 ## 为什么需要这一页
 
-单个规则条目回答“一个维度通常映射到哪里”，但 `tcgen05.mma` 的 modifier
-不是一组可以任意排列组合的开关。它们会限制彼此的适用范围，有些信息还只在
-操作数或机器编码中体现。
+单个规则条目回答“一个维度通常映射到哪里”，但 `tcgen05.mma` 的 modifier 不是一组可以任意排列组合的开关。它们会限制彼此的适用范围，有些信息还只在操作数或机器编码中体现。
 
 因此，完整分析应先判断组合是否合法，再按层解释 lowering。
 
@@ -65,8 +63,7 @@ mma.ws + collector::b2::use
 → UTCHMMA.WS ... gdesc[...].B_REUSE.B_KEEP.BUFFER2 ...
 ```
 
-`.WS` 位于主助记符，collector 状态位于 B 操作数。只比较助记符会遗漏
-`use` 和 `fill` 的差别。
+`.WS` 位于主助记符，collector 状态位于 B 操作数。只比较助记符会遗漏 `use` 和 `fill` 的差别。
 
 ### 3. sparse + WS
 
@@ -75,25 +72,21 @@ mma.ws.sp
 → UTC*MMA.WS ...
 ```
 
-这里可见 `.WS`，但没有同名 `.SP`。稀疏语义由额外 metadata、操作数位置或
-机器编码承载。因此 `.ws.sp` 不能被简单解释成字符串 `.WS.SP`。
+这里可见 `.WS`，但没有同名 `.SP`。稀疏语义由额外 metadata、操作数位置或机器编码承载。因此 `.ws.sp` 不能被简单解释成字符串 `.WS.SP`。
 
 ## 哪些维度不是独立效应
 
 ### `.sp` 是隐藏效应
 
-`.sp` 不改变为同名主 opcode modifier。必须把稀疏 metadata 和编码纳入比较，
-否则会错误地得出“`.sp` 没有作用”。
+`.sp` 不改变为同名主 opcode modifier。必须把稀疏 metadata 和编码纳入比较，否则会错误地得出“`.sp` 没有作用”。
 
 ### block scaling 是 kind、scale vector 和 descriptor 的联合效应
 
-`scale_vec::2X` 与 `block32` 没有同名 SASS 后缀；`scale_vec::4X` 和某些
-`block16` 形态可见 `.4X`。这些规则依赖合法 kind 和 descriptor 条件。
+`scale_vec::2X` 与 `block32` 没有同名 SASS 后缀；`scale_vec::4X` 和某些 `block16` 形态可见 `.4X`。这些规则依赖合法 kind 和 descriptor 条件。
 
 ### collector 是状态机，不是单条无状态 modifier
 
-`use` 和 `lastuse` 依赖先前的 `fill`。单独摘出第二条指令虽然能读出
-`REUSE/KEEP`，却不足以证明整段 PTX 合法。
+`use` 和 `lastuse` 依赖先前的 `fill`。单独摘出第二条指令虽然能读出 `REUSE/KEEP`，却不足以证明整段 PTX 合法。
 
 ## 上下文与核心规则怎样相遇
 
@@ -107,17 +100,13 @@ mma.ws.sp
 | derived producer | O1–O3 可能优化掉生产者或重排准备序列 |
 | completion | 核心 MMA 后的提交、barrier 和等待序列 |
 
-**谓词**是控制指令是否执行或选择某种输入语义的真假条件。`UPT` 是 uniform
-predicate true；`!UPT` 是其取反。
+**谓词**是控制指令是否执行或选择某种输入语义的真假条件。`UPT` 是 uniform predicate true；`!UPT` 是其取反。
 
-32,256 组上下文配对中，没有观察到上下文改变核心 MMA 的 opcode/modifier
-规范形态；但寄存器编号、活跃集合、外围指令和编码仍会变化。详细统计见
-[`../tcgen05_mma_上下文差分报告.md`](../tcgen05_mma_上下文差分报告.md)。
+32,256 组上下文配对中，没有观察到上下文改变核心 MMA 的 opcode/modifier 规范形态；但寄存器编号、活跃集合、外围指令和编码仍会变化。详细统计见 [`../tcgen05_mma_上下文差分报告.md`](../tcgen05_mma_上下文差分报告.md)。
 
 ## 哪些 modifier 会波及外围 SASS
 
-下面的“外围”指去掉目标 MMA 后的参数装载、谓词、选举、分支和完成协议。
-“有条件”表示只在部分上下文或优化级发生，不表示结果不稳定。
+下面的“外围”指去掉目标 MMA 后的参数装载、谓词、选举、分支和完成协议。 “有条件”表示只在部分上下文或优化级发生，不表示结果不稳定。
 
 选择外围指令时，可以先判断 PTX 是否改变了操作数契约：
 
@@ -146,8 +135,7 @@ predicate true；`!UPT` 是其取反。
     → UTCBAR → UTCBAR.2CTA
 ```
 
-`NOP` 不在这个语义选择树中，因为它是编译器根据最终调度间隔插入的填充，
-不是某个 PTX modifier 的语义实现指令。
+`NOP` 不在这个语义选择树中，因为它是编译器根据最终调度间隔插入的填充，不是某个 PTX modifier 的语义实现指令。
 
 | 维度 | 核心 MMA | 外围指令数/类型 | 核心寄存器/活跃数 | 最准确的心智模型 |
 |---|---|---|---|---|
@@ -167,6 +155,34 @@ predicate true；`!UPT` 是其取反。
 - 只改变核心编码字段的 modifier，通常不会生成外围指令；
 - 新增、删除或改变操作数宽度/类别的 modifier，会改变参数装载和寄存器分配；
 - CTA group 还会改变 mask 数量和 completion 指令，因此处在两者之间。
+
+## 真实组合见证
+
+前面的三个组合是规则示意。下面列出 expanded 结果中的真实 O3 见证，确保组合规则不是只靠字符串推演：
+
+| case | 联合维度 | 核心 SASS 结果 |
+|---|---|---|
+| `THOR_MMA_001641` | sparse + INT8 + TS + group 2 + ashift | `UTCIMMA.2CTA.ASHIFT tmem[...]` |
+| `THOR_MMA_000633` | group 2 + TS + A collector lastuse + ashift | `UTCHMMA.2CTA.ASHIFT tmem[...].A_REUSE` |
+| `THOR_MMA_007129` | WS + sparse + B2 fill→use | `UTCHMMA.WS ... B_REUSE.B_KEEP.BUFFER2` |
+| `THOR_MMA_007265` | WS + sparse + B2 + zero-column-mask | `UTCHMMA.WS ... BUFFER2 ..., UR12, UP0` |
+| `THOR_MMA_003145` | block scale + TS + group 2 + 4X | `UTCOMMA.2CTA.4X ... tmem[scale-factor]` |
+
+这些见证覆盖可见 modifier、隐藏 sparse 语义、操作数 modifier、可选 descriptor 和新增 scale-factor 操作数五种不同承载位置。非法边界则由 `WS + group 2`、`SS + ashift`、`block scale + ashift` 的文法或阴性探针约束。
+
+## 代表性覆盖口径
+
+| 主要机制 | 覆盖位置 |
+|---|---|
+| kind、CTA group、variant、block scale、ashift 的组合顺序 | 阅读顺序与真实见证 |
+| SS/TS 与 A/B collector 的操作数归属 | 组合表与真实见证 |
+| `.sp`、2X、descriptor 等隐藏效应 | 非独立效应与见证 |
+| 原位编码对操作数契约变化 | 外围选择树 |
+| guard、issuer、producer、enable、completion 上下文 | 上下文表与 32,256 组比较 |
+| 合法与非法组合边界 | 约束表和阴性探针 |
+| 核心、外围、寄存器、编码的分层解释 | 总结表 |
+
+按跨维度主要静态机制计，规则、真实案例和边界证据均已覆盖，保守记为 **至少 95% 的主要变化机制**。未覆盖的是运行时协作、数值结果和性能行为。
 
 ## 写映射规则时应使用的措辞
 

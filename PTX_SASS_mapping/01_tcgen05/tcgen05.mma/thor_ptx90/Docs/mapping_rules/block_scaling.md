@@ -12,19 +12,15 @@ block scaling 不总是产生一个同名的 SASS modifier。当前样本中的�
 | `block16` 规范别名 | `UTCOMMA.4X` |
 | `block32` 规范别名 | `UTCOMMA`，无独立 `.BLOCK32` |
 
-因此，看到“没有同名后缀”不能推断缩放信息被丢弃。信息可能由 opcode
-家族、操作数、instruction descriptor 或机器编码共同表达。
+因此，看到“没有同名后缀”不能推断缩放信息被丢弃。信息可能由 opcode 家族、操作数、instruction descriptor 或机器编码共同表达。
 
 ## 专有名词
 
-- **block scaling（分块缩放）**：一个数据块共享一个或一组缩放因子，用于表示
-  低精度矩阵数据。
+- **block scaling（分块缩放）**：一个数据块共享一个或一组缩放因子，用于表示低精度矩阵数据。
 - **scale factor（缩放因子）**：把低精度编码恢复到目标数值范围所需的乘法因子。
 - **scale vector（缩放向量）**：描述缩放因子沿矩阵数据如何成组应用。
-- **instruction descriptor，`idesc`**：描述 MMA 形状、数据类型和布局等信息的
-  指令描述值。
-- **规范别名**：源码拼写不同，但在特定 kind、形状或 K 值条件下表示同一规范
-  语义的写法。
+- **instruction descriptor，`idesc`**：描述 MMA 形状、数据类型和布局等信息的指令描述值。
+- **规范别名**：源码拼写不同，但在特定 kind、形状或 K 值条件下表示同一规范语义的写法。
 
 ## PTX 操作数也会变化
 
@@ -37,9 +33,7 @@ tcgen05.mma.cta_group::1.kind::mxf4nvf4.block_scale.scale_vec::4X
     %enable;
 ```
 
-`%scale_a_tmem` 和 `%scale_b_tmem` 是 A、B 的缩放因子地址，不是矩阵数据
-本身。具体参数顺序应以生成 manifest 中该 semantic form 的 PTX 为准；上例
-用于说明 lowering 中新增的是哪一类信息。
+`%scale_a_tmem` 和 `%scale_b_tmem` 是 A、B 的缩放因子地址，不是矩阵数据本身。具体参数顺序应以生成 manifest 中该 semantic form 的 PTX 为准；上例用于说明 lowering 中新增的是哪一类信息。
 
 `scale_vec::4X` 的核心 SASS 助记符可见 `.4X`：
 
@@ -63,19 +57,15 @@ scale vector 不是脱离 `kind` 独立选择 opcode：
 - `mxf4` 和 `mxf4nvf4` 的已覆盖规范形态进入 `UTCOMMA`；
 - `.4X` 只在相应的 `UTCOMMA` 规范形态中可见。
 
-因此，这里的规则应读作“在已覆盖合法 kind/scale-vector 组合中”，不能写成
-任意 `scale_vec::1X` 都无条件对应 `UTCQMMA`。
+因此，这里的规则应读作“在已覆盖合法 kind/scale-vector 组合中”，不能写成任意 `scale_vec::1X` 都无条件对应 `UTCQMMA`。
 
 ## 与 `.ashift` 的边界
 
-block-scaled MMA 不能再组合 `.ashift`。阴性探针有意构造该组合，`ptxas`
-以非法 modifier 拒绝。两者不是两个可以自由叠加的独立后缀。
+block-scaled MMA 不能再组合 `.ashift`。阴性探针有意构造该组合，`ptxas` 以非法 modifier 拒绝。两者不是两个可以自由叠加的独立后缀。
 
 ## 别名为什么不能一律合并
 
-`.block16`、`.block32` 与 `scale_vec` 写法的等价性可能依赖 kind 和
-`idesc.K`。当 K 值尚未冻结时，生成器保留它们为不同 source variant，
-不会只因为反汇编助记符相似就强行合并。
+`.block16`、`.block32` 与 `scale_vec` 写法的等价性可能依赖 kind 和 `idesc.K`。当 K 值尚未冻结时，生成器保留它们为不同 source variant，不会只因为反汇编助记符相似就强行合并。
 
 **source variant** 指表达同一或相近语义的具体 PTX 源码写法。
 
@@ -85,8 +75,7 @@ block-scaled MMA 不能再组合 `.ashift`。阴性探针有意构造该组合�
 
 ### 启用 block scaling：会改变外围 lowering
 
-启用 block scaling 的核心映射是增加 scale-factor 操作数，而不一定更换主
-opcode：
+启用 block scaling 的核心映射是增加 scale-factor 操作数，而不一定更换主 opcode：
 
 ```text
 f8f6f4
@@ -132,8 +121,7 @@ A/B scale address 的产生方式决定外围选择：
 | guard/producer 类别随寄存器重新分配 | `ISETP/BRA` 或 `UISETP/PLOP3` |
 | 调度调整 | `NOP`、`UMOV` |
 
-O0 中，非 block-scaled `THOR_MMA_000081` 没有 scale address 的生产路径。
-以下是选指相关片段，省略部分同值 `MOV` 和无关 mask 准备：
+O0 中，非 block-scaled `THOR_MMA_000081` 没有 scale address 的生产路径。以下是选指相关片段，省略部分同值 `MOV` 和无关 mask 准备：
 
 ```ptx
 tcgen05.mma.cta_group::1.kind::f8f6f4
@@ -158,8 +146,7 @@ UTCQMMA  gdesc[UR4], gdesc[UR6],
           tmem[UR10], tmem[UR8], idesc[UR9], UR12, UP0;
 ```
 
-block-scaled `THOR_MMA_001665` 多出两个 32 位 scale address load、两条
-`IADD3`，最后把结果送入 `tmem[UR10]`：
+block-scaled `THOR_MMA_001665` 多出两个 32 位 scale address load、两条 `IADD3`，最后把结果送入 `tmem[UR10]`：
 
 ```ptx
 tcgen05.mma.cta_group::1.kind::mxf8f6f4.block_scale
@@ -213,14 +200,9 @@ UTCQMMA  gdesc[UR8], gdesc[UR10],
           tmem[UR6], tmem[UR4], idesc[UR5], tmem[UR12], UP0;
 ```
 
-这里两条相邻的 32 位 scale address 被一次 `LDCU.64` 装入 `UR12:UR13`，
-核心 MMA 再通过 `tmem[UR12]` 使用这组 scale-factor 地址。O0 展示地址如何
-产生，O3 展示最终合并后的选指。
+这里两条相邻的 32 位 scale address 被一次 `LDCU.64` 装入 `UR12:UR13`，核心 MMA 再通过 `tmem[UR12]` 使用这组 scale-factor 地址。O0 展示地址如何产生，O3 展示最终合并后的选指。
 
-同一个 kind 不能同时拥有 block-scaled 和非 block-scaled 合法形态，因此无法
-做完全同 kind 的单因素配对。最接近的合法对照是
-`mxf8f6f4 + scale_vec::1X` 与 `f8f6f4`，其余 variant、来源、collector、
-上下文和优化级保持一致。
+同一个 kind 不能同时拥有 block-scaled 和非 block-scaled 合法形态，因此无法做完全同 kind 的单因素配对。最接近的合法对照是 `mxf8f6f4 + scale_vec::1X` 与 `f8f6f4`，其余 variant、来源、collector、上下文和优化级保持一致。
 
 320 个源码/上下文配对形成 1,280 次 SASS 比较：
 
@@ -232,9 +214,7 @@ UTCQMMA  gdesc[UR8], gdesc[UR10],
 | 核心位置活跃寄存器 | 1,280/1,280 |
 | 核心 MMA 编码 | 1,280/1,280 |
 
-原因不是 `.block_scale` 文字本身，而是 block scaling 新增 A/B scale-factor
-地址。它们需要额外装载、占用寄存器，并进入核心 MMA 的操作数布局。因此启用
-block scaling 是一次操作数契约变化，会波及上下文 SASS。
+原因不是 `.block_scale` 文字本身，而是 block scaling 新增 A/B scale-factor 地址。它们需要额外装载、占用寄存器，并进入核心 MMA 的操作数布局。因此启用 block scaling 是一次操作数契约变化，会波及上下文 SASS。
 
 ### 在 block-scaled 家族内选择 `2X/4X`：只改核心 MMA
 
@@ -251,8 +231,7 @@ scale_vec::4X
     → 保持相同
 ```
 
-`scale_vec::4X` 与同 kind 的 `scale_vec::2X` 有 320 个配对，即 1,280 次
-SASS 比较。全部结果都是：
+`scale_vec::4X` 与同 kind 的 `scale_vec::2X` 有 320 个配对，即 1,280 次 SASS 比较。全部结果都是：
 
 ```ptx
 tcgen05.mma.cta_group::1.kind::mxf4nvf4.block_scale.scale_vec::2X
@@ -284,8 +263,7 @@ UTCOMMA.4X gdesc[UR8], gdesc[UR10],
             tmem[UR6], tmem[UR4], idesc[UR5], tmem[UR12], UP0;
 ```
 
-这里 O0 与 O3 的寄存器编号会整体重排，但同一优化级内 `2X/4X` 的操作数布局
-相同；指令选择只从 `UTCOMMA` 变为 `UTCOMMA.4X`，外围指令保持相同。
+这里 O0 与 O3 的寄存器编号会整体重排，但同一优化级内 `2X/4X` 的操作数布局相同；指令选择只从 `UTCOMMA` 变为 `UTCOMMA.4X`，外围指令保持相同。
 
 - 完整函数指令数相同；
 - 外围指令类型和排列相同；
@@ -311,13 +289,44 @@ mxf8f6f4 的 omitted / block32 / scale_vec::1X
 - `mxf8f6f4` 的 omitted、`block32` 与 `scale_vec::1X`；
 - `mxf4` 的 omitted 与 `block32`
 
-生成的核心指令文本、寄存器活跃数量和编码均相同。这个结果只说明当前 descriptor
-条件下的 lowering 等价；别名是否能合并仍要服从 kind 和 `idesc.K` 条件。
+生成的核心指令文本、寄存器活跃数量和编码均相同。这个结果只说明当前 descriptor 条件下的 lowering 等价；别名是否能合并仍要服从 kind 和 `idesc.K` 条件。
+
+## 跨 variant 与 CTA group 的组合见证
+
+前面的展开示例集中在 group 1 的普通 MMA。block scaling 与合法的 CTA group、来源和 sparse variant 组合时，核心规则仍按字段叠加：
+
+```sass
+// THOR_MMA_003145：mma + TS + group 2 + mxf4nvf4 + 4X
+UTCOMMA.2CTA.4X
+    tmem[UR7], gdesc[UR8],
+    tmem[UR6], tmem[UR4], idesc[UR5], tmem[UR10], UP0;
+
+// THOR_MMA_004745：mma.sp + TS + group 2 + mxf4nvf4 + 4X
+UTCOMMA.2CTA.4X
+    tmem[UR5], gdesc[UR8],
+    tmem[UR4], tmem[UR10], idesc[UR11], tmem[UR12], UP0;
+```
+
+两条都保留 `.2CTA.4X` 和 scale-factor `tmem[...]` 操作数；sparse 版本没有同名 `.SP`，metadata 通过寄存器角色和编码表达。它们还说明 block-scaled 形态没有普通 MMA 的 disable-output-lane mask 契约，group 1→2 不需要额外扩展 4 个 mask。
+
+## 代表性覆盖口径
+
+| 主要机制 | 覆盖位置 |
+|---|---|
+| 启用 block scaling 增加 scale-factor 操作数 | O0/O3 与 1,280 次配对 |
+| `mxf8f6f4 → UTCQMMA` | 1X 对照 |
+| `mxf4/mxf4nvf4 → UTCOMMA` | 2X/4X 对照 |
+| 2X 无后缀、4X 选择 `.4X` | 家族内严格配对 |
+| block16/block32/omitted 规范别名 | 别名小节 |
+| SS/TS 的 scale/address producer | O0/O3 与 operand-source 交叉 |
+| CTA group 1/2 和 sparse 组合 | 跨组合见证 |
+| 与 `.ashift` 不兼容 | 阴性探针 |
+| descriptor 条件与运行时边界 | 别名和证据限制 |
+
+主要静态机制均已有正向、配对或阴性证据，保守记为 **至少 95% 的主要变化机制**。未覆盖的是所有 `idesc.K` 位型下的别名等价性和实机数值结果。
 
 ## 证据和限制
 
-- `syntax` 与 `expanded` 集合覆盖合法的 `scale_vec::1X/2X/4X`、
-  `.block16/.block32` 组合。
+- `syntax` 与 `expanded` 集合覆盖合法的 `scale_vec::1X/2X/4X`、 `.block16/.block32` 组合。
 - 映射结论来自四优化级的 SASS attribution 和规范化 semantic form。
-- 本实验尚未冻结所有 descriptor 位型，也没有做实机数值验证。因此可以报告
-  可见 lowering 规律，不能声称已经解释每个编码位的含义。
+- 本实验尚未冻结所有 descriptor 位型，也没有做实机数值验证。因此可以报告可见 lowering 规律，不能声称已经解释每个编码位的含义。

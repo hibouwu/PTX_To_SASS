@@ -7,6 +7,13 @@
 覆盖 tanh、ex2 等 F16/F16x2/BF16/BF16x2/F32 activation lowering，以及它们与常见
 epilogue pattern 的组合。
 
+## 具体指令目录
+
+- [`tanh`](tanh/)：F16/F16x2/BF16/BF16x2/F32；
+- [`ex2`](ex2/)：F16/F16x2/BF16 等低精度 activation。
+
+F32/F64 的通用 `ex2` lowering 由 `06_cuda_core_fp` 持有。
+
 ## 优先上下文
 
 - dtype、scalar/packed、approx、FTZ 和 modifier；
@@ -19,4 +26,3 @@ epilogue pattern 的组合。
 
 候选只记录 ptxas 已观察 lowering；数值 oracle 必须声明误差度量、输入域和特殊值策略，
 不能把观察到的近似序列直接当作可替换规则。
-

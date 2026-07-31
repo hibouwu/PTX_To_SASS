@@ -6,6 +6,21 @@
 
 覆盖 lop3、prmt、bfe/bfi、popc、clz、brev、fns 和 bmsk。
 
+## 具体指令目录
+
+- [`lop3`](lop3/)
+- [`prmt`](prmt/)
+- [`bfe`](bfe/)
+- [`bfi`](bfi/)
+- [`popc`](popc/)
+- [`clz`](clz/)
+- [`bfind`](bfind/)
+- [`brev`](brev/)
+- [`fns`](fns/)
+- [`bmsk`](bmsk/)
+
+普通 `and/or/xor/not` 与移位由 `05_cuda_core_int` 持有。
+
 ## 优先上下文
 
 - 位掩码、power-of-two、全零/全一、符号位和立即数编码类；
@@ -17,4 +32,3 @@
 ## 高风险簇
 
 立即数类别不能只取单个代表值；需要规则驱动边界变异与独立 bit-pattern corpus。
-
