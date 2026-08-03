@@ -2,7 +2,7 @@
 
 > 本页由 `analyze_mapping_rules.py` 从 expanded manifest、O3 核心 SASS attribution 和逐配对 context differences 自动生成。结论只适用于当前 PTX 9.0、`sm_110a`、生成矩阵和工具链。
 
-> 当前输入与工具链已写入生成 JSON：ptxas SHA-256 `daba837a68265cae38c832d13399b61dab811891de9b8914defddef143b849f2`，nvdisasm SHA-256 `3c27bded09bd877807207b62db8186a0a9a359d10311ab6e2c885f9b418c9f41`。
+> 当前输入与工具链已写入生成 JSON：ptxas SHA-256 `a1941a04ca4fd233b2fbe50c625b1e72b3d5f79ebe80209a272c85482dfbb487`，nvdisasm SHA-256 `bc40070d596fa49b81c0905ca1d05e457aaec071280f742997d4a0b511781b25`。
 
 ## guard lowering 的精确分类
 
