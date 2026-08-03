@@ -156,6 +156,24 @@ def validate_mma_suite(directory: Path, summary: dict, rows: list[dict]) -> dict
             prefix = "@%guard " if polarity == "positive" else "@!%guard "
             if any(not instruction.startswith(prefix) for instruction in actual_instructions):
                 raise ValueError(f"{label}: target guard mismatch")
+        if guard == "predicate_index_pressure":
+            hold_count = context["target_guard"]["live_uniform_predicates_across_target"]
+            prefix = f"@%hold{hold_count - 1} "
+            if any(not instruction.startswith(prefix) for instruction in actual_instructions):
+                raise ValueError(f"{label}: predicate-pressure guard mismatch")
+            for index in range(hold_count):
+                if f"@%hold{index} tcgen05.commit.cta_group::" not in block:
+                    raise ValueError(f"{label}: predicate-pressure live use missing")
+        if guard == "predicate_index_probe":
+            if any(not instruction.startswith("@%guard ") for instruction in actual_instructions):
+                raise ValueError(f"{label}: predicate-index guard mismatch")
+        if context["enable_input_d"]["producer"] == "predicate_index_sweep":
+            for index, instruction in enumerate(actual_instructions):
+                if f", %hold{index};" not in instruction:
+                    raise ValueError(f"{label}: enable-predicate sweep operand mismatch")
+        if context["operand_producers"]["mode"] == "uniform_register_pressure_across_target":
+            if block.count("tcgen05.commit.cta_group::") != 16:
+                raise ValueError(f"{label}: idesc pair-pressure construction missing")
         if context["issuer"]["mode"] == "lane_zero_branch":
             if "%laneid" not in block or "@!%issuer bra" not in block:
                 raise ValueError(f"{label}: lane-zero issuer construction missing")
@@ -252,7 +270,7 @@ def validate_directory(directory: Path) -> dict:
     summary = json.loads((directory / "summary.json").read_text(encoding="utf-8"))
     rows = read_json_lines(directory / "manifest.jsonl")
     schema = summary.get("schema_version")
-    if schema == "thor_tcgen05_mma_generator_v2":
+    if schema in {"thor_tcgen05_mma_generator_v2", "thor_tcgen05_mma_generator_v3", "thor_tcgen05_mma_generator_v4"}:
         return validate_mma_suite(directory, summary, rows)
     if schema == "thor_tcgen05_protocol_generator_v1":
         return validate_protocol_suite(directory, summary, rows)

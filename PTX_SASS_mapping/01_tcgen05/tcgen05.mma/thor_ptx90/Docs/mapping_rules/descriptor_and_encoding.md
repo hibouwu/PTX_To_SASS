@@ -1,21 +1,17 @@
-# descriptor 与机器编码：完整逆向映射还缺哪一层
+# descriptor 与机器编码：静态逆向的分层边界
 
 ## 先说结论
 
-当前文档已经能从 PTX 的操作码变体、限定符、操作数来源和上下文预测核心 SASS 文本及主要外围序列，但还不能仅凭静态编译结果解释 `idesc`、SMEM descriptor、zero-column-mask descriptor 内部每一个位域的语义。原因不是这些字段不重要，而是当前 case 把 descriptor 作为运行时参数装入 UR；核心机器指令编码记录的是“读取哪个 UR”，descriptor 的运行时数值并没有内嵌到这条 MMA 的 128-bit encoding 中。
+当前文档已经能从 PTX 的操作码变体、限定符、操作数来源和上下文预测核心 SASS 文本及主要外围序列。`idesc`、SMEM descriptor 和 zero-column-mask descriptor 在这里统一视为寄存器操作数；核心机器指令编码记录的是“读取哪个 UR”，不解释 UR 所承载值的内部格式。
 
-因此完整映射必须分成两个彼此独立的层：
+当前 PTX → SASS mapping 只研究下面这一层：
 
 ```text
 PTX opcode/qualifier/operand contract
     → SASS opcode、modifier、操作数槽位、核心机器编码
-
-descriptor runtime value
-    → shape/type/layout/stride/swizzle/稀疏或缩放解释
-    → 由 UR 中的数据驱动，不等于 MMA encoding word 的静态位域
 ```
 
-把这两层混在一起会产生两种错误：一是把 descriptor 位误称为 MMA opcode 位；二是看到 dense 与 sparse 的规范化核心文本相同，就误判稀疏语义消失。
+因此不能把 descriptor 值中的位误称为 MMA opcode 位，也不能因为 dense 与 sparse 的规范化核心文本相同就误判 PTX 操作数契约相同。
 
 ## 当前已经冻结的编码规则
 
@@ -31,7 +27,42 @@ descriptor runtime value
 | 非 4X→4X | 增加 `.4X` | 40 | 352 | `0x4000000000000000` | `0x0000000000000000` | 清位 |
 | 非 WS→WS | 增加 `.WS` | 16 | 64 | `0x0000000000000000` | `0x0000000000080000` | 置位 |
 
-`word 0/1` 按 `nvdisasm` 在 attribution 中输出的两个 64-bit word 顺序编号，不在这里换算成其他厂商文档或小端字节流的全局 bit 编号。`.4X` 的 PTX/SASS 变化在当前方向上清除 word 0 的该位，其余表中 modifier 置位；只报 XOR 会丢失这一方向信息。`A/B_REUSE` pair 除公共候选位外还会改变高位调度控制字段，尚不能按同一证据等级归纳为独立固定 XOR mask。完整 witness ID、左右 PTX/SASS/encoding 和 set/clear mask 见[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)的 `encoding_bits` 字段。
+`word 0/1` 按 `nvdisasm` 在 attribution 中输出的两个 64-bit word 顺序编号，不在这里换算成小端字节流的全局 bit 编号。`.4X` 的 PTX/SASS 变化在当前方向上清除 word 0 的该位，其余表中 modifier 置位；只报 XOR 会丢失方向信息。完整 witness ID、左右 PTX/SASS/encoding 和 set/clear mask 见[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)。
+
+## opcode、kind、REUSE 与 predicate
+
+| 静态变化 | 严格 pair | 稳定编码结果 | 同时变化但不属于 payload 的字段 |
+|---|---:|---|---|
+| `f16 → tf32` | 272 | 两个 word 完全相同 | 无 |
+| `f16 → i8` | 272 | word 1 置位 `0x0000000000000100` | 无 |
+| `f16 → f8f6f4` | 272 | word 1 置位 `0x0000000000000300` | 无 |
+| `f8f6f4 → i8` | 272 | word 1 清除 `0x0000000000000200` | 无 |
+| `UTCOMMA → UTCQMMA`，SS | 168 | word 0 XOR=`0xc000000000000800`，word 1 XOR=`0x0000000000000300` | 无 |
+| `UTCOMMA → UTCQMMA`，TS | 168 | word 0 XOR=`0xc000000000000600`，word 1 XOR=`0x0000000000000300` | 无 |
+| `A fill → use` | 112 | word 1 稳定置位 `0x0000000000400000`，即 `.A_REUSE` payload | word 1 高位调度/控制 mask `0x01f2000000000000` 可变 |
+| `B fill → use` | 128 | word 1 稳定置位 `0x0000000000040000`，即 `.B_REUSE` payload | word 1 高位调度/控制 mask `0x01f2000000000000` 可变 |
+| 无核心 predicate → `@UP1` | 232 | word 0 稳定清除 `0x0000000000006000` | word 1 高位随调度布局变化 |
+| `@UP1 → @!UP1` | 352 | word 0 稳定置位 `0x0000000000008000` | 无 |
+
+标准 kind 的 word 1 `0x300` 字段可读成 `f16/tf32=0b00`、`i8=0b01`、`f8f6f4=0b11`。`UTCOMMA/UTCQMMA` 还组合使用 word 0 `[63:56]`、与 A 来源相关的 word 0 `[11:0]` 和 word 1 `[9:8]`，因此不是单一 bit；生成 JSON 的 `opcode_layout.observed_rows` 给出全部 family/A-form/kind/variant 组合值。REUSE 使用稳定 payload 位，但 `fill → use` 还会改变调度控制编码；分析器通过所有 pair 的 set/clear 方向交集将二者分开。
+
+v4 定向 microprobe 同时保持多个统一谓词活跃，已恢复两套完整 predicate 字段：核心 guard 使用 word 0 `[14:12]`，`UP0..UP6` 直接编码为 0..6，值 7 表示无 guard，word 0 bit 15 是 negate；enable 操作数使用 word 1 `[25:23]`，`UP0..UP6` 同样直接编码为 0..6，值 7 表示 `UPT`，word 1 bit 26 是 enable negate。每个编号都有独立核心指令见证，分析器逐值断言，不能再把无 guard→`@UP1` 的 `0x6000` 差异误写成单独的 presence bit。
+
+以下隐式 kind/scale 形态是机器编码级 alias：`mxf4 block32 ↔ mxf4 2X` 为 112/112，`mxf4 block32 ↔ mxf4nvf4 block32` 为 112/112，`mxf4 block32 ↔ mxf4nvf4 2X` 为 112/112，`mxf4nvf4 block16 ↔ mxf4nvf4 4X` 为 56/56；每个 pair 的具体 SASS 操作与两个 encoding word 都完全相同。
+
+## 寄存器槽位 bitfield
+
+| SASS 操作数角色 | encoding 字段 | 检查 occurrence | 观测 UR 值 | mismatch |
+|---|---|---:|---|---:|
+| source A | word 0 `[31:24]` | 52,736 | `4,5,6,7,8,11,13,16,17` | 0 |
+| source B | word 0 `[39:32]` | 52,736 | `4,6,8,10,12,16,18` | 0 |
+| destination D | word 1 `[7:0]` | 52,736 | `4,6,10,12,16,18` | 0 |
+| mask 或 sparse metadata auxiliary | word 0 `[47:40]` | 52,736 | `4,6,8,10,14,16,18` | 0 |
+| block-scale 或 zero-mask extra | word 0 `[55:48]` | 37,088 | `6,8,10,12` | 0 |
+
+`idesc[URn]` 在 52,736 条既有 occurrence 中始终满足 `idesc_ur = auxiliary_ur XOR 1`。v4 还加入八个同时跨越目标存活的 64-bit uniform 值，A/B 分配被推高到 `UR22/UR24` 时 auxiliary/idesc 仍为 `UR4/UR5`；因此当前证据支持“编码只携带 auxiliary 偶寄存器，idesc 隐式取相邻奇寄存器”，而不是存在尚未找到的独立 idesc 字段。extra 槽位另有 240 个只改变该 UR 的上下文 pair 验证。
+
+word 1 `[63:27]` 被显式划为编译器 scheduling/control 区域，不参与 semantic opcode 预测。分析器记录各优化级的完整控制值 codebook 和观察到的 variable mask；`.A/B_REUSE` 配对中的 `0x01f2000000000000` 属于该区域。除非进一步逆向 Thor 调度器，正向规则应把这些位作为编译器选择量，而不是 PTX qualifier payload。
 
 ## 已证明是机器编码级 alias 的 PTX 拼写
 
@@ -47,13 +78,13 @@ descriptor runtime value
 
 ## descriptor/地址操作数分层表
 
-| 输入 | PTX 表现 | 核心 SASS 表现 | 值是否进入 MMA encoding | 当前可恢复内容 | 尚未恢复内容 |
-|---|---|---|---|---|---|
-| instruction descriptor | `%idesc` | `idesc[URn]` | 否，只编码 UR 槽位 | 存在性和寄存器类别 | shape、类型组合、转置/布局等内部位域 |
-| A/B SMEM descriptor | `%desc_a/%desc_b` | `gdesc[URn]` | 否，只编码 UR 槽位 | A/B 来源类别和槽位 | base、leading dimension、stride、swizzle、布局位域 |
-| zero-column-mask descriptor | `%zero_mask_desc` | WS 核心中的额外 `URn` | 否，只编码额外操作数槽位 | descriptor 是否存在 | mask 格式、地址和作用范围位域 |
-| D/A/metadata TMEM address | `[%d_tmem]/[%a_tmem]/[%meta_tmem]` | `tmem[URn]` | 地址值不进入，只编码槽位 | TMEM 来源与某些角色关系 | 地址位宽、对齐、跨 CTA 分布和 metadata 解释 |
-| scale-factor TMEM address | `[%scale_a_tmem]/[%scale_b_tmem]` | 额外 `tmem[URn]` | 地址值不进入，只编码槽位 | 是否启用 block scale | scale block 的运行时布局与地址解释 |
+| 输入 | PTX 表现 | 核心 SASS 表现 | 值是否进入 MMA encoding | 当前静态 mapping 可恢复内容 |
+|---|---|---|---|---|
+| instruction descriptor | `%idesc` | `idesc[URn]` | 否，只编码 UR 槽位 | 存在性、寄存器类别和槽位 bitfield |
+| A/B SMEM descriptor | `%desc_a/%desc_b` | `gdesc[URn]` | 否，只编码 UR 槽位 | A/B 来源类别和槽位 bitfield |
+| zero-column-mask descriptor | `%zero_mask_desc` | WS 核心中的额外 `URn` | 否，只编码额外操作数槽位 | descriptor 是否存在及其槽位 bitfield |
+| D/A/metadata TMEM address | `[%d_tmem]/[%a_tmem]/[%meta_tmem]` | `tmem[URn]` | 地址值不进入，只编码槽位 | TMEM 来源、角色关系和槽位 bitfield |
+| scale-factor TMEM address | `[%scale_a_tmem]/[%scale_b_tmem]` | 额外 `tmem[URn]` | 地址值不进入，只编码槽位 | block scale 是否启用及其槽位 bitfield |
 
 ## 为什么核心文本不能唯一恢复所有 PTX 字段
 
@@ -77,46 +108,15 @@ mxf4 与 mxf4nvf4、block32 与 scale_vec::2X
 
 这意味着一个实用逆向器应返回候选约束集合，例如“`sparse ∈ {false,true}`”，而不是在证据不足时任选一个 PTX 形态。
 
-## descriptor 位域的实验矩阵
-
-静态编译矩阵不足以回答 descriptor 值语义，下一阶段需要在 Thor 实机上执行单因素 runtime probe。每一类 descriptor 都应固定已知可工作的基线，只改变一个合法字段或一个候选 bit，并同时记录编译、反汇编、执行结果和错误状态。
-
-| probe 族 | 固定项 | 单因素扫描 | 主要观测 | 成功判据 |
-|---|---|---|---|---|
-| `idesc` | opcode/qualifier、A/B 数据、地址、collector、CTA group | 已知合法 shape/type/layout 字段；必要时对候选位做 walking-bit | D 的数值和写入范围、异常/非法指令 | 字段变化与数值/覆盖区域存在可重复的一一对应 |
-| SMEM descriptor | kind、idesc、矩阵数据、shared-memory allocation | base、leading dimension、stride、swizzle、layout | 读取元素位置和输出数值 | 每个字段可由地址置换或结果置换唯一辨识 |
-| sparse metadata | dense 数值、idesc、A/B descriptor | metadata TMEM 内容和地址字段 | 稀疏选择模式与 D 数值 | metadata 模式变化只影响预测的非零位置 |
-| zero-column-mask | WS 形态、B collector、数据和 idesc | descriptor 字段与 mask payload | 被抑制列和输出范围 | mask 位与输出列形成稳定映射 |
-| block scale | kind、idesc、A/B 原始值 | scale address、block size、scale-vector 模式 | 分块后的数值倍率 | 每个 block 的倍率和寻址符合唯一规则 |
-
-walking-bit 不能直接从全零开始，因为任意位组合可能非法。更安全的方法是从一个已验证的合法 descriptor 基线出发，对已知字段采用合法枚举，对未知字段先做单比特翻转并把“正常执行、结果改变、结果不变、trap/launch failure”分别记录。
-
-## 每条新规则必须保存的证据
-
-| 字段 | 含义 |
-|---|---|
-| `toolchain` | `ptxas`、driver、`nvdisasm` 版本和 `sm_110a` 目标 |
-| `ptx_form` | 完整 opcode、qualifier、操作数契约和上下文 |
-| `descriptor_role` | `idesc/desc_a/desc_b/meta/zero_mask/scale` |
-| `baseline_value` / `treatment_value` | 两个完整 32/64-bit 值 |
-| `changed_mask` | 两值 XOR，避免只写十进制差值 |
-| `core_sass` / `encoding_words` | 核心文本和两个原始 word |
-| `runtime_status` | success、compile reject、launch failure、trap、timeout |
-| `output_digest` | 完整输出或稳定 hash，并保存差异位置 |
-| `replicates` | 重复次数和是否稳定 |
-| `inferred_rule` | 可预测规则、适用条件和反例数 |
-
-只有同时具备单因素 pair、重复执行和零反例适用域，结论才升级为“确定性 descriptor 规则”；仅凭某一条正常执行样本只能标为观察结果。
-
-## 完整映射的完成标准
+## 静态 mapping 的完成标准
 
 | 层 | 当前状态 | 完成条件 |
 |---|---|---|
-| PTX grammar 与合法组合 | 已覆盖主要形态 | 阴性探针覆盖所有组合边界 |
+| PTX grammar 与合法组合 | 已覆盖主要形态 | 每类已建模 qualifier 与操作数约束都有最小阴性见证 |
 | 核心 SASS 文本选择 | 已形成主要零反例规则 | 新增形态进入自动回归，不靠人工例子 |
-| 外围 lowering | guard/issuer/identity producer/completion 已系统化 | 扩展非恒等 producer 和更多 issuer 模式 |
-| 核心机器编码 | 已隔离 `.2CTA`、`.ASHIFT`、`.A/B_KEEP`、B buffer、`.4X`、`.WS`，alias 已验证 | 继续分离 opcode、`A/B_REUSE`、predicate、kind/scale 隐式模式和寄存器槽位 bitfield |
-| descriptor runtime semantics | 尚未开始实机位域扫描 | 完成 `idesc`、SMEM descriptor、metadata、zero mask、block scale 的合法字段矩阵 |
-| 逆映射 | 已量化核心文本的可恢复率 | 合并核心编码、外围序列和 descriptor 值，输出唯一值或候选集合 |
+| 外围 lowering | guard、lane issuer、identity producer、completion 已系统化；生成器已加入更多 issuer 与非恒等 producer | 在 Thor 完整重跑后冻结新增 profile 的四优化级规则 |
+| 核心机器编码 | 已隔离主要 modifier、标准 kind、block opcode composite、REUSE、guard/enable predicate 全编号字段和五个 UR 槽位 | Thor 四优化级重跑验证 v4 定向探针；高位 scheduling/control 保持为独立编译器 codebook |
+| descriptor 操作数 | 已区分角色并恢复 A/B/D/aux/extra 槽位，idesc 相邻关系有压力探针 | 把 descriptor 内部内容保持为显式排除范围 |
+| 静态逆映射 | 已量化核心文本的可恢复率 | v4 生成正向规则和逆向候选集合并逐条回放 |
 
-因此，当前资料已经是一套较完整的“静态指令选择与外围 lowering 规则”，但还不是完整 Thor ISA 编码手册。真正剩余的核心工作是机器编码 bitfield 和 descriptor 运行时语义，而不是继续堆更多相似反汇编例子。
+因此，当前主要静态 opcode/modifier/predicate/UR 槽位已经从“观察变化”推进为可回放的编码断言。word 1 高位调度控制作为独立编译器字段记录 codebook，不伪装成 PTX 语义字段；新增 producer/issuer 和 v4 定向探针只需 Thor 四优化级完整重跑后冻结最终计数。

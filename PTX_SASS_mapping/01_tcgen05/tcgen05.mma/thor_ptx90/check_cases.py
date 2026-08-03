@@ -145,7 +145,7 @@ def main() -> None:
         [str(args.ptxas), "--version"], text=True, capture_output=True, check=True
     ).stdout
     report = {
-        "schema_version": "thor_tcgen05_mma_compile_report_v3",
+        "schema_version": "thor_tcgen05_mma_compile_report_v4",
         "mode": args.mode,
         "ptx_target": "sm_110a",
         "ptxas_path": str(args.ptxas),
@@ -176,7 +176,7 @@ def main() -> None:
             }
         }
         compact = {
-            "schema_version": "thor_tcgen05_mma_compile_summary_v3",
+            "schema_version": "thor_tcgen05_mma_compile_summary_v4",
             "validation_status": (
                 "PASS"
                 if not failures and sass_target_attribution["status"] == "COMPLETE"

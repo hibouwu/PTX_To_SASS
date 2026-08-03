@@ -126,6 +126,10 @@ first_occurrence_core_predication =
 
 因此不能写成“任意正 guard 必然使用 `@UPn`”，但现在可以根据上一节的四字段规则预测当前矩阵中的具体路径。极性决定 `@UPn`/`@!UPn` 或外围分支的取反方向，路径选择条件本身不随极性变化。
 
+## predicate 机器编码字段
+
+在具体核心操作数相同的 O3 pair 中，无核心 predicate→`@UP1` 有 232 对，word 0 稳定清除 `0x0000000000006000`；word 1 的高位差异随调度布局变化，不能并入 predicate selector。正负极性 `@UP1→@!UP1` 有 352 对，全部只在 word 0 置位 `0x0000000000008000`。v4 定向 microprobe 进一步产生 `@UP0..@UP6`：word 0 `[14:12]` 直接等于 UP 编号，值 7 表示无 guard，bit 15 表示取反；enable predicate 则独立使用 word 1 `[25:23]` 和 negate bit 26。
+
 ## 代表性覆盖口径
 
 本文按以下静态机制清单报告覆盖，不把有限生成矩阵换算成总体百分比：
@@ -135,7 +139,7 @@ first_occurrence_core_predication =
 - `UTCHMMA`/`UTCQMMA`/`UTCIMMA`/`UTCOMMA`、SS/TS、CTA group 1/2、普通/稀疏/WS/分块缩放等已生成形态。
 - O0/O1/O2/O3 的核心、完整序列、指令数、寄存器布局和活跃数差分。
 
-未覆盖的是实机上发散 warp 的动态执行行为、性能代价，以及编译器选择直接谓词化或分支路径的完整成本模型。
+新增 compound issuer 已覆盖 lane predicate 与参数 predicate 的合取，定向活跃压力覆盖全部可编码 UP 编号。尚未穷举任意嵌套 CFG 和任意布尔表达式的编译器启发式；它们属于外围 lowering 开放集合，不作为核心 predicate bitfield 的未完成项。
 
 ## 证据
 

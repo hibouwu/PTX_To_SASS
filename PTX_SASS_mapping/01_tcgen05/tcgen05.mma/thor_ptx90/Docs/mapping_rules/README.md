@@ -32,7 +32,8 @@
 | `.ashift` 如何映射，什么组合非法？ | [`ashift.md`](ashift.md) |
 | 多个修饰符同时存在时怎样解释？ | [`interactions.md`](interactions.md) |
 | 这些规则能否用于从核心 SASS 反推 PTX，哪些字段会多对一？ | [`reverse_mapping_rules.md`](reverse_mapping_rules.md) |
-| descriptor 值、核心机器编码位和完整逆向还缺什么？ | [`descriptor_and_encoding.md`](descriptor_and_encoding.md) |
+| descriptor 边界、核心机器编码 bitfield 和可回放逆向规则是什么？ | [`descriptor_and_encoding.md`](descriptor_and_encoding.md)、[生成 canonical JSON](../../results/rule-mining/canonical_mapping_rules.json) |
+| Thor 主机重跑是否复现了规则，哪些差异不稳定？ | [`reproducibility.md`](reproducibility.md) |
 
 完整函数级 PTX/SASS 对照、上下文和寄存器分析见 [`../tcgen05_mma_PTX到SASS映射规则报告.md`](../tcgen05_mma_PTX到SASS映射规则报告.md)。
 
@@ -113,7 +114,7 @@ collector
 
 内存一致性不属于单个 MMA 修饰符的核心操作码映射。它由 commit、mbarrier、tcgen05 fence、LD/ST wait、scope 和资源生命周期共同构成，见 [`memory_consistency.md`](memory_consistency.md)。
 
-descriptor 的运行时值也不属于核心 MMA encoding word 本身。`idesc`、SMEM descriptor、metadata、zero-column-mask 和 block-scale 地址的可见槽位与内部位域必须分层研究，见 [`descriptor_and_encoding.md`](descriptor_and_encoding.md)。
+descriptor 的内部内容不属于核心 MMA encoding word 本身。`idesc`、SMEM descriptor、metadata、zero-column-mask 和 block-scale 地址的可见寄存器槽位与不透明参数契约必须分层，见 [`descriptor_and_encoding.md`](descriptor_and_encoding.md)。
 
 ## 外围上下文规则速览
 
@@ -131,7 +132,7 @@ descriptor 的运行时值也不属于核心 MMA encoding word 本身。`idesc`�
 | 确定性规则 | 当前适用样本中零反例，有单因素或结构性证据 |
 | 条件规则 | 只在特定变体、操作数来源或优化级成立 |
 | 观察结果 | 数据中稳定出现，但尚不能归因到独立编码字段 |
-| 未覆盖 | 描述符（descriptor）位型或实机语义尚未冻结和运行 |
+| 未覆盖 | 当前静态样本尚未封闭枚举的语法、上下文或机器编码字段 |
 
 单因素证据指比较时只改变一个实验维度。描述符是描述数据地址、布局和解释方式的编码值，不是矩阵数据本身。
 
@@ -151,6 +152,8 @@ descriptor 的运行时值也不属于核心 MMA encoding word 本身。`idesc`�
 
 ## 数据规模
 
+下表是当前已发布 Thor 结果；v4 最终矩阵增加定向 predicate/idesc microprobe、扩展 producer/issuer 和 30 个 qualifier/操作数契约阴性探针，Thor 重跑后由生成报告统一替换计数。
+
 | 数据层 | 数量 |
 |---|---|
 | semantic form | 896 |
@@ -161,3 +164,7 @@ descriptor 的运行时值也不属于核心 MMA encoding word 本身。`idesc`�
 | 上下文配对比较 | 32,256 |
 
 归属配对指把 PTX 出现位置与对应的核心 SASS 指令一一关联。
+
+## 复现状态
+
+完整集合已经在 NVIDIA Thor 主机上用另一份二进制 SHA-256 的 CUDA 13.0 `ptxas`/`nvdisasm` 重跑。52,736 条核心 attribution、32,256 个上下文差分、全部规则挖掘结果和 196 个协议有序检查均与原完整重跑一致；仅 28 个 O0 文件出现无语义自搬运 `MOV R0, R0`/`MOV R2, R2` 的相邻顺序交换。比较方法、输入摘要和适用边界见 [`reproducibility.md`](reproducibility.md)。

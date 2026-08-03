@@ -335,10 +335,10 @@ UTCHMMA.WS ..., idesc[UR11], UR12, UP0;
 | CTA group 限制 | WS 固定 group 1 |
 | 指令数、外围、活跃寄存器和编码四层影响 | 三组统计表 |
 
-四个变体及其当前主要操作数契约和组合边界均有真实见证。尚未覆盖的是稀疏/WS 的实机数值与逐位编码解释，因此不声明总体百分比。
+四个变体及其主要操作数契约、组合边界、隐式 kind/scale alias 和寄存器槽位均有真实见证。v4 还把 dense/sparse 共享规范核心 signature 的 pair 按 semantic payload 重新比较：发生碰撞时 `.sp` 没有独立可恢复的核心 opcode bit，必须依靠 metadata 操作数契约或外围 producer 返回 dense/sparse 候选集合。
 
 ## 证据与边界
 
 - `.WS` 与变体的对应关系在 52,736 条目标出现位置中反例为 0。
 - 所有目标助记符中均未观察到 `.SP`。
-- 当前结果能确认 `.sp` 影响操作数、编码和寄存器，尚未逐位解释稀疏编码。
+- `.sp` 会改变 PTX 操作数契约和外围 producer，但在碰撞的核心 signature 中没有独立可恢复 bit；这是一条经配对验证的多对一规则，不再把它描述为未知 opcode 位。

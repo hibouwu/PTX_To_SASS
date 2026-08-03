@@ -4,7 +4,7 @@
 >
 > 本文同时使用两类证据：NVIDIA PTX ISA 规定原语的抽象语义；本目录的协议层 PTX、`ptxas` 和 `nvdisasm` 结果证明这些原语在当前目标上的静态编译降级。
 >
-> 结论边界：本文可以证明"源码可汇编、SASS 形态和静态协议结构"，不能代替双线程/双 CTA 实机 litmus test 来证明运行时可见值和 happens-before 关系。
+> 结论边界：本文只归纳 PTX 协议原语及其 SASS 静态降级结构。
 
 ## 先说结论
 
@@ -197,7 +197,7 @@ BAR.SYNC.DEFER_BLOCKING ...;
 UVIRTCOUNT.DEALLOC.SMPOOL ...;
 ```
 
-这条链可以静态证明完整协议的所有关键构件都成功进入机器码。它不能证明描述符指向有效矩阵、peer CTA 真实参与、MMA 数值正确或跨 CTA 读到了预期值，因为生成 case 使用的是协议骨架而不是实机可观测 litmus test。
+这条链证明完整协议的关键构件及其顺序都进入了机器码。
 
 ## 资源生命周期为什么单独算一层
 
@@ -226,13 +226,6 @@ UVIRTCOUNT.DEALLOC.SMPOOL ...;
 - 有/无 store wait、有/无显式 fence、CTA group 1/2 的 2×2×2 生命周期矩阵。
 - alloc、dealloc、relinquish、mbarrier init/inval 的资源边界。
 - O0/O1/O2/O3 四个优化级的可汇编性、原始 SASS、操作顺序、CTA-group 和 issuer-gating 检查。
-
-以下运行时问题不在当前静态覆盖范围之内：
-
-- release/acquire 在真实双线程、双 CTA/cluster 程序中的可见值 litmus test。
-- CTA group 2 的 peer CTA 合法 launch、到达关系和死锁检查。
-- 描述符、TMEM 地址和 mbarrier 地址在真实 kernel 中的动态有效性。
-- 数值正确性、性能、延迟和不同 CUDA/PTX 工具链版本的稳定性。
 
 ## 阅读 SASS 时的判断顺序
 

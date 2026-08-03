@@ -457,6 +457,7 @@ def build_comparisons(
 
     missing = []
     comparisons = []
+    design_treatment_pair_count = 0
     for semantic_form_id, source_variant_id in design_keys:
         baseline_manifest = manifest_by_design_profile.get(
             (semantic_form_id, source_variant_id, baseline_profile)
@@ -470,19 +471,20 @@ def build_comparisons(
                 }
             )
             continue
-        for treatment_profile in treatment_profiles:
+        applicable_treatments = sorted(
+            row["context_profile_label"]
+            for row in manifest_rows
+            if row["semantic_form_id"] == semantic_form_id
+            and row["source_variant_id"] == source_variant_id
+            and row["context_profile_label"] != baseline_profile
+        )
+        design_treatment_pair_count += len(applicable_treatments)
+        for treatment_profile in applicable_treatments:
             treatment_manifest = manifest_by_design_profile.get(
                 (semantic_form_id, source_variant_id, treatment_profile)
             )
             if treatment_manifest is None:
-                missing.append(
-                    {
-                        "semantic_form_id": semantic_form_id,
-                        "source_variant_id": source_variant_id,
-                        "profile": treatment_profile,
-                    }
-                )
-                continue
+                raise AssertionError("applicable treatment index is inconsistent")
             changed_groups = changed_top_level_groups(
                 baseline_manifest["static_context_assignment"],
                 treatment_manifest["static_context_assignment"],
@@ -691,6 +693,7 @@ def build_comparisons(
         "profiles": profiles,
         "treatment_profiles": treatment_profiles,
         "design_key_count": len(design_keys),
+        "design_treatment_pair_count": design_treatment_pair_count,
         "missing": missing,
     }
 
@@ -866,6 +869,21 @@ def write_markdown(
             "guard_negative": "使用负 guard。",
             "guard_positive": "使用正 guard。",
             "lane0_issuer": "限制 lane 0 为发射线程。",
+            "lane31_issuer": "限制 lane 31 为发射线程。",
+            "dynamic_lane_issuer": "由 kernel 参数选择发射 lane。",
+            "thread0_issuer": "限制 CTA thread 0 为发射线程。",
+            "compound_predicated_issuer": "用 lane 0 与参数谓词的合取直接保护目标指令。",
+            "nonidentity_producers": "用参数 delta 构造不能被消除的算术 producer。",
+            "branched_producers": "在条件基本块中选择直接参数或 delta 派生 producer。",
+            "global_load_producers": "从 global-memory load 生成全部目标操作数。",
+            "predicate_index_up0": "释放 enable 的 UP0 后定向观察核心 guard 的 UP0 编码。",
+            "predicate_pressure_1": "用统一谓词活跃压力定向观察核心 guard 的 UP1 编码。",
+            "predicate_pressure_2": "用统一谓词活跃压力定向观察核心 guard 的 UP2 编码。",
+            "predicate_pressure_3": "用统一谓词活跃压力定向观察核心 guard 的 UP3 编码。",
+            "predicate_pressure_4": "用统一谓词活跃压力定向观察核心 guard 的 UP4 编码。",
+            "predicate_pressure_5": "用统一谓词活跃压力定向观察核心 guard 的 UP5 编码。",
+            "predicate_pressure_6": "用统一谓词活跃压力定向观察核心 guard 的 UP6 编码。",
+            "enable_index_sweep": "七条代表性核心指令分别使用七个同时活跃的 enable 谓词，以恢复 enable-index 字段。",
         }
         lines.append(f"- `{profile}`：改变 `{'; '.join(group_sets)}` 上下文组。{explanations.get(profile, '其中存在联合处理，只能解释为联合效应。' if joint_count else '单独改变一个顶层上下文组。')}")
     lines.extend(
@@ -880,7 +898,7 @@ def write_markdown(
             "- `类别变化`：区分普通寄存器与统一寄存器以及谓词路径，也区分 RZ、URZ、PT、UPT 等特殊寄存器。",
             "- 活跃寄存器数来自 `nvdisasm --life-range-mode count` 的静态数据流结果。kernel 引用过的寄存器集合不等于硬件分配上限。",
             "- `LDL*`/`STL*` 被记为本地内存指令指标，能提示潜在的寄存器溢出（spill），但仅凭指令名不能断言一定由溢出造成。",
-            "- 本报告是静态代码生成差分，不是运行时语义或性能结论。",
+            "- 本报告只描述静态 PTX → SASS 代码生成差分。",
             "",
         ]
     )
@@ -945,8 +963,7 @@ def main() -> None:
             f"see {missing_path}"
         )
     expected_comparisons = (
-        design_metadata["design_key_count"]
-        * len(design_metadata["treatment_profiles"])
+        design_metadata["design_treatment_pair_count"]
         * len(requested_optimizations)
     )
     if len(comparisons) != expected_comparisons:
@@ -964,7 +981,7 @@ def main() -> None:
     write_csv(summary_path, summaries)
     report_path = output_dir / "context_report.md"
     metadata = {
-        "schema_version": "thor_tcgen05_context_comparison_v2",
+        "schema_version": "thor_tcgen05_context_comparison_v3",
         "status": "COMPLETE",
         "normalization_schema": NORMALIZATION_SCHEMA,
         "baseline_profile": args.baseline_profile,
@@ -972,6 +989,9 @@ def main() -> None:
         "treatment_profiles": design_metadata["treatment_profiles"],
         "optimizations": list(requested_optimizations),
         "design_key_count": design_metadata["design_key_count"],
+        "design_treatment_pair_count": design_metadata[
+            "design_treatment_pair_count"
+        ],
         "comparison_count": len(comparisons),
         "expected_comparison_count": expected_comparisons,
         "input_manifest_sha256": file_sha256(manifest_path),

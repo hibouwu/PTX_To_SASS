@@ -63,12 +63,6 @@ UTCHMMA.2CTA.ASHIFT
 
 因此，不存在合法的 `tcgen05.mma.ws.cta_group::2 ...`。这是变体与 CTA group 的适用性约束，不是测试覆盖不足。
 
-## 静态验证与运行时验证要分开
-
-当前结果证明 `.cta_group::2` 能通过 `ptxas` 并稳定生成 `.2CTA`。它没有证明两个 CTA 已在 Thor 上通过真实集群启动（cluster launch）正确协作。
-
-集群启动是把多个 CTA 作为一个协作集群启动的运行方式。真实验证还需要 peer CTA、合法 TMEM 生命周期和同步协议。
-
 ## CTA group 是否改变外围 SASS
 
 CTA group 的核心和完成协议存在两条直接映射：
@@ -430,7 +424,7 @@ word 1 XOR = 0x0000000000200000
 | completion 的 `UTCBAR→UTCBAR.2CTA` | 对比 4 |
 | 操作码/变体/修饰符组合与活跃寄存器变化 | 对比 5、6 |
 
-按这六类主要静态机制计为 6/6。没有逐条展示所有 kind、collector 和调度填充实例；真实双 CTA 集群协作仍属于运行时验证，因此不把静态清单外推成总体百分比。
+按这六类主要静态机制计为 6/6。没有逐条展示所有 kind、collector 和调度填充实例，因此不把这组代表性清单外推成所有精确 semantic form 的总体百分比。
 
 ## 统计总计
 

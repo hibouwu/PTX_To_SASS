@@ -1,11 +1,15 @@
-# 发射线程：lane 0 issuer 如何改变 SASS
+# 发射线程：lane、CTA thread 与直接谓词 issuer 如何改变 SASS
 
 ## 先说结论
 
-发射线程（issuer）描述由哪个线程执行目标 `tcgen05.mma`。当前实验比较两种上下文：
+发射线程（issuer）描述由哪个线程执行目标 `tcgen05.mma`。已完成的 Thor 基线比较当前线程与 lane-0 branch；新增矩阵进一步加入 lane 31、参数选择 lane、CTA thread 0 和复合直接谓词：
 
 - 当前执行到目标位置的线程直接发射
 - 仅 lane 0 通过分支到达目标位置
+- 仅 lane 31 通过分支到达目标位置
+- kernel 参数指定的 lane 通过分支到达目标位置
+- 仅 `%tid.x==0` 的 CTA thread 通过分支到达目标位置
+- lane-0 条件与参数 guard 合取后直接谓词化目标
 
 限制 lane 0 为发射线程不改变核心 MMA 的助记符、修饰符或规范操作数结构，但会增加 lane ID 读取、谓词比较和控制流，并系统性改变核心位置与整个 kernel 的寄存器活跃状态。
 
@@ -124,18 +128,28 @@ renumber_only =
 
 O0 的核心位置活跃数没有变化，但完整 kernel 序列全部变化、1,024 组指令数变化、700 组峰值活跃数变化。这反映 O0 的冗长编译降级使新增发射线程计算尚未以 O1–O3 的方式重排到核心附近。
 
+## 扩展 issuer 矩阵
+
+新增 profile 对全部 1,152 个设计生成单因素配对：
+
+| profile | issuer producer | 目标保护方式 | 本地 CUDA 13 O3 预验证 |
+|---|---|---|---|
+| `lane31_issuer` | `%laneid == 31` | 外围 branch | 核心助记符/规范操作 0 变化；168 纯重编号、984 稳定 |
+| `dynamic_lane_issuer` | `%laneid == p_issuer_lane` | 外围 branch | 核心助记符/规范操作 0 变化；168 纯重编号、984 稳定 |
+| `thread0_issuer` | `%tid.x == 0` | 外围 branch | 核心助记符/规范操作 0 变化；168 纯重编号、984 稳定 |
+| `compound_predicated_issuer` | `(%laneid==0) && (p_guard!=0)` | 目标 `@predicate` 或编译器生成的外围控制流 | 双 occurrence 的 496 个设计只谓词化第一条；单 occurrence 的 656 个设计走外围控制流 |
+
+前三种 branch issuer 与 lane 0 的 168/984 精确分类逐设计一致，跨 profile mismatch=0。compound 形态的零反例规则是 `step_count==2 → (true,false)`，否则核心 predicate 形状为 `(false)`。这些 O3 预验证已经通过全部 270 个 expanded shard 的编译和 24,720 条 occurrence 归属；Thor 上的 O0/O1/O2/O3 完整回归尚待执行，最终结果会由 `analyze_mapping_rules.py` 自动写入 [`reverse_mapping_rules.md`](reverse_mapping_rules.md)。
+
 ## 与 guard、CTA group 和 completion 的边界
 
 - 发射线程决定谁到达并发射目标；guard 决定到达目标后的这条指令是否执行。两者都能生成分支，但语义来源不同。
 - `.cta_group::1/2` 决定一次 tcgen05 操作触及一个还是两个 CTA 的 TMEM，不等于"由几个 lane 发射"。
 - completion 决定已发出的异步工作如何提交和等待，不决定发射者身份。
-- 当前 case 只做静态汇编和反汇编，没有证明任意 lane 选择都满足真实 kernel 的 tcgen05 参与约束。
 
 ## 代表性覆盖口径
 
-本文覆盖当前发射线程清单中的两种静态配置：当前线程与 lane-0 分支；证据包含全部 1,152 个设计、四优化级、所有已生成操作码/变体/来源/CTA group 组合，以及核心、完整序列、寄存器和活跃数差分。未枚举真实 CTA-pair 发射者和运行时调度，因此不声明总体百分比。
-
-未覆盖的是其他单 lane、warp leader 动态选举、多 warp/warpgroup 发射协议、实机收敛性和性能。不能从 lane-0 静态 case 推导这些未测试模式。
+已完成 Thor 四优化级证据覆盖当前线程与 lane-0 branch；新增生成矩阵覆盖 lane 31、参数选择 lane、CTA thread 0 和复合直接谓词，并已完成全矩阵 O3 预验证。尚未枚举的是动态 leader election、多个候选 issuer、嵌套 issuer/guard 和多 warp/warpgroup 控制流，因此不声明总体百分比。
 
 ## 证据
 

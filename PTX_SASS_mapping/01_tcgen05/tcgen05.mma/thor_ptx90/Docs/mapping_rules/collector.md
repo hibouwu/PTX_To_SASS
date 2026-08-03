@@ -141,7 +141,7 @@ O3 `runtime_zero` 中，保留具体寄存器并移除单个被测 modifier 后�
 | B0→B2，即增加 `.BUFFER2` | 160 | 288 | `0x0000000000000000` | `0x0000000000010000` |
 | B0→B3，即增加 `.BUFFER3` | 160 | 288 | `0x0000000000000000` | `0x0000000000018000` |
 
-B buffer 因而是 word 1 的两位字段：B0=`0x00000`、B1=`0x08000`、B2=`0x10000`、B3=`0x18000`。`A/B_REUSE` 的配对都包含一个稳定公共候选位，但高位调度控制字段也随序列位置变化；在未进一步冻结调度控制前，本页不把公共位升级为独立确定性字段。完整结果见[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)，方法边界见 [`descriptor_and_encoding.md`](descriptor_and_encoding.md)。
+B buffer 因而是 word 1 的两位字段：B0=`0x00000`、B1=`0x08000`、B2=`0x10000`、B3=`0x18000`。对 112 个 A fill→use pair 和 128 个 B fill→use pair 求 set/clear 方向交集后，`.A_REUSE` 稳定置位 word 1 的 `0x0000000000400000`，`.B_REUSE` 稳定置位 `0x0000000000040000`；两类 pair 同时出现的 word 1 高位变化 mask `0x01f2000000000000` 属于随序列位置变化的调度/控制字段，不并入 REUSE payload。完整结果见[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)，方法边界见 [`descriptor_and_encoding.md`](descriptor_and_encoding.md)。
 
 ## A collector 的跨来源实证
 
@@ -184,7 +184,7 @@ UTCHMMA.2CTA.ASHIFT tmem[UR7].A_REUSE, gdesc[UR8], ...;
 
 ## 不能从本结果推出什么
 
-这些结果能证明 PTX collector 状态和反汇编文本之间的稳定映射，但没有测量 collector 的容量、驻留时间、冲突代价或性能收益。它们需要实机性能实验。
+这些结果建立的是 PTX collector 状态到 SASS modifier、buffer 字段和编码位的静态映射。
 
 ## 证据
 

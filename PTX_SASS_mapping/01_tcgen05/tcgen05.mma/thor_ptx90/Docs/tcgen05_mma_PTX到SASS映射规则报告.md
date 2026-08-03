@@ -4,7 +4,7 @@
 >
 > 工具环境：CUDA 13.0，汇编器 `ptxas` V13.0.88，反汇编器 `nvdisasm` V13.0.85
 >
-> 报告性质：静态编译与反汇编结果的规则总结，不包含在 GPU 实机上运行的数值验证
+> 报告性质：静态 PTX → SASS 编译与反汇编映射规则
 >
 > 数据来源：`thor_ptx90/results/` 目录中的生成清单、编译报告、SASS 归属记录和上下文差分摘要
 
@@ -298,14 +298,14 @@ B collector 用于权重驻留形式：
 在 O1、O2、O3 编译优化级下，编译器把已知常量折叠进核心 SASS。例如：
 
 ```text
-运行时 enable:
+动态参数 enable:
 ..., UP0
 
 静态 false:
 ..., !UPT
 ```
 
-`UPT` 是恒真的统一谓词，`!UPT` 是对它取反，因此恒假。编译器把运行时表达式替换为编译期常量的行为叫常量折叠。
+`UPT` 是恒真的统一谓词，`!UPT` 是对它取反，因此恒假。编译器把动态表达式替换为编译期常量的行为叫常量折叠。
 
 O0 到 O3 是四个编译优化级：O0 尽量少优化以便观察原始降级过程，O1 启用基础优化，O2 启用更完整的优化，O3 是最高常用优化级。
 
@@ -467,9 +467,9 @@ completion
 - A、B、D 的精确数据类型组合；
 - row-major 或 column-major 方向（major 指数据以行还是以列为主要连续方向）；
 - SMEM 描述符的步长（stride，相邻行或列在地址上的距离）和地址重排（swizzle，为改善存储访问分布而做的地址重排）；
-- descriptor 内部字段以及尚未隔离 modifier 对应的精确机器编码位。`.2CTA`、`.ASHIFT`、`.A/B_KEEP`、`.BUFFER1/2/3`、`.4X` 和 `.WS` 已有严格同寄存器文本配对的固定 mask；完整 witness 见映射规则索引中的逆向报告。
+- descriptor 内部字段。它们在本研究中是显式排除的不透明参数；`.2CTA`、`.ASHIFT`、`.A/B_KEEP`、`.A/B_REUSE`、`.BUFFER1/2/3`、`.4X`、`.WS`、标准 kind、guard/enable predicate 和五个 UR 槽位均已有编码断言，完整 witness 见映射规则索引中的逆向报告。
 
-当前用例把这些描述符当作运行时参数，可以证明 `ptxas` 接受语法并生成 SASS，但不能反推出描述符内每个字段的独立映射。
+当前用例把这些描述符当作不透明 kernel 参数，可以证明 `ptxas` 接受语法并生成 SASS，但不能反推出描述符内部字段；内部字段不在本项目的静态映射范围内。
 
 ## 这份报告证明了什么，又没有证明什么
 
@@ -480,17 +480,9 @@ completion
 - 上述 kind、CTA group、TS/SS、WS、ASHIFT 和 collector 映射在当前样本中稳定，反例数为 0。
 - 上下文对核心操作、寄存器和完整 kernel 的影响可以被配对测量。
 - 协议层的 49 个静态用例（41 个独立协议原语和 8 个完整生命周期）在 O0/O1/O2/O3 全部通过编译与有序 SASS 检查。
-- 十一个已知非法组合得到目标行上的预期拒绝。
+- 当前已发布 Thor 结果的十一个已知非法组合得到目标行上的预期拒绝；v4 已扩展为 30 类 qualifier、collector、CTA group、kind/scale、变体和缺失/多余操作数边界，本地 30/30 通过，等待 Thor 最终重跑。
 
-尚未证明：
-
-- 这些原始描述符在 Thor 实机上代表合法矩阵布局。
-- 运算得到正确数值。
-- `.cta_group::2` 的两个 CTA 在真实 cluster launch 中正确协作。
-- 哪种写法性能更好。
-- 所有可能的描述符位型都已覆盖。
-
-静态编译只说明工具链能生成目标机器码。实机语义验证还需要合法描述符、真实 TMEM 分配、输入数据、结果对照和同步检查。
+v4 已把 opcode composite、`A/B_REUSE`、guard/enable predicate 全编号、隐式 kind/scale、五个寄存器槽位、idesc 相邻配对压力见证、非恒等 producer 和更多 issuer lowering 纳入自动断言，并生成可回放的正向规则与逆向候选集合。当前只差 Thor 上的 O0/O1/O2/O3 最终重跑；descriptor 值继续视为不透明寄存器操作数，word 1 高位 scheduling/control 作为编译器 codebook 单独记录。
 
 ## 实验规模和证据来源
 
@@ -507,7 +499,7 @@ completion
 | 上下文配对比较 | 32,256 / 32,256 完成 |
 | 协议层编译 | 196 / 196 通过 |
 | 全部协议 case 有序 SASS 检查 | 196 / 196 通过 |
-| 阴性探针 | 11 / 11 通过 |
+| 阴性探针 | 当前 Thor 11/11；v4 本地 30/30 |
 
 逻辑设计点是 semantic form 与适用静态上下文组合后的逻辑实验点。归属配对（attribution）是把 PTX 中的目标出现位置与 SASS 中对应核心指令配对。
 
@@ -997,7 +989,7 @@ use  → .B_REUSE.B_KEEP.BUFFER2
 4. 看是否 `.ashift`，决定是否添加 `.ASHIFT`。
 5. 看 A 来源，决定第一个源操作数是 `gdesc` 还是 `tmem`。
 6. 看 collector，决定 `KEEP`、`REUSE` 和 `BUFFERn`。
-7. 看 enable 和 guard，判断谓词是运行时寄存器、常量 `UPT`/`!UPT`，还是指令前的 `@UPn`。
+7. 看 enable 和 guard，判断谓词是动态参数寄存器、常量 `UPT`/`!UPT`，还是指令前的 `@UPn`。
 8. 最后查看完整 kernel，判断发射线程、producer 和 completion 带来的外围序列。
 
-这套顺序能够预测当前实验已经覆盖的核心映射，但不能替代对 `idesc` 位型和 Thor 实机运行结果的后续验证。
+这套顺序能够预测当前实验覆盖的核心映射；无法从核心机器码唯一恢复的 source alias、dense/sparse 和隐式 kind/scale 形态必须返回候选集合，不能伪造唯一 PTX。

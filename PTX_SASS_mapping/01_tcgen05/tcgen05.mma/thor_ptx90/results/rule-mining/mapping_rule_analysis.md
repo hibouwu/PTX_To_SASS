@@ -49,6 +49,10 @@ renumber_only =
 
 这里的预测目标只是在 O3 核心 MMA 上是否发生纯物理寄存器重编号；lane-0 issuer 对所有设计的完整控制流和活跃寄存器仍有影响。
 
+## 扩展 issuer 与 producer lowering
+
+生成器已经加入扩展 issuer/producer profile，但当前 attribution 尚未包含：`branched_producers, compound_predicated_issuer, dynamic_lane_issuer, global_load_producers, lane31_issuer, nonidentity_producers, thread0_issuer`。运行完整 `check_all.sh` 后本节会自动生成分类、公式和反例计数。
+
 ## PTX source alias 的编码等价性
 
 在同一 semantic form 内比较 O3 `runtime_zero` 的 source spelling，共有 384 对。384/384 对生成完全相同的具体核心 SASS 操作文本，384/384 对连两个 64-bit encoding word 也完全相同。
@@ -77,7 +81,78 @@ renumber_only =
 | `非 4X → 4X` / `.4X` | 40 | 352 | `0x4000000000000000` | `0x0000000000000000` | 清位 |
 | `非 WS → WS` / `.WS` | 16 | 64 | `0x0000000000000000` | `0x0000000000080000` | 置位 |
 
-候选配对会因等价 source spelling 和同组重复实例形成笛卡尔积，因此表中把独立 witness 组作为证据规模，把候选配对仅作为一致性重复数；每组的 witness ID、左右 PTX、SASS、encoding、置位 mask 和清位 mask 均保存在生成 JSON。所有行都只有一个稳定 XOR mask，其中 `.4X` 是清位，其余当前字段是置位或表中注明的方向；B buffer 的 `B0/B1/B2/B3` 对应 word 1 的两位字段 `0x0000/0x8000/0x10000/0x18000`。这里描述的是当前 Thor 工具链输出，不把 bit 编号外推到其他架构；`A/B_REUSE` 配对还会改变高位调度控制字段，尚未列入已隔离规则。
+候选配对会因等价 source spelling 和同组重复实例形成笛卡尔积，因此表中把独立 witness 组作为证据规模，把候选配对仅作为一致性重复数；每组的 witness ID、左右 PTX、SASS、encoding、置位 mask 和清位 mask 均保存在生成 JSON。所有行都只有一个稳定 XOR mask，其中 `.4X` 是清位，其余当前字段是置位或表中注明的方向；B buffer 的 `B0/B1/B2/B3` 对应 word 1 的两位字段 `0x0000/0x8000/0x10000/0x18000`。这里描述的是当前 Thor 工具链输出，不把 bit 编号外推到其他架构。`A/B_REUSE` 和 predicate 因伴随调度控制变化而在下一节单独分解。
+
+## opcode、kind 与隐式 scale 编码
+
+标准非 block-scale kind 在具体操作数完全相同的 O3 pair 上形成 word 1 的两位字段；每一行均只有一个 XOR mask：
+
+| kind 变化 | witness 组 | pair | word 0 XOR | word 1 XOR | 方向 |
+|---|---:|---:|---:|---:|---|
+| `f16 → tf32` | 272 | 272 | `0x0000000000000000` | `0x0000000000000000` | 编码相同 |
+| `f16 → f8f6f4` | 272 | 272 | `0x0000000000000000` | `0x0000000000000300` | 置位 |
+| `f16 → i8` | 272 | 272 | `0x0000000000000000` | `0x0000000000000100` | 置位 |
+| `f8f6f4 → i8` | 272 | 272 | `0x0000000000000000` | `0x0000000000000200` | 清位 |
+
+因此 `f16` 与 `tf32` 在当前动态 `idesc` 契约下是核心机器编码 alias；`f16/tf32=0b00`、`i8=0b01`、`f8f6f4=0b11` 对应 word 1 的 `0x300` 两位字段。`UTCOMMA` 相对 `UTCQMMA` 还组合使用 word 0 的 opcode 位，不能只看这两位判断全部 block-scale 家族。
+
+在 block-scale 且具体寄存器完全相同的 pair 中，`UTCOMMA → UTCQMMA` 的 composite opcode 变化还取决于 A 来源：
+
+| 家族变化 | A 来源 | witness 组 | pair | word 0 XOR | word 1 XOR |
+|---|---|---:|---:|---:|---:|
+| `UTCOMMA → UTCQMMA` | `smem_descriptor` | 28 | 168 | `0xc000000000000800` | `0x0000000000000300` |
+| `UTCOMMA → UTCQMMA` | `tmem_address` | 28 | 168 | `0xc000000000000600` | `0x0000000000000300` |
+
+word 0 的高两位、低 opcode 子字段和 word 1 的 kind 两位共同决定这一家族转换；SS 与 TS 的低 opcode mask 不同，所以不能把 `UTCOMMA/UTCQMMA` 简化成单一 bit。
+
+全矩阵按 SASS family、A 来源、kind 和 PTX variant 分组后的 opcode composite 值保存在生成 JSON 的 `extended_encoding.opcode_layout.observed_rows`；字段模型固定为 word 0 `[63:56] + [11:0]`、word 1 `[9:8]`，guard 使用 word 0 `[15:12]` 的独立区域。
+
+以下 block-scale 形态在所有严格配对中连具体 SASS 操作和两个 encoding word 都相同，说明 kind/scale 的部分区别没有独立进入核心机器码：
+
+| 隐式 kind/scale alias | 独立 witness 组 | pair | 操作相同 | 编码相同 |
+|---|---:|---:|---:|---:|
+| `mxf4 block32 ↔ 2X` | 56 | 112 | 112 | 112 |
+| `mxf4 ↔ mxf4nvf4 at block32` | 56 | 112 | 112 | 112 |
+| `mxf4 block32 ↔ mxf4nvf4 2X` | 56 | 112 | 112 | 112 |
+| `mxf4nvf4 block16 ↔ 4X` | 56 | 56 | 56 | 56 |
+
+## `A/B_REUSE` 与 predicate 编码
+
+`fill → use` 的第二条核心指令同时改变 REUSE payload 和高位调度/控制字段。对全部 pair 求方向交集后，可以把稳定 modifier 位与可变控制位分开：
+
+| 变化 | pair | 稳定置位 word 0 | 稳定置位 word 1 | 稳定清位 word 0 | 可变 word 1 |
+|---|---:|---:|---:|---:|---:|
+| `.A_REUSE` | 112 | `0x0000000000000000` | `0x0000000000400000` | `0x0000000000000000` | `0x01f2000000000000` |
+| `.B_REUSE` | 128 | `0x0000000000000000` | `0x0000000000040000` | `0x0000000000000000` | `0x01f2000000000000` |
+
+`A_REUSE` 的稳定 payload 是 word 1 置位 `0x0000000000400000`，`B_REUSE` 是 word 1 置位 `0x0000000000040000`；两者共同出现的 word 1 高位变化属于调度/控制字段，不能并入 REUSE modifier mask。
+
+| predicate 配对 | pair | 稳定变化 | 其他变化 |
+|---|---:|---|---|
+| 无核心 predicate → `@UP1` | 232 | word 0 清除 `0x0000000000006000` | word 1 高位随调度布局变化 `0x01ee000000000000` |
+| `@UP1 → @!UP1` | 352 | word 0 置位 `0x0000000000008000` | 无 |
+
+当前 attribution 尚未包含 v4 定向谓词探针；完成 Thor 重跑后，本节会自动生成 `UP0..UP6` guard/enable selector 与哨兵值的逐值断言。
+
+## 核心寄存器槽位 bitfield
+
+把全部 O0/O1/O2/O3 attribution 中反汇编显示的 UR 编号直接回放到 encoding word，得到以下五个 8-bit 槽位，所有检查均为零 mismatch：
+
+| SASS 操作数角色 | encoding 字段 | occurrence | 观测 UR 值 | mismatch |
+|---|---|---:|---|---:|
+| `source_a` | word 0 `[31:24]` | 52736 | `4,5,6,7,8,11,13,16,17` | 0 |
+| `source_b` | word 0 `[39:32]` | 52736 | `4,6,8,10,12,16,18` | 0 |
+| `destination` | word 1 `[7:0]` | 52736 | `4,6,10,12,16,18` | 0 |
+| `auxiliary_mask_or_metadata` | word 0 `[47:40]` | 52736 | `4,6,8,10,14,16,18` | 0 |
+| `extra_scale_or_zero_mask` | word 0 `[55:48]` | 37088 | `6,8,10,12` | 0 |
+
+`idesc[URn]` 在 52736 条 occurrence 中始终满足 `idesc_ur = auxiliary_ur XOR 1`，mismatch=0；当前分配把 auxiliary/idesc 作为偶/奇相邻对，尚未观察到独立 idesc 槽位。extra 槽位另有 240 个只改变该 UR 的上下文 pair 验证，mismatch=0。
+
+当前已发布 attribution 中的 enable predicate 主要为 `UP0`，共 42848 条动态谓词 occurrence；v4 定向 sweep 将在 Thor 重跑后把 word 1 `[25:23]` 的逐编号证据写入本报告。
+
+## 可回放的正向与逆向规则
+
+分析器已经生成 [`canonical_mapping_rules.json`](../../results/rule-mining/canonical_mapping_rules.json)：包含 896 条 semantic-form→核心 SASS/semantic-payload 正向规则和 300 条 SASS/semantic-payload→候选 semantic-form 逆向规则；其中 300 条逆向规则必须返回候选集合。正向→逆向逐条回放 mismatch=0。
 
 ## 从核心 SASS 反推 PTX 字段
 

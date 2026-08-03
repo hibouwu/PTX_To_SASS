@@ -44,4 +44,4 @@ python3 "${script_dir}/check_protocol_layers.py" \
 python3 "${script_dir}/generate_cases.py"
 python3 "${script_dir}/generate_protocol_layers.py"
 
-echo "PASS: syntax + expanded + context comparison + predictive/inverse rule mining + CTX.protocol + effect_slice O0/O1/O2/O3"
+echo "PASS: syntax + expanded + predicate/idesc encoding probes + context comparison + canonical forward/inverse rules + 30 negative boundaries + CTX.protocol + effect_slice O0/O1/O2/O3"

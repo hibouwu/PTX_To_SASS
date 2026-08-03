@@ -6,6 +6,8 @@
 
 验证环境为 CUDA 13.0 `ptxas` V13.0.88，二进制 SHA-256 为 `daba837a68265cae38c832d13399b61dab811891de9b8914defddef143b849f2`。
 
+下表是当前已发布 Thor 结果；v4 最终矩阵已完成本地 O3 全量预验证，等待一次 Thor O0/O1/O2/O3 重跑后替换本表。
+
 | 集合 | 源码实现 | semantic form | logical design | occurrence | O0/O1/O2/O3 汇编 |
 |---|---|---|---|---|---|
 | `syntax` | 1,152 | 896 | 896 | 1,648 | 72/72 通过 |
@@ -15,6 +17,8 @@
 | 预期拒绝探针 | 11 | — | 11 | 11 | 11/11 通过 |
 
 仓库保留默认生成结果。各层编译摘要和阴性探针诊断保存在 [`validation/`](validation/)。
+
+v4 最终矩阵生成 17,290 个 expanded 实现、897 个 semantic form、13,450 个 logical design、24,750 个 occurrence 和 271 个 shard；本地 O3 为 271/271 编译通过、24,750/24,750 occurrence 归属、16,137/16,137 上下文配对完成，30/30 个阴性探针得到预期拒绝。新增的 10 个定向实现只用于恢复 guard/enable `UP0..UP6` 和 idesc 相邻配对，不与全部 semantic form 做无意义的笛卡尔积；阴性矩阵同时覆盖 qualifier 合法性和缺失/多余操作数、mask 数量、metadata、scale-factor 契约。
 
 协议层 49 个 case 在四个优化级共 196/196 次汇编通过；检查器对全部 196 个产物保存原始 SASS 并执行有序操作检查。effect slice 还验证 `UTCHMMA`、`UTCBAR`、mbarrier phase wait、`LDTM`、TMEM dealloc、可选 `STTM`/`FENCE.VIEW.ASYNC.T`、proxy fence、CTA-pair topology 和 issuer-gating，避免只汇编成功但关键路径被优化删除或重排。
 
@@ -35,14 +39,14 @@
 
 PTX ISA 9.0 的通用 `tcgen05.mma` 文法还列出 `scale-input-d`，但 CUDA 13.0 `ptxas` 对 `.target sm_110a` 明确拒绝这个 side operand。因此它不进入 Thor 正向用例分母，只进入预期拒绝的 capability probes。`.ashift` 仅出现在普通 TMEM-A 形态中，不能与分块缩放或 SMEM-descriptor A 形态做无约束组合。
 
-`expanded` 模式再与 8 个静态上下文配置文件交叉，包括 enable 常量、全一 mask、正/负 PTX guard、lane 0 issuer、派生 producer 和 commit completion。
+`expanded` 模式把全部合法表面形式与 15 个主要静态上下文配置交叉，包括 enable 常量、全一 mask、正/负 PTX guard、四种 branch issuer、复合谓词 issuer、四种 producer 和 commit completion；另附少量 predicate/idesc 定向 microprobe。
 
 ## 使用
 
 一键重新生成并编译以下四层的 O0/O1/O2/O3 四个版本，执行 expanded 上下文配对差分和阴性探针：
 
 - `syntax`：合法限定符/操作数表面形式
-- `expanded`：表面形式与 8 个静态上下文配置文件的交叉
+- `expanded`：表面形式与 15 个主要静态上下文配置文件的交叉，加定向编码 microprobe
 - `CTX.protocol`：allocation、fence、commit/mbarrier、LD/ST wait
 - `effect_slice`：alloc→可选 ST/wait→MMA→commit/mbarrier wait→LD/wait→dealloc 的完整序列
 

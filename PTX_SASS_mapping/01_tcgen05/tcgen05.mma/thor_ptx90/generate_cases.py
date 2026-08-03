@@ -3,8 +3,7 @@
 
 The default ``syntax`` mode exhaustively enumerates the legal PTX 9.0 surface
 forms declared below. ``expanded`` crosses the same forms with bounded static
-context profiles. Descriptor bitfields remain runtime parameters, so successful
-assembly proves syntax/target support, not numerical or lifecycle correctness.
+context profiles. Descriptor values are treated as opaque register operands.
 """
 
 from __future__ import annotations
@@ -67,9 +66,44 @@ EXPANDED_CONTEXTS = (
     "guard_positive",
     "guard_negative",
     "lane0_issuer",
+    "lane31_issuer",
+    "dynamic_lane_issuer",
+    "thread0_issuer",
+    "compound_predicated_issuer",
     "derived_producers",
+    "nonidentity_producers",
+    "branched_producers",
+    "global_load_producers",
     "commit_completion",
 )
+
+BRANCH_ISSUER_PROFILES = {
+    "lane0_issuer",
+    "lane31_issuer",
+    "dynamic_lane_issuer",
+    "thread0_issuer",
+}
+
+PREDICATE_PRESSURE_PROFILES = {
+    "predicate_pressure_1": 1,
+    "predicate_pressure_2": 2,
+    "predicate_pressure_3": 3,
+    "predicate_pressure_4": 4,
+    "predicate_pressure_5": 5,
+    "predicate_pressure_6": 6,
+}
+
+ENCODING_PROBE_CONTEXTS = (
+    "predicate_index_up0",
+    *PREDICATE_PRESSURE_PROFILES,
+    "idesc_pair_pressure",
+)
+
+
+def predicate_hold_count(case: Case) -> int:
+    if case.context_profile == "enable_index_sweep":
+        return 7
+    return PREDICATE_PRESSURE_PROFILES.get(case.context_profile, 0)
 
 
 def semantic_scale_vector(case: Case) -> str | None:
@@ -157,10 +191,59 @@ def static_context_assignment(case: Case) -> dict:
             "polarity": "negative",
             "producer": "runtime_parameter_ne_zero",
         }
+    elif case.context_profile == "predicate_index_up0":
+        assignment["enable_input_d"] = {
+            "producer": "compile_time_predicate",
+            "known_value": True,
+        }
+        assignment["target_guard"] = {
+            "mode": "predicate_index_probe",
+            "polarity": "positive",
+            "producer": "runtime_parameter_ne_zero",
+            "expected_allocator_goal": "UP0",
+        }
     elif case.context_profile == "lane0_issuer":
         assignment["issuer"] = {
             "mode": "lane_zero_branch",
             "producer": "%laneid",
+        }
+    elif case.context_profile == "lane31_issuer":
+        assignment["issuer"] = {
+            "mode": "lane_immediate_branch",
+            "producer": "%laneid",
+            "lane": 31,
+        }
+    elif case.context_profile == "dynamic_lane_issuer":
+        assignment["issuer"] = {
+            "mode": "lane_parameter_branch",
+            "producer": "%laneid",
+            "lane_parameter": "p_issuer_lane",
+        }
+    elif case.context_profile == "thread0_issuer":
+        assignment["issuer"] = {
+            "mode": "cta_thread_zero_branch",
+            "producer": "%tid.x",
+        }
+    elif case.context_profile == "compound_predicated_issuer":
+        assignment["issuer"] = {
+            "mode": "lane_zero_and_parameter_predicate",
+            "producers": ["%laneid", "p_guard"],
+            "target_lowering": "direct_predication",
+        }
+    elif case.context_profile in PREDICATE_PRESSURE_PROFILES:
+        assignment["target_guard"] = {
+            "mode": "predicate_index_pressure",
+            "polarity": "positive",
+            "producer": "runtime_parameter_ne_zero",
+            "live_uniform_predicates_across_target": PREDICATE_PRESSURE_PROFILES[
+                case.context_profile
+            ],
+        }
+    elif case.context_profile == "enable_index_sweep":
+        assignment["enable_input_d"] = {
+            "producer": "predicate_index_sweep",
+            "virtual_predicates": [f"hold{index}" for index in range(7)],
+            "target_occurrence_mapping": "occurrence i uses hold[i]",
         }
     elif case.context_profile == "derived_producers":
         assignment["operand_producers"] = {
@@ -181,6 +264,45 @@ def static_context_assignment(case: Case) -> dict:
                 "mbar",
             ],
         }
+    elif case.context_profile == "nonidentity_producers":
+        assignment["operand_producers"] = {
+            "mode": "runtime_delta_arithmetic_chain",
+            "delta_parameter": "p_producer_delta",
+            "operations": ["add_delta", "xor_delta"],
+            "covered_inputs": [
+                "d_tmem",
+                "a_tmem",
+                "desc_a",
+                "desc_b",
+                "meta_tmem",
+                "idesc",
+                "scale_a_tmem",
+                "scale_b_tmem",
+                "zero_mask_desc",
+                "enable",
+                "guard",
+                "mbar",
+            ],
+        }
+    elif case.context_profile == "branched_producers":
+        assignment["operand_producers"] = {
+            "mode": "branch_selected_runtime_delta",
+            "selector": "p_guard_ne_zero",
+            "delta_parameter": "p_producer_delta",
+            "control_flow": "conditional_basic_block",
+        }
+    elif case.context_profile == "global_load_producers":
+        assignment["operand_producers"] = {
+            "mode": "global_memory_loads",
+            "base_parameter": "p_source_ptr",
+            "addressing": "fixed_role_offsets",
+        }
+    elif case.context_profile == "idesc_pair_pressure":
+        assignment["operand_producers"] = {
+            "mode": "uniform_register_pressure_across_target",
+            "live_uniform_64bit_values": 8,
+            "purpose": "attempt to separate auxiliary and idesc physical allocation",
+        }
     elif case.context_profile == "commit_completion":
         assignment["completion"] = {
             "mode": "tcgen05_commit",
@@ -197,7 +319,7 @@ def source_variant(case: Case) -> dict:
         "scale_vector_spelling": (
             "omitted" if case.scale_vector is None else case.scale_vector
         ),
-        "kernel_template": "thor_tcgen05_mma_v2",
+        "kernel_template": "thor_tcgen05_mma_v4",
     }
 
 
@@ -333,11 +455,50 @@ def enumerate_source_forms() -> list[Case]:
 
 def expand_contexts(cases: list[Case], mode: str) -> list[Case]:
     profiles = CORE_CONTEXTS if mode == "syntax" else EXPANDED_CONTEXTS
-    return [
+    expanded = [
         Case(**{**asdict(case), "steps": case.steps, "context_profile": profile})
         for case in cases
         for profile in profiles
     ]
+    if mode == "expanded":
+        representative = next(
+            case
+            for case in cases
+            if case.variant == "mma"
+            and case.cta_group == 1
+            and case.kind == "f16"
+            and case.a_form == "smem_descriptor"
+            and case.collector_mode == "fill_then_use"
+        )
+        expanded.extend(
+            Case(
+                **{
+                    **asdict(representative),
+                    "steps": representative.steps,
+                    "context_profile": profile,
+                }
+            )
+            for profile in ENCODING_PROBE_CONTEXTS
+        )
+        enable_sweep_case = Case(
+            **{
+                **asdict(representative),
+                "collector_mode": "encoding_enable_index_sweep",
+                "steps": tuple(Step() for _ in range(7)),
+                "context_profile": "",
+            }
+        )
+        expanded.extend(
+            Case(
+                **{
+                    **asdict(enable_sweep_case),
+                    "steps": enable_sweep_case.steps,
+                    "context_profile": profile,
+                }
+            )
+            for profile in ("runtime_zero", "enable_index_sweep")
+        )
+    return expanded
 
 
 def qualifier(step: Step) -> str:
@@ -347,7 +508,7 @@ def qualifier(step: Step) -> str:
     return result
 
 
-def instruction(case: Case, step: Step) -> str:
+def instruction(case: Case, step: Step, step_index: int = 0) -> str:
     opcode = f"tcgen05.{case.variant}.cta_group::{case.cta_group}.kind::{case.kind}"
     if case.scale_vector is not None or case.kind in BLOCK_SCALE_VECTORS:
         opcode += ".block_scale"
@@ -361,16 +522,19 @@ def instruction(case: Case, step: Step) -> str:
         operands.append("[%meta_tmem]")
     operands.append("%idesc")
 
+    enable_operand = "%enable"
+    if case.context_profile == "enable_index_sweep":
+        enable_operand = f"%hold{step_index}"
     if case.kind in BLOCK_SCALE_VECTORS:
-        operands.extend(("[%scale_a_tmem]", "[%scale_b_tmem]", "%enable"))
+        operands.extend(("[%scale_a_tmem]", "[%scale_b_tmem]", enable_operand))
     elif case.variant.startswith("mma.ws"):
-        operands.append("%enable")
+        operands.append(enable_operand)
         if case.zero_column_mask:
             operands.append("%zero_mask_desc")
     else:
         mask_count = 4 if case.cta_group == 1 else 8
         operands.append("{" + ", ".join(f"%mask{i}" for i in range(mask_count)) + "}")
-        operands.append("%enable")
+        operands.append(enable_operand)
         if case.scale_input_d is not None:
             operands.append(str(case.scale_input_d))
 
@@ -379,6 +543,14 @@ def instruction(case: Case, step: Step) -> str:
         guard = "@%guard "
     elif case.context_profile == "guard_negative":
         guard = "@!%guard "
+    elif case.context_profile == "compound_predicated_issuer":
+        guard = "@%issuer "
+    elif case.context_profile == "predicate_index_up0":
+        guard = "@%guard "
+    elif case.context_profile in PREDICATE_PRESSURE_PROFILES:
+        guard = (
+            f"@%hold{PREDICATE_PRESSURE_PROFILES[case.context_profile] - 1} "
+        )
     return f"{guard}{opcode} " + ", ".join(operands) + ";"
 
 
@@ -411,18 +583,36 @@ def render_kernel(case: Case, ordinal: int) -> str:
         "    .param .u64 p_zero_mask_desc,",
         "    .param .u32 p_enable,",
         "    .param .u32 p_guard,",
-        "    .param .u64 p_mbar",
+        "    .param .u64 p_mbar,",
+        "    .param .u32 p_issuer_lane,",
+        "    .param .u32 p_producer_delta,",
+        "    .param .u64 p_source_ptr",
         ")",
         "{",
         "    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;",
         "    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;",
-        "    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar;",
-        "    .reg .pred %enable, %guard, %issuer;",
+        "    .reg .b32 %issuer_lane_u32, %producer_delta;",
+        "    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;",
+        "    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;",
     ]
     if mask_count:
         lines.append(f"    .reg .b32 %mask<{mask_count}>;")
-    if case.context_profile == "lane0_issuer":
+    if case.context_profile in {"lane0_issuer", "lane31_issuer", "dynamic_lane_issuer", "compound_predicated_issuer"}:
         lines.append("    .reg .u32 %lane;")
+    if case.context_profile == "thread0_issuer":
+        lines.append("    .reg .u32 %thread_index;")
+    if case.context_profile == "branched_producers":
+        lines.extend(
+            (
+                "    .reg .b32 %d_alt, %a_alt, %meta_alt, %idesc_alt;",
+                "    .reg .b32 %scale_a_alt, %scale_b_alt, %enable_alt, %guard_alt;",
+                "    .reg .b64 %desc_a_alt, %desc_b_alt, %zero_mask_alt, %mbar_alt;",
+            )
+        )
+    if predicate_hold_count(case):
+        lines.append("    .reg .pred %hold<7>;")
+    if case.context_profile == "idesc_pair_pressure":
+        lines.append("    .reg .b64 %idesc_pressure<8>;")
 
     lines.extend(
         (
@@ -438,6 +628,9 @@ def render_kernel(case: Case, ordinal: int) -> str:
             "    ld.param.b32 %enable_u32, [p_enable];",
             "    ld.param.b32 %guard_u32, [p_guard];",
             "    ld.param.b64 %mbar, [p_mbar];",
+            "    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];",
+            "    ld.param.b32 %producer_delta, [p_producer_delta];",
+            "    ld.param.b64 %source_ptr, [p_source_ptr];",
         )
     )
 
@@ -458,14 +651,111 @@ def render_kernel(case: Case, ordinal: int) -> str:
                 "    add.u64 %mbar, %mbar, 0;",
             )
         )
+    elif case.context_profile in {"nonidentity_producers", "branched_producers"}:
+        lines.append("    cvt.u64.u32 %producer_delta64, %producer_delta;")
+        if case.context_profile == "nonidentity_producers":
+            lines.extend(
+                (
+                    "    add.u32 %d_tmem, %d_tmem, %producer_delta;",
+                    "    add.u32 %a_tmem, %a_tmem, %producer_delta;",
+                    "    xor.b64 %desc_a, %desc_a, %producer_delta64;",
+                    "    xor.b64 %desc_b, %desc_b, %producer_delta64;",
+                    "    add.u32 %meta_tmem, %meta_tmem, %producer_delta;",
+                    "    xor.b32 %idesc, %idesc, %producer_delta;",
+                    "    add.u32 %scale_a_tmem, %scale_a_tmem, %producer_delta;",
+                    "    add.u32 %scale_b_tmem, %scale_b_tmem, %producer_delta;",
+                    "    xor.b64 %zero_mask_desc, %zero_mask_desc, %producer_delta64;",
+                    "    xor.b32 %enable_u32, %enable_u32, %producer_delta;",
+                    "    xor.b32 %guard_u32, %guard_u32, %producer_delta;",
+                    "    add.u64 %mbar, %mbar, %producer_delta64;",
+                )
+            )
+        else:
+            lines.extend(
+                (
+                    "    add.u32 %d_alt, %d_tmem, %producer_delta;",
+                    "    add.u32 %a_alt, %a_tmem, %producer_delta;",
+                    "    xor.b64 %desc_a_alt, %desc_a, %producer_delta64;",
+                    "    xor.b64 %desc_b_alt, %desc_b, %producer_delta64;",
+                    "    add.u32 %meta_alt, %meta_tmem, %producer_delta;",
+                    "    xor.b32 %idesc_alt, %idesc, %producer_delta;",
+                    "    add.u32 %scale_a_alt, %scale_a_tmem, %producer_delta;",
+                    "    add.u32 %scale_b_alt, %scale_b_tmem, %producer_delta;",
+                    "    xor.b64 %zero_mask_alt, %zero_mask_desc, %producer_delta64;",
+                    "    xor.b32 %enable_alt, %enable_u32, %producer_delta;",
+                    "    xor.b32 %guard_alt, %guard_u32, %producer_delta;",
+                    "    add.u64 %mbar_alt, %mbar, %producer_delta64;",
+                    "    setp.ne.u32 %producer_select, %guard_u32, 0;",
+                    f"    @!%producer_select bra PRODUCER_DONE_{ordinal:06d};",
+                    "    mov.b32 %d_tmem, %d_alt;",
+                    "    mov.b32 %a_tmem, %a_alt;",
+                    "    mov.b64 %desc_a, %desc_a_alt;",
+                    "    mov.b64 %desc_b, %desc_b_alt;",
+                    "    mov.b32 %meta_tmem, %meta_alt;",
+                    "    mov.b32 %idesc, %idesc_alt;",
+                    "    mov.b32 %scale_a_tmem, %scale_a_alt;",
+                    "    mov.b32 %scale_b_tmem, %scale_b_alt;",
+                    "    mov.b64 %zero_mask_desc, %zero_mask_alt;",
+                    "    mov.b32 %enable_u32, %enable_alt;",
+                    "    mov.b32 %guard_u32, %guard_alt;",
+                    "    mov.b64 %mbar, %mbar_alt;",
+                    f"PRODUCER_DONE_{ordinal:06d}:",
+                )
+            )
+    elif case.context_profile == "global_load_producers":
+        lines.extend(
+            (
+                "    ld.global.u32 %d_tmem, [%source_ptr+0];",
+                "    ld.global.u32 %a_tmem, [%source_ptr+4];",
+                "    ld.global.u64 %desc_a, [%source_ptr+8];",
+                "    ld.global.u64 %desc_b, [%source_ptr+16];",
+                "    ld.global.u32 %meta_tmem, [%source_ptr+24];",
+                "    ld.global.u32 %idesc, [%source_ptr+28];",
+                "    ld.global.u32 %scale_a_tmem, [%source_ptr+32];",
+                "    ld.global.u32 %scale_b_tmem, [%source_ptr+36];",
+                "    ld.global.u64 %zero_mask_desc, [%source_ptr+40];",
+                "    ld.global.u32 %enable_u32, [%source_ptr+48];",
+                "    ld.global.u32 %guard_u32, [%source_ptr+52];",
+                "    ld.global.u64 %mbar, [%source_ptr+56];",
+            )
+        )
+
+    if case.context_profile == "idesc_pair_pressure":
+        for index in range(8):
+            lines.append(
+                f"    add.u64 %idesc_pressure{index}, %mbar, {16 * (index + 1)};"
+            )
 
     if case.context_profile == "enable_false":
         lines.append("    setp.ne.u32 %enable, 0, 0;")
-    elif case.context_profile == "enable_true_mask_ones":
+    elif case.context_profile in {"enable_true_mask_ones", "predicate_index_up0"}:
         lines.append("    setp.eq.u32 %enable, 0, 0;")
     else:
         lines.append("    setp.ne.u32 %enable, %enable_u32, 0;")
     lines.append("    setp.ne.u32 %guard, %guard_u32, 0;")
+
+    if predicate_hold_count(case):
+        hold_count = predicate_hold_count(case)
+        hold_sources = (
+            "%producer_delta",
+            "%issuer_lane_u32",
+            "%d_tmem",
+            "%a_tmem",
+            "%meta_tmem",
+            "%scale_a_tmem",
+            "%scale_b_tmem",
+        )
+        for index in range(hold_count):
+            lines.append(
+                f"    setp.ne.u32 %hold{index}, {hold_sources[index]}, 0;"
+            )
+
+    if case.context_profile == "idesc_pair_pressure":
+        for index in range(8):
+            lines.append(
+                f"    tcgen05.commit.cta_group::{case.cta_group}."
+                f"mbarrier::arrive::one.b64 [%idesc_pressure{index}];"
+            )
 
     mask_value = (
         "0xffffffff"
@@ -475,19 +765,44 @@ def render_kernel(case: Case, ordinal: int) -> str:
     for index in range(mask_count):
         lines.append(f"    mov.b32 %mask{index}, {mask_value};")
 
-    if case.context_profile == "lane0_issuer":
+    if case.context_profile in {"lane0_issuer", "lane31_issuer", "dynamic_lane_issuer"}:
+        compare_value = "0" if case.context_profile == "lane0_issuer" else "31" if case.context_profile == "lane31_issuer" else "%issuer_lane_u32"
+        lines.extend(
+            (
+                "    mov.u32 %lane, %laneid;",
+                f"    setp.eq.u32 %issuer, %lane, {compare_value};",
+                f"    @!%issuer bra CASE_END_{ordinal:06d};",
+            )
+        )
+    elif case.context_profile == "thread0_issuer":
+        lines.extend(
+            (
+                "    mov.u32 %thread_index, %tid.x;",
+                "    setp.eq.u32 %issuer, %thread_index, 0;",
+                f"    @!%issuer bra CASE_END_{ordinal:06d};",
+            )
+        )
+    elif case.context_profile == "compound_predicated_issuer":
         lines.extend(
             (
                 "    mov.u32 %lane, %laneid;",
                 "    setp.eq.u32 %issuer, %lane, 0;",
-                f"    @!%issuer bra CASE_END_{ordinal:06d};",
+                "    setp.ne.u32 %issuer_guard, %guard_u32, 0;",
+                "    and.pred %issuer, %issuer, %issuer_guard;",
             )
         )
 
+    if predicate_hold_count(case):
+        hold_count = predicate_hold_count(case)
+        for index in range(hold_count):
+            lines.append(
+                f"    @%hold{index} tcgen05.commit.cta_group::{case.cta_group}."
+                "mbarrier::arrive::one.b64 [%mbar];"
+            )
     lines.append("    // TARGET_PATTERN_BEGIN")
     for step_index, step in enumerate(case.steps):
         lines.append(f"    // target_occurrence {step_index}")
-        lines.append(f"    {instruction(case, step)}")
+        lines.append(f"    {instruction(case, step, step_index)}")
     if case.context_profile == "commit_completion":
         lines.append(
             f"    tcgen05.commit.cta_group::{case.cta_group}."
@@ -495,7 +810,21 @@ def render_kernel(case: Case, ordinal: int) -> str:
         )
     lines.append("    // TARGET_PATTERN_END")
 
-    if case.context_profile == "lane0_issuer":
+    if predicate_hold_count(case):
+        hold_count = predicate_hold_count(case)
+        for index in range(hold_count):
+            lines.append(
+                f"    @%hold{index} tcgen05.commit.cta_group::{case.cta_group}."
+                "mbarrier::arrive::one.b64 [%mbar];"
+            )
+    if case.context_profile == "idesc_pair_pressure":
+        for index in range(8):
+            lines.append(
+                f"    tcgen05.commit.cta_group::{case.cta_group}."
+                f"mbarrier::arrive::one.b64 [%idesc_pressure{index}];"
+            )
+
+    if case.context_profile in BRANCH_ISSUER_PROFILES:
         lines.append(f"CASE_END_{ordinal:06d}:")
     lines.extend(("    ret;", "}", f"// CASE_END {ordinal:06d}", ""))
     return "\n".join(lines)
@@ -533,7 +862,8 @@ def write_suite(output: Path, cases: list[Case], shard_size: int, mode: str) -> 
                 "source_shard": f"thor_tcgen05_mma_{shard:04d}.ptx",
                 "target_occurrence_count": len(case.steps),
                 "target_instructions": [
-                    instruction(case, step) for step in case.steps
+                    instruction(case, step, step_index)
+                    for step_index, step in enumerate(case.steps)
                 ],
                 "context_profile_label": case.context_profile,
                 "semantic_form": sf,
@@ -579,7 +909,7 @@ def write_suite(output: Path, cases: list[Case], shard_size: int, mode: str) -> 
     }
     source_variant_ids = {row["source_variant_id"] for row in manifest_rows}
     summary = {
-        "schema_version": "thor_tcgen05_mma_generator_v2",
+        "schema_version": "thor_tcgen05_mma_generator_v4",
         "ptx_isa": "9.0",
         "ptx_target": "sm_110a",
         "device_family": "NVIDIA Thor / compute capability 11.0",
@@ -595,8 +925,7 @@ def write_suite(output: Path, cases: list[Case], shard_size: int, mode: str) -> 
         "coverage": {
             "surface_form_model": "constrained exhaustive",
             "context_model": "baseline" if mode == "syntax" else "bounded exhaustive profiles",
-            "descriptor_bitfields": "runtime unknown; not enumerated",
-            "runtime_semantics": "not validated",
+            "descriptor_values": "opaque register operands",
         },
     }
     (output / "summary.json").write_text(
@@ -618,7 +947,7 @@ def parse_args() -> argparse.Namespace:
         "--mode",
         choices=("syntax", "expanded"),
         default="syntax",
-        help="syntax: exhaustive qualifier forms; expanded: cross with 8 static contexts",
+        help="syntax: exhaustive qualifier forms; expanded: cross with bounded static contexts",
     )
     parser.add_argument("--shard-size", type=int, default=64)
     parser.add_argument(

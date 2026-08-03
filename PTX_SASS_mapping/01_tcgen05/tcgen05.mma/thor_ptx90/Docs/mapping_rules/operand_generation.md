@@ -116,7 +116,32 @@ UTCHMMA gdesc[UR8], gdesc[UR10], tmem[UR6], tmem[UR4], idesc[UR5], UP0;
 
 O0 的 1,152/1,152 完整序列变化说明 producer 确实进入了未优化编译降级。只有 852 组改变指令总数，说明其余 300 组虽然总数相同，指令类型、顺序或操作数仍然变化。O1 起所有指标归零，说明当前恒等链已经完全规范化为基线。
 
-## 哪些 producer 不能套用这条消除规则
+## 扩展 producer 矩阵
+
+生成器现在为全部 1,152 个设计增加三种不能按恒等链消除的 producer：
+
+| profile | producer 结构 | 本地 CUDA 13 O3 预验证 |
+|---|---|---|
+| `nonidentity_producers` | 对 32-bit 地址/`idesc` 加或异或参数 delta，对 64-bit descriptor/mbarrier 使用扩展后的 delta | 核心助记符与规范操作 0 变化；1,152/1,152 纯寄存器重编号；完整 kernel 序列 1,152/1,152 变化 |
+| `branched_producers` | 计算直接值和 delta 派生值，由参数 predicate 在独立基本块中选择 | 核心助记符与规范操作 0 变化；1,152/1,152 纯寄存器重编号；完整 kernel 序列和指令数 1,152/1,152 变化 |
+| `global_load_producers` | 从同一 global base 的固定 role offset 装入 D/A、descriptor、metadata、scale、predicate 与 mbarrier 输入 | 核心助记符与规范操作 0 变化；468/1,152 纯重编号、684/1,152 稳定；完整 kernel 序列和指令数 1,152/1,152 变化 |
+
+global-load producer 的 468/684 分类由下面的零反例条件预测：
+
+```text
+renumber_only =
+    (variant == mma.sp
+     and (a_form == tmem_address or kind in {mxf4, mxf4nvf4, mxf8f6f4}))
+    or
+    (variant == mma.ws.sp
+     and (a_form == tmem_address or zero_column_mask == true))
+
+其余合法形态 = stable_layout
+```
+
+三种 profile 已通过全部 270 个 expanded shard 的 O3 编译、归属和 3×1,152 配对检查，手写公式 mismatch=0。Thor 四优化级完整回归后，O0/O1/O2 的保留、融合和重编号边界会由自动报告补齐。
+
+## producer 规则的适用边界
 
 当前确定性结论只适用于生成器明确记录的 `identity_arithmetic_chain`：
 
@@ -124,26 +149,24 @@ O0 的 1,152/1,152 完整序列变化说明 producer 确实进入了未优化编
 - `xor_zero`：与零异或
 - `or_zero`：与零或
 
-下列情形没有被本实验证明会消除：
+下列形态不应套用恒等链消除规则：
 
 - 非零地址偏移、动态 stride、swizzle 或描述符位域拼装。
-- 从共享/全局内存实际加载后再形成描述符。
+- 从 shared/global memory load 后再形成目标操作数。
 - 可能溢出、改变高位或改变对齐的算术。
-- 依赖 lane、CTA、运行时分支或原子操作的 producer。
+- 依赖 lane、CTA、条件分支或原子操作的 producer。
 - 具有副作用、volatile、内存顺序或别名约束的生产链。
 
 文档中的规则必须写成"当前恒等 producer 在 O1 以上被消除"，不能缩写成"producer 不影响 SASS"。
 
 ## 代表性覆盖口径
 
-本文覆盖当前生成集合中的直接参数与恒等派生链，并对 32 位地址/`idesc`、64 位描述符、谓词输入和 completion 地址执行恒等 producer 变换，同时覆盖全部已生成核心形态以及 O0–O3 的消除边界。非恒等地址运算、descriptor 构造、跨基本块数据流和内存加载 producer 尚未形成封闭集合，因此不声明总体百分比。
-
-这个覆盖清单不包含任意真实地址生成算法。若要研究非恒等 producer，需要新增单因素矩阵，分别冻结 offset、stride、descriptor pack、lane dependence 和 memory load。
+当前生成集合覆盖直接参数、恒等算术、参数 delta 非恒等算术、条件基本块选择和 global-load producer，并横跨全部 1,152 个核心设计。尚未枚举的是 shared-memory producer、循环携带值、多个合流基本块、原子结果、复杂 descriptor pack 和跨函数 producer，因此不声明总体百分比。
 
 ## 证据
 
 - 上下文统计：[`../tcgen05_mma_上下文差分报告.md`](../tcgen05_mma_上下文差分报告.md)
-- PTX case 与 `identity_arithmetic_chain` 清单：[`../../results/expanded/sources/manifest.jsonl`](../../results/expanded/sources/manifest.jsonl)
+- PTX case 与全部 producer 清单：[`../../results/expanded/sources/manifest.jsonl`](../../results/expanded/sources/manifest.jsonl)
 - 核心 SASS 与寄存器归属：[`../../results/expanded/sass/sass_attribution.jsonl`](../../results/expanded/sass/sass_attribution.jsonl)
 - 操作数来源规则：[`operand_source.md`](operand_source.md)
 - 综合解释：[`../tcgen05_mma_PTX到SASS映射规则报告.md`](../tcgen05_mma_PTX到SASS映射规则报告.md)

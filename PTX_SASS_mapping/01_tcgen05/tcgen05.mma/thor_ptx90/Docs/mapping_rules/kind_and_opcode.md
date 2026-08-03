@@ -28,6 +28,28 @@ tcgen05.mma.cta_group::1.kind::i8 ...
 | `mxf4` | `UTCOMMA` | 显微缩放（microscaling）FP4 家族 |
 | `mxf4nvf4` | `UTCOMMA` | MXF4/NVF4 家族 |
 
+## opcode 与 kind 的机器编码字段
+
+O3 `runtime_zero` 中保持所有具体寄存器和其他 modifier 不变，只改变标准 kind 的 272 组 pair 得到：
+
+| kind 变化 | pair | word 0 XOR | word 1 XOR | 结论 |
+|---|---:|---:|---:|---|
+| `f16 → tf32` | 272 | `0x0000000000000000` | `0x0000000000000000` | 当前核心编码 alias |
+| `f16 → i8` | 272 | `0x0000000000000000` | `0x0000000000000100` | word 1 kind 字段=`0b01` |
+| `f16 → f8f6f4` | 272 | `0x0000000000000000` | `0x0000000000000300` | word 1 kind 字段=`0b11` |
+| `f8f6f4 → i8` | 272 | `0x0000000000000000` | `0x0000000000000200` | 从 `0b11` 清除高位得到 `0b01` |
+
+所以标准 kind 的 word 1 `0x300` 两位字段是 `f16/tf32=0b00`、`i8=0b01`、`f8f6f4=0b11`。`f16` 与 `tf32` 的差异不进入当前核心 instruction word，静态逆向器必须返回二者候选集合。
+
+block-scale 家族的 opcode 不是只改这两位。严格的 `mxf4 UTCOMMA → mxf8f6f4 UTCQMMA` pair 得到：
+
+| A 来源 | pair | word 0 XOR | word 1 XOR |
+|---|---:|---:|---:|
+| SS：`gdesc` | 168 | `0xc000000000000800` | `0x0000000000000300` |
+| TS：`tmem` | 168 | `0xc000000000000600` | `0x0000000000000300` |
+
+word 0 的高两位、与 A 来源相关的低 opcode 子字段和 word 1 kind 字段共同选择 `UTCOMMA/UTCQMMA`。完整自动断言见 [`reverse_mapping_rules.md`](reverse_mapping_rules.md)和[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)。
+
 术语说明：
 
 - FP（Floating Point）是浮点数。
@@ -181,7 +203,7 @@ O0 用来观察描述符、mask 和 `enable` 如何进入操作数；O3 用来�
 
 对于不带分块缩放的 `f16`、`tf32`、`f8f6f4`、`i8`，外围指令选择集合不随 kind 变化：参数仍由同一组 `LDC`/`LDCU` 装载，谓词和控制仍使用同一组 `UISETP`/`PLOP3`/`ELECT`/`BRA` 指令。变化被限制在核心 MMA 家族内。
 
-`f16` 和 `tf32` 都选择 `UTCHMMA`。在当前 `idesc` 运行时传入的实验中，二者连核心编码也相同；类型区别不由另一个 SASS 操作码表达，而由 `idesc` 的运行时内容表达。
+`f16` 和 `tf32` 都选择 `UTCHMMA`。在当前把 `idesc` 作为不透明参数的静态实验中，二者连核心编码也相同；类型区别不由另一个 SASS 操作码或当前可见 bitfield 表达，而留在 `idesc` 的外部契约中。
 
 以下计数用于确认上述选择关系在全部上下文和优化级中是否稳定。
 
@@ -199,7 +221,7 @@ O0 用来观察描述符、mask 和 `enable` 如何进入操作数；O3 用来�
 
 - 非分块缩放 kind 不会增加或删除外围 SASS，也不改变外围指令类型。
 - `f8f6f4` 和 `i8` 改变核心操作码与编码。
-- 当前运行时 `idesc` 写法下，`f16` 与 `tf32` 生成了完全相同的核心指令文本和编码，二者的具体类型区别由运行时描述符承载。
+- 当前不透明 `idesc` 参数写法下，`f16` 与 `tf32` 生成了完全相同的核心指令文本和编码，二者的具体类型区别不在当前可见核心编码中。
 - 分块缩放 kind 还会增加 scale-factor 操作数，不能套用本节结论。见 [`block_scaling.md`](block_scaling.md)。
 
 ## 代表性覆盖口径
@@ -212,7 +234,7 @@ O0 用来观察描述符、mask 和 `enable` 如何进入操作数；O3 用来�
 | `f8f6f4`/`mxf8f6f4 → UTCQMMA` | O0/O3 对比与分块缩放交叉引用 |
 | `i8 → UTCIMMA` | O0/O3 对比 |
 | `mxf4`/`mxf4nvf4 → UTCOMMA` | `.4X` 代表例子 |
-| 同操作码不等于同数据类型 | `f16`/`tf32` 与运行时 `idesc` 边界 |
+| 同操作码不等于同数据类型 | `f16`/`tf32` 与不透明 `idesc` 参数边界 |
 | 非分块 kind 不改变外围序列 | 三组各 6,016 次严格配对 |
 | kind 与 `.2CTA`/`.WS`/`.ASHIFT`/`.4X` 的组合 | 修饰符组合段 |
 

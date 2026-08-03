@@ -182,7 +182,7 @@ mma.ws.sp
 | 合法与非法组合边界 | 约束表和阴性探针 |
 | 核心、外围、寄存器、编码的分层解释 | 总结表 |
 
-当前清单中的跨维度主要静态机制均有规则、真实案例和边界证据。未覆盖的是运行时协作、数值结果和性能行为，因此不声明没有严格分母的百分比。
+当前清单中的跨维度主要静态机制均有规则、真实案例和边界证据。v4 已补 guard/enable 全编号、opcode composite、REUSE、隐式 alias、寄存器槽位、idesc 压力见证以及扩展 producer/issuer；任意 CFG 和任意 producer 仍是开放的编译器输入空间，因此继续按机制清单而不是虚构总体百分比报告覆盖。
 
 ## 写映射规则时应使用的措辞
 
@@ -204,4 +204,4 @@ mma.ws.sp
 6. 稀疏 metadata 和 scale-factor 操作数是否完整。
 7. 核心 SASS 的操作码、修饰符和操作数是否分别对应。
 8. 差异是否其实来自 guard、issuer、producer、enable 或 completion。
-9. 若目标是逆映射，核心 SASS 是否存在多对一碰撞，是否需要结合完整 kernel、encoding word 或 descriptor 运行时值；见 [`reverse_mapping_rules.md`](reverse_mapping_rules.md)和 [`descriptor_and_encoding.md`](descriptor_and_encoding.md)。
+9. 若目标是逆映射，核心 SASS 是否存在多对一碰撞，是否需要结合完整 kernel、encoding word 或 descriptor 参数契约；见 [`reverse_mapping_rules.md`](reverse_mapping_rules.md)和 [`descriptor_and_encoding.md`](descriptor_and_encoding.md)。

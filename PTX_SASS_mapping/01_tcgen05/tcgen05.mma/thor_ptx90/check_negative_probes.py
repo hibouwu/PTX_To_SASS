@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify that known non-Thor tcgen05 modifiers are rejected by ptxas."""
+"""Verify Thor tcgen05 qualifier and operand-contract rejection boundaries."""
 
 from __future__ import annotations
 
@@ -71,6 +71,118 @@ PROBES = (
         Case("mma", 3, "f16", "smem_descriptor", None, None, False, "probe", (Step(),), "runtime_zero"),
         r"cta_group::3|Illegal modifier|Arguments mismatch",
     ),
+    (
+        "cta_group_0",
+        Case("mma", 0, "f16", "smem_descriptor", None, None, False, "probe", (Step(),), "runtime_zero"),
+        r"cta_group::0|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "cta_group_4",
+        Case("mma", 4, "f16", "smem_descriptor", None, None, False, "probe", (Step(),), "runtime_zero"),
+        r"cta_group::4|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "unsupported_kind_bf16",
+        Case("mma", 1, "bf16", "smem_descriptor", None, None, False, "probe", (Step(),), "runtime_zero"),
+        r"kind::bf16|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "invalid_collector_operation",
+        Case("mma", 1, "f16", "tmem_address", None, None, False, "probe", (Step("reuse", "a"),), "runtime_zero"),
+        r"collector::a::reuse|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "invalid_ws_buffer_b4",
+        Case("mma.ws", 1, "f16", "smem_descriptor", None, None, False, "probe", (Step("fill", "b4"),), "runtime_zero"),
+        r"collector::b4|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "sparse_uses_b_collector",
+        Case("mma.sp", 1, "f16", "smem_descriptor", None, None, False, "probe", (Step("fill", "b0"),), "runtime_zero"),
+        r"collector::b0|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "ws_sparse_uses_a_collector",
+        Case("mma.ws.sp", 1, "f16", "tmem_address", None, None, False, "probe", (Step("fill", "a"),), "runtime_zero"),
+        r"collector::a|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "standard_kind_with_block_scale",
+        Case("mma", 1, "f16", "smem_descriptor", "scale_vec::1X", None, False, "probe", (Step(),), "runtime_zero"),
+        r"block_scale|scale_vec::1X|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "mxf4nvf4_scale_vec_1x",
+        Case("mma", 1, "mxf4nvf4", "smem_descriptor", "scale_vec::1X", None, False, "probe", (Step(),), "runtime_zero"),
+        r"scale_vec::1X|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "mxf8f6f4_block16",
+        Case("mma", 1, "mxf8f6f4", "smem_descriptor", "block16", None, False, "probe", (Step(),), "runtime_zero"),
+        r"block16|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "mxf4_scale_vec_8x",
+        Case("mma", 1, "mxf4", "smem_descriptor", "scale_vec::8X", None, False, "probe", (Step(),), "runtime_zero"),
+        r"scale_vec::8X|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "ws_with_ashift",
+        Case("mma.ws", 1, "f16", "tmem_address", None, None, False, "probe", (Step(ashift=True),), "runtime_zero"),
+        r"Illegal modifier '.ashift'.*tcgen05\.mma|Arguments mismatch",
+    ),
+)
+
+MUTATION_PROBES = (
+    (
+        "missing_idesc_standard",
+        Case("mma", 1, "f16", "smem_descriptor", None, None, False, "probe", (Step(),), "runtime_zero"),
+        "%desc_b, %idesc, {%mask0",
+        "%desc_b, {%mask0",
+        r"Arguments mismatch|Argument vector size mismatch",
+    ),
+    (
+        "missing_enable_standard",
+        Case("mma", 1, "f16", "smem_descriptor", None, None, False, "probe", (Step(),), "runtime_zero"),
+        "}, %enable;",
+        "};",
+        r"Arguments mismatch|Argument vector size mismatch",
+    ),
+    (
+        "cta_group_1_wrong_mask_count",
+        Case("mma", 1, "f16", "smem_descriptor", None, None, False, "probe", (Step(),), "runtime_zero"),
+        "{%mask0, %mask1, %mask2, %mask3}",
+        "{%mask0, %mask1, %mask2}",
+        r"Arguments mismatch|Argument vector size mismatch",
+    ),
+    (
+        "cta_group_2_wrong_mask_count",
+        Case("mma", 2, "f16", "smem_descriptor", None, None, False, "probe", (Step(),), "runtime_zero"),
+        "{%mask0, %mask1, %mask2, %mask3, %mask4, %mask5, %mask6, %mask7}",
+        "{%mask0, %mask1, %mask2, %mask3}",
+        r"Arguments mismatch|Argument vector size mismatch",
+    ),
+    (
+        "unexpected_standard_operand",
+        Case("mma", 1, "f16", "smem_descriptor", None, None, False, "probe", (Step(),), "runtime_zero"),
+        "}, %enable;",
+        "}, %enable, %zero_mask_desc;",
+        r"Arguments mismatch|Argument vector size mismatch",
+    ),
+    (
+        "missing_sparse_metadata",
+        Case("mma.sp", 1, "f16", "smem_descriptor", None, None, False, "probe", (Step(),), "runtime_zero"),
+        "%desc_b, [%meta_tmem], %idesc",
+        "%desc_b, %idesc",
+        r"Arguments mismatch|Argument vector size mismatch",
+    ),
+    (
+        "missing_block_scale_operand",
+        Case("mma", 1, "mxf4", "smem_descriptor", "scale_vec::2X", None, False, "probe", (Step(),), "runtime_zero"),
+        "[%scale_a_tmem], [%scale_b_tmem], %enable;",
+        "[%scale_a_tmem], %enable;",
+        r"Arguments mismatch|Argument vector size mismatch",
+    ),
 )
 
 
@@ -104,7 +216,14 @@ def main() -> None:
     )
 
     results = []
-    for ordinal, (name, case, expected_diagnostic_pattern) in enumerate(PROBES, start=1):
+    probe_specs = [
+        (name, case, expected_diagnostic_pattern, None)
+        for name, case, expected_diagnostic_pattern in PROBES
+    ] + [
+        (name, case, expected_diagnostic_pattern, (old, new))
+        for name, case, old, new, expected_diagnostic_pattern in MUTATION_PROBES
+    ]
+    for ordinal, (name, case, expected_diagnostic_pattern, mutation) in enumerate(probe_specs, start=1):
         source = work_dir / f"probe_{ordinal:03d}.ptx"
         cubin = work_dir / f"probe_{ordinal:03d}.cubin"
         source_text = "\n".join(
@@ -117,6 +236,13 @@ def main() -> None:
                 render_kernel(case, ordinal),
             )
         )
+        if mutation is not None:
+            old, new = mutation
+            if source_text.count(old) != 1:
+                raise RuntimeError(
+                    f"{name}: source mutation expected one match for {old!r}"
+                )
+            source_text = source_text.replace(old, new, 1)
         source.write_text(source_text, encoding="utf-8")
         target_lines = [
             line_number
@@ -160,7 +286,7 @@ def main() -> None:
         [str(args.ptxas), "--version"], text=True, capture_output=True, check=True
     ).stdout
     report = {
-        "schema_version": "thor_tcgen05_negative_probe_summary_v2",
+        "schema_version": "thor_tcgen05_negative_probe_summary_v3",
         "validation_status": (
             "PASS" if all(result["status"] == "PASS" for result in results) else "FAIL"
         ),

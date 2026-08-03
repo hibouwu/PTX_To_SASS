@@ -183,7 +183,7 @@ mxf8f6f4 的 omitted / block32 / scale_vec::1X
     → UTCQMMA
 ```
 
-在可形成合法配对的样本中（`block16` 与对应 `scale_vec::4X`、`block32` 与对应 `scale_vec::2X` 等），生成的核心指令文本、寄存器活跃数量和编码均相同。这个结果只说明当前描述符条件下的编译降级等价。别名是否能合并仍要服从 kind 和 `idesc.K` 条件。
+严格同寄存器配对进一步冻结了这些机器编码 alias：`mxf4 block32 ↔ mxf4 2X` 为 112/112，`mxf4 block32 ↔ mxf4nvf4 block32` 为 112/112，`mxf4 block32 ↔ mxf4nvf4 2X` 为 112/112，`mxf4nvf4 block16 ↔ mxf4nvf4 4X` 为 56/56；具体核心操作与两个 encoding word 均完全相同。逆向器必须保留这些 kind/scale 候选，而不能从同一 UTCOMMA 机器码任选一种 PTX 写法。
 
 ## 跨变体与 CTA group 的组合见证
 
@@ -215,12 +215,12 @@ UTCOMMA.2CTA.4X
 | SS/TS 的 scale/address producer | O0/O3 与 operand-source 交叉 |
 | CTA group 1/2 和稀疏组合 | 跨组合见证 |
 | 与 `.ashift` 不兼容 | 阴性探针 |
-| 描述符条件与运行时边界 | 别名和证据限制 |
+| descriptor 作为不透明操作数的边界 | 别名和证据限制 |
 
-当前清单中的主要静态机制均已有正向、配对或阴性证据。由于 descriptor 位型不是封闭枚举集合，本文不再给出没有严格分母的百分比；未覆盖的是所有 `idesc.K` 位型下的别名等价性和实机数值结果。
+当前清单中的主要静态机制均已有正向、配对或阴性证据。隐式 kind/scale 的主要 alias 已由严格机器码配对冻结；剩余项是其他未生成组合和与 predicate/调度控制重叠的编码字段。
 
 ## 证据和限制
 
 - `syntax` 与 `expanded` 集合覆盖合法的 `scale_vec::1X`/`2X`/`4X` 和 `.block16`/`.block32` 组合。
 - 映射结论来自四优化级的 SASS 归属配对和规范化 semantic form。
-- 本实验尚未冻结所有描述符位型，也没有做实机数值验证。可以报告可见编译降级规律，不能声称已经解释每个编码位的含义。
+- 本实验把 descriptor 值视为不透明输入；当前结论只解释可见编译降级和已隔离的机器编码位。
