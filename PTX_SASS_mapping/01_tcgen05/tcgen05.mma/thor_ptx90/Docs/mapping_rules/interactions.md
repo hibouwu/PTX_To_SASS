@@ -72,7 +72,7 @@ mma.ws.sp
 → UTC*MMA.WS ...
 ```
 
-可见 `.WS`，但没有同名 `.SP`。稀疏语义由额外 metadata、操作数位置或机器编码承载。`.ws.sp` 不能被解释成字符串 `.WS.SP`。
+可见 `.WS`，但没有同名 `.SP`。稀疏语义由额外 metadata 及其完整 producer/参数数据流承载，并可能影响操作数位置或机器编码；某些 pair 的规范化核心文本和编码仍完全相同。`.ws.sp` 不能被解释成字符串 `.WS.SP`，也不能只靠核心 SASS 与 `mma.ws` 唯一区分。
 
 ## 哪些维度不是独立效应
 
@@ -182,7 +182,7 @@ mma.ws.sp
 | 合法与非法组合边界 | 约束表和阴性探针 |
 | 核心、外围、寄存器、编码的分层解释 | 总结表 |
 
-按跨维度主要静态机制计，规则、真实案例和边界证据均已覆盖，保守记为至少 95% 的主要变化机制。未覆盖的是运行时协作、数值结果和性能行为。
+当前清单中的跨维度主要静态机制均有规则、真实案例和边界证据。未覆盖的是运行时协作、数值结果和性能行为，因此不声明没有严格分母的百分比。
 
 ## 写映射规则时应使用的措辞
 
@@ -204,3 +204,4 @@ mma.ws.sp
 6. 稀疏 metadata 和 scale-factor 操作数是否完整。
 7. 核心 SASS 的操作码、修饰符和操作数是否分别对应。
 8. 差异是否其实来自 guard、issuer、producer、enable 或 completion。
+9. 若目标是逆映射，核心 SASS 是否存在多对一碰撞，是否需要结合完整 kernel、encoding word 或 descriptor 运行时值；见 [`reverse_mapping_rules.md`](reverse_mapping_rules.md)和 [`descriptor_and_encoding.md`](descriptor_and_encoding.md)。

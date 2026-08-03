@@ -775,7 +775,9 @@ def write_csv(path: Path, rows: list[dict]) -> None:
     if not rows:
         raise ValueError("cannot write empty summary")
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(
+            handle, fieldnames=list(rows[0]), lineterminator="\n"
+        )
         writer.writeheader()
         writer.writerows(rows)
 
@@ -792,24 +794,23 @@ def write_markdown(
     lines = [
         "# tcgen05.mma 上下文差分报告",
         "",
-        "## 结果概览",
+        "## 实验配置",
         "",
         f"- 基线：`{metadata['baseline_profile']}`",
         f"- 配对设计数：{metadata['design_key_count']}",
         f"- 总比较数：{metadata['comparison_count']}",
-        f"- 优化级：{', '.join(metadata['optimizations'])}",
+        f"- 编译优化级：{'、'.join(metadata['optimizations'])}",
         f"- SASS 规范化版本：`{NORMALIZATION_SCHEMA}`",
         "",
-        "核心变化忽略指令地址和具体寄存器编号，但保留助记符、修饰、",
-        "操作数类别、立即数和操作数结构。kernel 变化比较完整规范化指令序列。",
-        "寄存器表则单独保留具体编号、R/UR/P/UP 类别、同一寄存器复用关系，",
-        "以及 `nvdisasm` 给出的逐指令活跃寄存器计数。",
+        "核心变化比较时忽略指令地址和具体寄存器编号，保留助记符、修饰符、操作数类别、立即数和操作数结构。kernel 变化比较完整规范化指令序列。寄存器表单独保留具体编号、R/UR/P/UP 类别、寄存器复用关系和 `nvdisasm` 给出的逐指令活跃寄存器计数。",
         "",
         "## 分上下文统计",
         "",
-        "| 上下文 | 实际改变的 CTX | 优化 | 配对数 | 核心助记符变化 | "
+        "下表列出每种上下文配置文件和优化级的配对数量及各项变化情况。核心助记符变化栏在所有行中均为 0，说明上下文不改变核心 MMA 的助记符选择。",
+        "",
+        "| 上下文 | 改变的 CTX 组 | 优化 | 配对数 | 核心助记符变化 | "
         "核心规范形变化 | kernel 规范序列变化 | kernel 指令数变化 |",
-        "|---|---|---:|---:|---:|---:|---:|---:|",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for row in summaries:
         count = row["comparison_count"]
@@ -827,10 +828,12 @@ def write_markdown(
             "",
             "## 寄存器分配差分",
             "",
-            "| 上下文 | 实际改变的 CTX | 优化 | 配对数 | 核心寄存器布局变化 | "
+            "下表列出寄存器层面的差分统计。",
+            "",
+            "| 上下文 | 改变的 CTX | 优化 | 配对数 | 核心寄存器布局变化 | "
             "仅重编号 | 类别变化 | 别名关系变化 | 核心处活跃数变化 | "
             "kernel 峰值活跃数变化 | kernel 引用集合变化 | 本地内存指令变化 |",
-            "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|",
         ]
     )
     for row in summaries:
@@ -848,39 +851,35 @@ def write_markdown(
             f"{percent(row['kernel_referenced_register_set_changed_count'], count)} | "
             f"{percent(row['kernel_local_memory_indicators_changed_count'], count)} |"
         )
-    lines.extend(["", "## 处理解释", ""])
+    lines.extend(["", "## 各种上下文配置文件的含义", ""])
     by_profile: dict[str, list[dict]] = defaultdict(list)
     for row in summaries:
         by_profile[row["treatment_profile"]].append(row)
     for profile, rows in sorted(by_profile.items()):
         group_sets = sorted({item["changed_context_groups"] for item in rows})
         joint_count = sum(item["joint_treatment_count"] for item in rows)
-        lines.append(
-            f"- `{profile}`：改变的 CTX 组为 `{'; '.join(group_sets)}`。"
-            + (
-                "其中存在联合处理，只能解释为联合效应。"
-                if joint_count
-                else "这是单个顶层 CTX 组的处理。"
-            )
-        )
+        explanations = {
+            "commit_completion": "单独改变顶层上下文组 completion。",
+            "derived_producers": "单独改变生产者链。",
+            "enable_false": "单独改变 D 累加使能常量。",
+            "enable_true_mask_ones": "这是一个联合处理配置，存在联合效应。",
+            "guard_negative": "使用负 guard。",
+            "guard_positive": "使用正 guard。",
+            "lane0_issuer": "限制 lane 0 为发射线程。",
+        }
+        lines.append(f"- `{profile}`：改变 `{'; '.join(group_sets)}` 上下文组。{explanations.get(profile, '其中存在联合处理，只能解释为联合效应。' if joint_count else '单独改变一个顶层上下文组。')}")
     lines.extend(
         [
             "",
-            "## 口径",
+            "## 统计口径",
             "",
-            "- `core` 只比较已经归属的 MMA 核心指令。",
-            "- `kernel` 比较整个 kernel，因此包含参数装载、谓词、分支、",
-            "  操作数准备和完成指令。",
-            "- `encoding_changed` 保留具体寄存器编码，不能单独解释为",
-            "  指令选择发生变化。",
-            "- `仅重编号` 表示核心 MMA 使用的具体寄存器号改变，但",
-            "  R/UR/P/UP 路径和操作数之间的寄存器复用关系不变。",
-            "- `类别变化` 会区分普通/统一寄存器和谓词路径，也会区分",
-            "  RZ、URZ、PT、UPT 等特殊寄存器。",
-            "- 活跃寄存器数来自 `nvdisasm --life-range-mode count` 的",
-            "  静态数据流结果；kernel 引用过的寄存器集合不等于硬件分配上限。",
-            "- `LDL*`/`STL*` 被记为本地内存指令指标。它能提示潜在 spill，",
-            "  但仅凭指令名不能断言它一定由寄存器溢出造成。",
+            "- `core`：只比较已经归属的 MMA 核心指令。",
+            "- `kernel`：比较整个 kernel，包含参数装载、谓词、分支、操作数准备和完成指令。",
+            "- `encoding_changed`：保留具体寄存器编码，不能单独解释为指令选择发生变化。",
+            "- `仅重编号`：核心 MMA 使用的具体寄存器号改变，但 R/UR/P/UP 路径和操作数之间的寄存器复用关系不变。",
+            "- `类别变化`：区分普通寄存器与统一寄存器以及谓词路径，也区分 RZ、URZ、PT、UPT 等特殊寄存器。",
+            "- 活跃寄存器数来自 `nvdisasm --life-range-mode count` 的静态数据流结果。kernel 引用过的寄存器集合不等于硬件分配上限。",
+            "- `LDL*`/`STL*` 被记为本地内存指令指标，能提示潜在的寄存器溢出（spill），但仅凭指令名不能断言一定由溢出造成。",
             "- 本报告是静态代码生成差分，不是运行时语义或性能结论。",
             "",
         ]

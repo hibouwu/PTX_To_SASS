@@ -25,6 +25,13 @@ python3 "${script_dir}/compare_context_lowering.py" \
     --output-dir "${work_root}/context-comparison" \
     --report-output "${script_dir}/Docs/tcgen05_mma_上下文差分报告.md"
 
+python3 "${script_dir}/analyze_mapping_rules.py" \
+    --manifest "${work_root}/expanded/sources/manifest.jsonl" \
+    --attribution "${work_root}/expanded/sass/sass_attribution.jsonl" \
+    --differences "${work_root}/context-comparison/context_differences.jsonl" \
+    --output-dir "${work_root}/rule-mining" \
+    --report-output "${script_dir}/Docs/mapping_rules/reverse_mapping_rules.md"
+
 python3 "${script_dir}/check_negative_probes.py" \
     --work-dir "${work_root}/negative-probes" \
     --summary-output "${script_dir}/validation/negative_probe_summary.json"
@@ -37,4 +44,4 @@ python3 "${script_dir}/check_protocol_layers.py" \
 python3 "${script_dir}/generate_cases.py"
 python3 "${script_dir}/generate_protocol_layers.py"
 
-echo "PASS: syntax + expanded + context comparison + CTX.protocol + effect_slice O0/O1/O2/O3"
+echo "PASS: syntax + expanded + context comparison + predictive/inverse rule mining + CTX.protocol + effect_slice O0/O1/O2/O3"

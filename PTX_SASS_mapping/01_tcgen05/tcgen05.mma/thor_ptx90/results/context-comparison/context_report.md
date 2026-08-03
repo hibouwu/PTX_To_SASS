@@ -12,7 +12,7 @@
 
 ## 分上下文统计
 
-下表列出每种上下文配置文件和优化级的配对数量及各项变化情况。核心助记符变化在所有行中均为 0，说明上下文不改变核心 MMA 的助记符选择。
+下表列出每种上下文配置文件和优化级的配对数量及各项变化情况。核心助记符变化栏在所有行中均为 0，说明上下文不改变核心 MMA 的助记符选择。
 
 | 上下文 | 改变的 CTX 组 | 优化 | 配对数 | 核心助记符变化 | 核心规范形变化 | kernel 规范序列变化 | kernel 指令数变化 |
 |---|---|---|---|---|---|---|---|
@@ -20,7 +20,7 @@
 | `commit_completion` | `completion` | O1 | 1152 | 0 (0.0%) | 0 (0.0%) | 1152 (100.0%) | 1152 (100.0%) |
 | `commit_completion` | `completion` | O2 | 1152 | 0 (0.0%) | 0 (0.0%) | 1152 (100.0%) | 1152 (100.0%) |
 | `commit_completion` | `completion` | O3 | 1152 | 0 (0.0%) | 0 (0.0%) | 1152 (100.0%) | 1152 (100.0%) |
-| `derived_producers` | `operand_producers` | O0 | 1152 | 0 (0.0%) | 0 (0.0%) | 1152 (100.0%) | 852 (74.0%) |
+| `derived_producers` | `operand_producers` | O0 | 1152 | 0 (0.0%) | 0 (0.0%) | 1152 (100.0%) | 1068 (92.7%) |
 | `derived_producers` | `operand_producers` | O1 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `derived_producers` | `operand_producers` | O2 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `derived_producers` | `operand_producers` | O3 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
@@ -51,13 +51,15 @@
 
 ## 寄存器分配差分
 
+下表列出寄存器层面的差分统计。
+
 | 上下文 | 改变的 CTX | 优化 | 配对数 | 核心寄存器布局变化 | 仅重编号 | 类别变化 | 别名关系变化 | 核心处活跃数变化 | kernel 峰值活跃数变化 | kernel 引用集合变化 | 本地内存指令变化 |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | `commit_completion` | `completion` | O0 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 1152 (100.0%) | 1152 (100.0%) | 1084 (94.1%) | 0 (0.0%) |
 | `commit_completion` | `completion` | O1 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `commit_completion` | `completion` | O2 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `commit_completion` | `completion` | O3 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
-| `derived_producers` | `operand_producers` | O0 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 108 (9.4%) | 556 (48.3%) | 0 (0.0%) |
+| `derived_producers` | `operand_producers` | O0 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 92 (8.0%) | 564 (49.0%) | 0 (0.0%) |
 | `derived_producers` | `operand_producers` | O1 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `derived_producers` | `operand_producers` | O2 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `derived_producers` | `operand_producers` | O3 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
@@ -88,13 +90,13 @@
 
 ## 各种上下文配置文件的含义
 
-- `commit_completion`：单独改变 `completion` 上下文组。
-- `derived_producers`：单独改变 `operand_producers` 上下文组。
-- `enable_false`：单独改变 `enable_input_d` 上下文组。
-- `enable_true_mask_ones`：同时改变 `disable_output_lane` 和 `enable_input_d` 上下文组，存在联合效应。
-- `guard_negative`：单独改变 `target_guard`，使用负 guard。
-- `guard_positive`：单独改变 `target_guard`，使用正 guard。
-- `lane0_issuer`：单独改变 `issuer`，限制 lane 0 为发射线程。
+- `commit_completion`：改变 `completion` 上下文组。单独改变顶层上下文组 completion。
+- `derived_producers`：改变 `operand_producers` 上下文组。单独改变生产者链。
+- `enable_false`：改变 `enable_input_d` 上下文组。单独改变 D 累加使能常量。
+- `enable_true_mask_ones`：改变 `disable_output_lane+enable_input_d; enable_input_d` 上下文组。这是一个联合处理配置，存在联合效应。
+- `guard_negative`：改变 `target_guard` 上下文组。使用负 guard。
+- `guard_positive`：改变 `target_guard` 上下文组。使用正 guard。
+- `lane0_issuer`：改变 `issuer` 上下文组。限制 lane 0 为发射线程。
 
 ## 统计口径
 

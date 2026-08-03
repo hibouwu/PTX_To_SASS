@@ -6,6 +6,8 @@
 
 - [`mapping_rules/README.md`](mapping_rules/README.md)：按 kind、CTA group、变体、操作数来源、collector、分块缩放、`.ashift`、guard、发射线程、操作数生成方式和内存一致性拆分的可检索规则索引。查单个语义维度或外围上下文时从这里开始。
 - [`mapping_rules/memory_consistency.md`](mapping_rules/memory_consistency.md)：系统整理 commit、mbarrier、tcgen05 fence、LD/ST wait、scope 和资源生命周期。
+- [`mapping_rules/reverse_mapping_rules.md`](mapping_rules/reverse_mapping_rules.md)：自动挖掘 guard/issuer 的精确决策条件，并量化从规范化核心 SASS 反推各 PTX 字段时的一对一与多对一边界。
+- [`mapping_rules/descriptor_and_encoding.md`](mapping_rules/descriptor_and_encoding.md)：区分核心机器编码和运行时 descriptor 位域，列出已隔离的编码位、机器码级 alias、实机 probe 矩阵和完整映射的完成标准。
 - [`tcgen05_mma_PTX到SASS映射规则报告.md`](tcgen05_mma_PTX到SASS映射规则报告.md)：指令族综合报告，讲清修饰符联合作用、完整编译降级、函数级 PTX/SASS 例子、寄存器和上下文。
 - [`tcgen05_mma_上下文差分报告.md`](tcgen05_mma_上下文差分报告.md)：供进一步核对的逐上下文统计报告。
 

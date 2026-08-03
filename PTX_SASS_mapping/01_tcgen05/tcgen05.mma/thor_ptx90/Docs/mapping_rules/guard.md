@@ -2,18 +2,18 @@
 
 ## 先说结论
 
-guard 是写在目标 PTX 指令前的条件谓词（predicate），例如 `@%guard tcgen05.mma ...` 或 `@!%guard tcgen05.mma ...`。它不改变 `UTCHMMA`/`UTCQMMA`/`UTCIMMA`/`UTCOMMA` 的操作码家族，但通过两种主要路径控制核心 MMA 是否执行：
+guard 是写在目标 PTX 指令前的条件谓词（predicate），例如 `@%guard tcgen05.mma ...` 或 `@!%guard tcgen05.mma ...`。它不改变 `UTCHMMA`/`UTCQMMA`/`UTCIMMA`/`UTCOMMA` 的操作码家族，但通过两种主要路径控制核心 MMA 序列是否执行：
 
-- 直接附着为 SASS 统一谓词（uniform predicate）
+- 只附着到两条 collector 序列的第一条核心 SASS，后续 occurrence 不重复携带谓词
 - 生成外围谓词与分支，使未满足条件的线程绕过核心 MMA
 
 ```text
 PTX 正 guard
-    → @UPn UTC*MMA ...
+    → @UPn UTC*MMA ... ; UTC*MMA ...
     或 ISETP/PLOP3 + 条件分支/提前退出 + 无显式 guard 的 UTC*MMA
 
 PTX 负 guard
-    → @!UPn UTC*MMA ...
+    → @!UPn UTC*MMA ... ; UTC*MMA ...
     或反向条件分支/提前退出 + 无显式 guard 的 UTC*MMA
 ```
 
@@ -35,7 +35,7 @@ PTX 负 guard
 
 两者都称为谓词，但控制不同语义，不能互换。
 
-## 路径一：直接 SASS 谓词化
+## 路径一：collector 序列首条 SASS 谓词化
 
 `THOR_MMA_000028/000029` 使用 A collector fill。正、负 guard 的目标 PTX 只差极性：
 
@@ -44,14 +44,16 @@ PTX 负 guard
 @!%guard tcgen05.mma.cta_group::1.kind::f16.collector::a::fill ...;
 ```
 
-O3 直接把 guard 保留在核心 SASS 上：
+这个 case 实际包含 fill 和后续 use 两个 occurrence。O3 只把 guard 保留在第一条核心 SASS 上：
 
 ```sass
 @UP1  UTCHMMA gdesc[UR8].A_KEEP, gdesc[UR10], tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+      UTCHMMA gdesc[UR8].A_REUSE.A_KEEP, gdesc[UR10], tmem[UR6], tmem[UR4], idesc[UR5], UP0;
 @!UP1 UTCHMMA gdesc[UR8].A_KEEP, gdesc[UR10], tmem[UR6], tmem[UR4], idesc[UR5], UP0;
+      UTCHMMA gdesc[UR8].A_REUSE.A_KEEP, gdesc[UR10], tmem[UR6], tmem[UR4], idesc[UR5], UP0;
 ```
 
-可以分别读出：最前面的 `@UP1`/`@!UP1` 是 guard；最后的 `UP0` 是 enable；`.A_KEEP` 是 collector。guard 改变核心规范操作文本，但不改变 `UTCHMMA` 和 `.A_KEEP` 的选择。
+可以分别读出：第一条最前面的 `@UP1`/`@!UP1` 是 guard；最后的 `UP0` 是 enable；`.A_KEEP`/`.A_REUSE` 是 collector。guard 改变第一条核心规范操作文本，但不改变 `UTCHMMA` 和 collector 修饰符的选择。第二条未重复谓词化不是 guard 丢失，而是编译器把整个 collector 序列作为一个受同一入口条件控制的单元。
 
 对应的无 guard 基线 `THOR_MMA_000025` 为：
 
@@ -94,15 +96,39 @@ O0 中谓词形成与控制流更长，可见 `ISETP`、`PLOP3.LUT`、条件 `BR
 
 O1–O3 的 352 组核心规范操作变化对应 guard 进入核心谓词形态。其余形态由外围控制流承担。O2/O3 的 508 组核心寄存器布局变化包含 156 组纯重编号和 352 组寄存器类别/别名关系变化。所有 1,152 组完整 kernel 序列都改变，说明 guard 始终是完整编译降级的一部分。
 
+## O1–O3 的精确路径选择规则
+
+对当前 1,152 个设计，路径选择可以由四个字段无误差预测：`variant + kind + zero_column_mask + step_count`。规则为：
+
+```text
+first_occurrence_core_predication =
+    step_count == 2
+    and (
+        variant in {mma.sp, mma.ws.sp}
+        or (kind in {f16, tf32, f8f6f4, i8} and zero_column_mask == false)
+    )
+
+其余合法形态 = external_control_flow
+```
+
+结果分布为：
+
+| lowering 路径 | 设计数 | 核心 occurrence 的 guard 形状 |
+|---|---:|---|
+| collector 序列首条谓词化 | 352 | 全部为 `(true, false)` |
+| 外围控制流 | 800 | 656 个 `(false)`；144 个 `(false, false)` |
+
+这里的 `step_count == 2` 表示 fill→use 或 fill→lastuse 两条 collector 序列。单 occurrence 的 discard/fill 和不满足上式的双 occurrence 形态都走外围控制流。该式是当前 PTX 9.0、`sm_110a`、O1–O3 数据上的零反例规则；它描述已观察到的编译器选择边界，不声称是 ISA 强制要求。
+
 ## 正 guard 与负 guard 的关系
 
 正负 guard 覆盖相同的 semantic form、变体、TS/SS、CTA group、collector、分块缩放和 `.ashift` 范围。当前统计中，两种极性的核心变化、寄存器变化和 O1–O3 指令数变化数量一致。因此可以写成：极性决定谓词取反方向，但没有改变编译器使用两类编译降级机制的覆盖规模。
 
-不能进一步写成"任意正 guard 必然使用 `@UPn`"或"某种 kind 必然使用分支"，因为当前结果只证明两条路径都存在，尚未把路径选择冻结为独立的 PTX 字段规则。
+因此不能写成“任意正 guard 必然使用 `@UPn`”，但现在可以根据上一节的四字段规则预测当前矩阵中的具体路径。极性决定 `@UPn`/`@!UPn` 或外围分支的取反方向，路径选择条件本身不随极性变化。
 
 ## 代表性覆盖口径
 
-本文覆盖 guard 的主要静态变化机制至少 95%：
+本文按以下静态机制清单报告覆盖，不把有限生成矩阵换算成总体百分比：
 
 - 无谓词（unpredicated）、正 guard、负 guard 三种目标形态。
 - 直接核心谓词化与外围控制流两条编译降级路径。
@@ -117,3 +143,4 @@ O1–O3 的 352 组核心规范操作变化对应 guard 进入核心谓词形态
 - PTX case 与上下文清单：[`../../results/expanded/sources/manifest.jsonl`](../../results/expanded/sources/manifest.jsonl)
 - PTX occurrence → 核心 SASS 归属：[`../../results/expanded/sass/sass_attribution.jsonl`](../../results/expanded/sass/sass_attribution.jsonl)
 - 综合解释：[`../tcgen05_mma_PTX到SASS映射规则报告.md`](../tcgen05_mma_PTX到SASS映射规则报告.md)
+- 自动挖掘的决策规则与逆向可恢复率：[`reverse_mapping_rules.md`](reverse_mapping_rules.md)

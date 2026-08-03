@@ -31,6 +31,8 @@ tcgen05.mma.ws...  → UTCHMMA.WS...
 
 `.ws` 还把 collector 的主要对象从 A 改为 B0–B3。具体规则见 [`collector.md`](collector.md)。
 
+在 O3 `runtime_zero` 中，筛出 16 个独立 witness 组；等价拼写和重复实例展开为 64 个具体寄存器相同、移除 `.WS` 后整条核心操作相同的候选 pair，全部得到 word 0 XOR=`0x0000000000000000`、word 1 XOR=`0x0000000000080000`。因此当前工具链的 `.WS` 已能归纳为 word 1 的固定单比特；这不表示整个 `mma→mma.ws` 的操作数契约只有一个 bit，因为 WS 还改变合法 collector 和可选 zero-column-mask。完整计数见[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)，编码方法边界见 [`descriptor_and_encoding.md`](descriptor_and_encoding.md)。
+
 ## `.sp` 为什么没有 `.SP`
 
 本实验中，`mma.sp` 和 `mma.ws.sp` 都没有生成同名 `.SP` SASS 修饰符：
@@ -43,7 +45,9 @@ mma.ws    → UTCHMMA.WS
 mma.ws.sp → UTCHMMA.WS
 ```
 
-这不表示稀疏语义被删除。`.sp` 增加的元数据（metadata）会进入操作数位置和机器编码，并影响物理寄存器分配（`ptxas` 把 PTX 虚拟寄存器安排到具体 R/UR/P/UP 编号的过程）。
+这不表示稀疏语义被删除。`.sp` 增加的元数据（metadata）会改变完整操作数契约、前序参数装载和数据流，并可能改变核心机器编码与物理寄存器分配（`ptxas` 把 PTX 虚拟寄存器安排到具体 R/UR/P/UP 编号的过程）；但反汇编文本不会给对应 `tmem[URn]` 标注“这是 metadata”，某些 dense/sparse pair 的核心文本和编码甚至完全相同，因此不能仅靠规范化核心指令判断 `.sp`。
+
+对 O3 `runtime_zero` 的 300 种规范化核心 SASS signature 做逆映射时，`.sp` 的唯一可恢复率为 0/300；相反 `.ws` 为 300/300。逆向器必须把完整 kernel 的 producer/参数槽位、PTX 或调用约定中的 metadata 值纳入证据，并在证据不足时返回 dense/sparse 候选集合。详细碰撞矩阵见 [`reverse_mapping_rules.md`](reverse_mapping_rules.md)，descriptor 与编码的分层边界见 [`descriptor_and_encoding.md`](descriptor_and_encoding.md)。
 
 ## 稀疏变体的寄存器证据
 
@@ -331,7 +335,7 @@ UTCHMMA.WS ..., idesc[UR11], UR12, UP0;
 | CTA group 限制 | WS 固定 group 1 |
 | 指令数、外围、活跃寄存器和编码四层影响 | 三组统计表 |
 
-四个变体及其主要操作数契约和组合边界均有真实见证，保守记为至少 95% 的主要变化机制。尚未覆盖的是稀疏/WS 的实机数值与逐位编码解释。
+四个变体及其当前主要操作数契约和组合边界均有真实见证。尚未覆盖的是稀疏/WS 的实机数值与逐位编码解释，因此不声明总体百分比。
 
 ## 证据与边界
 

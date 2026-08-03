@@ -14,15 +14,19 @@
     .param .u32 p_idesc,
     .param .u64 p_out
 )
+    .reqntid 32
+    .reqnctapercluster 2
+    .explicitcluster
 {
-    .reg .b32 %taddr, %idesc, %io0, %io1, %lane;
+    .reg .b32 %taddr, %idesc, %io0, %io1, %lane, %rank, %rank_parity;
     .reg .b64 %desc_a, %desc_b;
-    .reg .b64 %out;
-    .reg .pred %issuer, %enable, %complete;
+    .reg .b64 %out, %out_cta;
+    .reg .b16 %cta_mask;
+    .reg .pred %lane_zero, %even_cta, %issuer, %enable, %complete;
     .reg .b32 %mask<8>;
     // EFFECT_SLICE_BEGIN
     mov.u32 %lane, %laneid;
-    setp.eq.u32 %issuer, %lane, 0;
+    setp.eq.u32 %lane_zero, %lane, 0;
     tcgen05.alloc.cta_group::2.sync.aligned.shared::cta.b32 [alloc_slot], 32;
     bar.cta.sync 0;
     ld.shared::cta.b32 %taddr, [alloc_slot];
@@ -30,6 +34,12 @@
     ld.param.b64 %desc_b, [p_desc_b];
     ld.param.b32 %idesc, [p_idesc];
     ld.param.b64 %out, [p_out];
+    mov.u32 %rank, %cluster_ctarank;
+    and.b32 %rank_parity, %rank, 1;
+    setp.eq.u32 %even_cta, %rank_parity, 0;
+    and.pred %issuer, %lane_zero, %even_cta;
+    mad.wide.u32 %out_cta, %rank, 8, %out;
+    mov.b16 %cta_mask, 0x3;
     setp.eq.u32 %enable, 0, 1;
     mov.b32 %io0, 0;
     mov.b32 %io1, 0;
@@ -41,24 +51,25 @@
     mov.b32 %mask5, 0;
     mov.b32 %mask6, 0;
     mov.b32 %mask7, 0;
-    @%issuer mbarrier.init.shared::cta.b64 [mbar_obj], 1;
+    @%lane_zero mbarrier.init.shared::cta.b64 [mbar_obj], 1;
     bar.cta.sync 0;
+    fence.proxy.async;
     tcgen05.st.sync.aligned.32x32b.x2.b32 [%taddr], {%io0, %io1};
     tcgen05.wait::st.sync.aligned;
     @%issuer tcgen05.mma.cta_group::2.kind::f16 [%taddr], %desc_a, %desc_b, %idesc, {%mask0, %mask1, %mask2, %mask3, %mask4, %mask5, %mask6, %mask7}, %enable;
-    @%issuer tcgen05.commit.cta_group::2.mbarrier::arrive::one.shared::cluster.b64 [mbar_obj];
+    @%issuer tcgen05.commit.cta_group::2.mbarrier::arrive::one.shared::cluster.multicast::cluster.b64 [mbar_obj], %cta_mask;
 EFFECT_WAIT:
     mbarrier.try_wait.parity.acquire.cluster.shared::cta.b64 %complete, [mbar_obj], 0;
     @!%complete bra EFFECT_WAIT;
     tcgen05.fence::after_thread_sync;
     tcgen05.ld.sync.aligned.32x32b.x2.b32 {%io0, %io1}, [%taddr];
     tcgen05.wait::ld.sync.aligned;
-    st.global.v2.b32 [%out], {%io0, %io1};
+    @%lane_zero st.global.v2.b32 [%out_cta], {%io0, %io1};
     bar.cta.sync 0;
     tcgen05.dealloc.cta_group::2.sync.aligned.b32 %taddr, 32;
     tcgen05.relinquish_alloc_permit.cta_group::2.sync.aligned;
     bar.cta.sync 0;
-    @%issuer mbarrier.inval.shared::cta.b64 [mbar_obj];
+    @%lane_zero mbarrier.inval.shared::cta.b64 [mbar_obj];
     // EFFECT_SLICE_END
     ret;
 }

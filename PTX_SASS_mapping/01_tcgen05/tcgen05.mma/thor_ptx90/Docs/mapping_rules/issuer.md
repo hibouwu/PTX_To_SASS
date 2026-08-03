@@ -97,7 +97,30 @@ lane-0 分支改变了控制流边界、哪些线程继续执行以及参数准�
 | O2 | 0/1,152 | 0/1,152 | 1,152/1,152 | 592/1,152 | 168/1,152 | 1,152/1,152 | 1,152/1,152 |
 | O3 | 0/1,152 | 0/1,152 | 1,152/1,152 | 592/1,152 | 168/1,152 | 1,152/1,152 | 1,152/1,152 |
 
-O1–O3 的 168 组核心寄存器布局变化全部是纯重编号，且全部来自稀疏 `.sp` 变体。没有寄存器类别或别名关系变化。与此同时，1,152/1,152 组核心活跃数、kernel 峰值活跃数和 kernel 引用集合都变化。最准确的表述是：lane-0 issuer 不改变指令选择，但强烈改变控制流和资源状态。
+O1–O3 的 168 组核心寄存器布局变化全部是纯重编号。没有寄存器类别或别名关系变化。与此同时，1,152/1,152 组核心活跃数、kernel 峰值活跃数和 kernel 引用集合都变化。最准确的表述是：lane-0 issuer 不改变指令选择，但强烈改变控制流和资源状态。
+
+## O1–O3 的精确重编号条件
+
+168 组并不是“所有稀疏形态”，而是可以由 `variant + kind + a_form + zero_column_mask` 精确预测的两个子集：
+
+```text
+renumber_only =
+    a_form == tmem_address
+    and (
+        (variant == mma.sp and kind in {mxf4, mxf4nvf4, mxf8f6f4})
+        or (variant == mma.ws.sp and zero_column_mask == true)
+    )
+
+其余合法形态 = stable_layout
+```
+
+| 子集 | 数量 | 必要条件 |
+|---|---:|---|
+| 稀疏分块缩放 TS | 100 | `mma.sp`；A=`tmem`；kind 为 `mxf4/mxf4nvf4/mxf8f6f4` |
+| 稀疏 WS + zero-column-mask TS | 68 | `mma.ws.sp`；A=`tmem`；zero-column-mask=true |
+| 其余合法设计 | 984 | 核心寄存器布局稳定 |
+
+这个规则预测的是相对 `runtime_zero` 基线是否出现纯物理寄存器重编号，不预测具体编号。具体编号仍受参数装载融合、活跃区间和工具链版本影响。
 
 O0 的核心位置活跃数没有变化，但完整 kernel 序列全部变化、1,024 组指令数变化、700 组峰值活跃数变化。这反映 O0 的冗长编译降级使新增发射线程计算尚未以 O1–O3 的方式重排到核心附近。
 
@@ -110,7 +133,7 @@ O0 的核心位置活跃数没有变化，但完整 kernel 序列全部变化、
 
 ## 代表性覆盖口径
 
-本文覆盖发射线程的主要静态变化机制至少 95%：当前线程与 lane-0 分支两种配置、全部 1,152 个设计、四优化级、所有已生成操作码/变体/来源/CTA group 组合，以及核心、完整序列、寄存器和活跃数差分。
+本文覆盖当前发射线程清单中的两种静态配置：当前线程与 lane-0 分支；证据包含全部 1,152 个设计、四优化级、所有已生成操作码/变体/来源/CTA group 组合，以及核心、完整序列、寄存器和活跃数差分。未枚举真实 CTA-pair 发射者和运行时调度，因此不声明总体百分比。
 
 未覆盖的是其他单 lane、warp leader 动态选举、多 warp/warpgroup 发射协议、实机收敛性和性能。不能从 lane-0 静态 case 推导这些未测试模式。
 
@@ -120,3 +143,4 @@ O0 的核心位置活跃数没有变化，但完整 kernel 序列全部变化、
 - PTX case 与上下文清单：[`../../results/expanded/sources/manifest.jsonl`](../../results/expanded/sources/manifest.jsonl)
 - 核心 SASS 与活跃寄存器归属：[`../../results/expanded/sass/sass_attribution.jsonl`](../../results/expanded/sass/sass_attribution.jsonl)
 - 综合解释：[`../tcgen05_mma_PTX到SASS映射规则报告.md`](../tcgen05_mma_PTX到SASS映射规则报告.md)
+- 自动挖掘的决策规则与逆向可恢复率：[`reverse_mapping_rules.md`](reverse_mapping_rules.md)

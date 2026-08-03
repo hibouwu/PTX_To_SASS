@@ -1,0 +1,24 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "ctx_mbarrier_cluster_release_relaxed.ptx"
+
+.shared .align 8 .b64 mbar_obj;
+
+// LAYER CTX.protocol
+// COORDINATES {"arrive_semantics":"release","family":"mbarrier_lifecycle","scope":"cluster","state_space":"shared_cta","wait_semantics":"relaxed"}
+.visible .entry ctx_mbarrier_cluster_release_relaxed(
+
+)
+{
+    .reg .pred %complete;
+    // EFFECT_SLICE_BEGIN
+    mbarrier.init.shared::cta.b64 [mbar_obj], 1;
+    bar.cta.sync 0;
+    mbarrier.arrive.release.cluster.shared::cta.b64 _, [mbar_obj];
+    mbarrier.try_wait.parity.relaxed.cluster.shared::cta.b64 %complete, [mbar_obj], 0;
+    bar.cta.sync 0;
+    mbarrier.inval.shared::cta.b64 [mbar_obj];
+    // EFFECT_SLICE_END
+    ret;
+}

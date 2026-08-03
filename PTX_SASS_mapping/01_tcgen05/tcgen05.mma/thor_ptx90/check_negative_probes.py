@@ -19,17 +19,57 @@ PROBES = (
     (
         "scale_input_d",
         Case("mma", 1, "f16", "smem_descriptor", None, 0, False, "probe", (Step(),), "runtime_zero"),
-        "Feature 'argument scale-inp-d-imm' not supported on .target 'sm_110a'",
+        r"scale-inp-d-imm.*not supported.*sm_110a",
     ),
     (
         "block_scale_with_ashift",
         Case("mma", 1, "mxf8f6f4", "tmem_address", "scale_vec::1X", None, False, "probe", (Step(ashift=True),), "runtime_zero"),
-        "Illegal modifier '.ashift' for instruction 'tcgen05.mma'",
+        r"Illegal modifier '.ashift'.*tcgen05\.mma",
     ),
     (
         "smem_descriptor_with_ashift",
         Case("mma", 1, "tf32", "smem_descriptor", None, None, False, "probe", (Step(ashift=True),), "runtime_zero"),
-        "Illegal modifier '.ashift' for instruction 'tcgen05.mma'",
+        r"Illegal modifier '.ashift'.*tcgen05\.mma",
+    ),
+    (
+        "ws_cta_group_2",
+        Case("mma.ws", 2, "f16", "smem_descriptor", None, None, False, "probe", (Step(),), "runtime_zero"),
+        r"cta_group::2|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "normal_uses_b_collector",
+        Case("mma", 1, "f16", "smem_descriptor", None, None, False, "probe", (Step("fill", "b0"),), "runtime_zero"),
+        r"collector::b0|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "ws_uses_a_collector",
+        Case("mma.ws", 1, "f16", "smem_descriptor", None, None, False, "probe", (Step("fill", "a"),), "runtime_zero"),
+        r"collector::a|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "mxf4nvf4_omits_scale_vector",
+        Case("mma", 1, "mxf4nvf4", "smem_descriptor", None, None, False, "probe", (Step(),), "runtime_zero"),
+        r"scale_vec|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "mxf8f6f4_scale_vec_2x",
+        Case("mma", 1, "mxf8f6f4", "smem_descriptor", "scale_vec::2X", None, False, "probe", (Step(),), "runtime_zero"),
+        r"scale_vec::2X|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "mxf4_scale_vec_1x",
+        Case("mma", 1, "mxf4", "smem_descriptor", "scale_vec::1X", None, False, "probe", (Step(),), "runtime_zero"),
+        r"scale_vec::1X|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "ws_block_scale",
+        Case("mma.ws", 1, "mxf4", "smem_descriptor", "scale_vec::2X", None, False, "probe", (Step(),), "runtime_zero"),
+        r"block_scale|Illegal modifier|Arguments mismatch",
+    ),
+    (
+        "cta_group_3",
+        Case("mma", 3, "f16", "smem_descriptor", None, None, False, "probe", (Step(),), "runtime_zero"),
+        r"cta_group::3|Illegal modifier|Arguments mismatch",
     ),
 )
 
@@ -64,7 +104,7 @@ def main() -> None:
     )
 
     results = []
-    for ordinal, (name, case, expected_diagnostic) in enumerate(PROBES, start=1):
+    for ordinal, (name, case, expected_diagnostic_pattern) in enumerate(PROBES, start=1):
         source = work_dir / f"probe_{ordinal:03d}.ptx"
         cubin = work_dir / f"probe_{ordinal:03d}.cubin"
         source_text = "\n".join(
@@ -99,14 +139,14 @@ def main() -> None:
         diagnostics = error_diagnostics(completed.stderr)
         passed = completed.returncode != 0 and any(
             item["line"] == target_lines[0]
-            and item["message"] == expected_diagnostic
+            and re.search(expected_diagnostic_pattern, item["message"])
             for item in diagnostics
         )
         results.append(
             {
                 "probe": name,
                 "expected": "PTXAS_REJECT",
-                "expected_diagnostic": expected_diagnostic,
+                "expected_diagnostic_pattern": expected_diagnostic_pattern,
                 "expected_error_line": target_lines[0],
                 "returncode": completed.returncode,
                 "parsed_error_diagnostics": diagnostics,

@@ -119,6 +119,17 @@ UTCHMMA.2CTA ...
 
 它不会额外生成移位指令，也不会改变 `LDCU`、`ELECT`、`PLOP3`、`BRA` 等外围序列。当前样本中连核心寄存器编号都保持不变，只有修饰符和机器编码发生变化。
 
+## `.ASHIFT` 的已隔离机器编码位
+
+在 O3 `runtime_zero` 中筛出 32 个独立 witness 组；等价源码拼写展开后形成 80 个具体寄存器完全一致、去掉 `.ASHIFT` 后整条核心操作文本完全一致的候选 pair。全部候选的两个 64-bit encoding word 只有同一个 XOR 差异：
+
+```text
+word 0 XOR = 0x0000000000000000
+word 1 XOR = 0x0000000000000400
+```
+
+对应实例 `THOR_MMA_000161 → THOR_MMA_000201` 的 word 1 为 `0x0081d80008000006 → 0x0081d80008000406`。因此在当前 Thor 工具链中，`.ashift` 可归纳为设置 word 1 的 `0x00000400` 单比特。分析方法、完整计数和边界见 [`descriptor_and_encoding.md`](descriptor_and_encoding.md)及[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)。
+
 ## 跨形态代表例子
 
 单个 f16 例子不足以说明 `.ASHIFT` 与其他合法维度的组合。下面列出 expanded 结果中的真实 O3 核心指令：
@@ -155,7 +166,7 @@ UTCHMMA.2CTA.ASHIFT
 | 不新增外围 shift/load/control 指令 | 外围 SASS 统计 |
 | TS-only、非分块缩放的合法性边界 | 两个阴性探针 |
 
-这些机制均有正向或阴性证据。未逐条展示的主要是共享同一 `UTCHMMA` 家族的 `tf32` 和所有 collector 状态的重复实例。保守记为至少 95% 的主要变化机制，不是 95% 的精确 semantic form。
+这些机制均有正向或阴性证据。未逐条展示的主要是共享同一 `UTCHMMA` 家族的 `tf32` 和所有 collector 状态的重复实例；本文按覆盖清单报告，不把它换算成缺少封闭分母的百分比。
 
 ## 证据和限制
 

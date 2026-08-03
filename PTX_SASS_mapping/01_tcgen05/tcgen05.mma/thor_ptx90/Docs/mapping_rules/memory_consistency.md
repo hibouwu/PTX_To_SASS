@@ -12,6 +12,7 @@
 
 | 机制 | 回答的问题 | 主要 PTX 原语 | 当前 SASS 见证 |
 |---|---|---|---|
+| generic/async proxy 衔接 | 普通 shared-memory 访问与 tcgen05 异步代理访问如何互相可见？ | `fence.proxy.async`、`fence.proxy.async.shared::{cta,cluster}` | `FENCE.VIEW.ASYNC.S` |
 | 异步完成 | 先前的异步操作是否已经完成？ | `tcgen05.commit`、`mbarrier.try_wait`、`tcgen05.wait::ld/st` | `UTCBAR*`、`SYNCS.PHASECHK*`、`LDTM/STTM`、`FENCE.VIEW.ASYNC.T` |
 | 跨线程排序 | 一个线程的 tcgen05 操作如何排在同步点前后？ | `tcgen05.fence::before_thread_sync`/`after_thread_sync` | 上下文相关；可以不产生同名独立指令，也可以改变 `BAR.SYNC`、`NOP` 和调度布局 |
 | 普通内存可见性 | 同步对象之前的普通内存访问何时对其他线程可见？ | `mbarrier.arrive.release` + 成功的 `mbarrier.try_wait.acquire` | 集群（cluster）release/acquire 见到 `MEMBAR.ALL.CTA/GPU`、`ERRBAR`、`CGAERRBAR`；具体序列受上下文优化影响 |
@@ -19,6 +20,7 @@
 
 最容易混淆的三点：
 
+- `tcgen05.mma`/`tcgen05.cp` 对 shared memory 的访问属于 async proxy；普通 shared-memory load/store 属于 generic proxy。跨 proxy 传递数据时需要 `fence.proxy.async`，普通 `membar`、mbarrier phase 完成或 `tcgen05.fence` 不能自动替代它。
 - `tcgen05.commit` 跟踪先前 `tcgen05.mma`/`cp`/`shift` 的完成，并在完成后触发 mbarrier arrive。它不是面向所有普通内存访问的通用 fence。
 - `mbarrier` 的"phase 已完成"和普通内存的 release/acquire 可见性是相关但不同的属性。`.relaxed` 只检查 phase，不提供普通内存排序与可见性保证。
 - `tcgen05.wait::ld/st` 等待当前线程先前的 TMEM load/store 完成，并要求 warp 对齐执行。它不是 CTA/集群线程同步，也不能单独把数据发布给另一个线程。
@@ -44,11 +46,25 @@
     → 消费者后续普通内存访问
 ```
 
-NVIDIA PTX ISA 将 release pattern 定义为让本线程在它之前的操作参与同步，将 acquire pattern 限定到它之后的操作。成功返回的 acquire `mbarrier.try_wait`/`test_wait` 才形成 acquire pattern。`.relaxed` 明确不提供内存排序或可见性保证。双方必须处于能相互同步的 scope 内。参见 [NVIDIA PTX ISA：Memory Consistency Model 与 mbarrier](https://docs.nvidia.com/cuda/parallel-thread-execution/)。
+NVIDIA PTX ISA 将 release pattern 定义为让本线程在它之前的操作参与同步，将 acquire pattern 限定到它之后的操作。成功返回的 acquire `mbarrier.try_wait`/`test_wait` 才形成 acquire pattern。`.relaxed` 明确不提供内存排序或可见性保证。双方必须处于能相互同步的 scope 内。参见 [NVIDIA PTX ISA 9.0（CUDA 13.0 archive）：Memory Consistency Model 与 mbarrier](https://docs.nvidia.com/cuda/archive/13.0.0/parallel-thread-execution/index.html)。
+
+## `fence.proxy.async`：generic proxy 与 tcgen05 async proxy 的边界
+
+对 shared memory 来说，`tcgen05.mma`/`tcgen05.cp` 的访问由 async proxy 执行，而普通 PTX shared-memory load/store 由 generic proxy 执行。即使两边访问同一地址，一个 proxy 中完成或有序也不自动意味着另一个 proxy 可观察到结果；在 generic → async 或 async → generic 的通信边界需要按规范放置 `fence.proxy.async`，并选择足够的 state space 与 scope。
+
+当前协议矩阵分别编译以下三个独立形态，四个优化级都保留 `FENCE.VIEW.ASYNC.S`：
+
+| PTX | 当前 SASS |
+|---|---|
+| `fence.proxy.async;` | `FENCE.VIEW.ASYNC.S` |
+| `fence.proxy.async.shared::cta;` | `FENCE.VIEW.ASYNC.S` |
+| `fence.proxy.async.shared::cluster;` | `FENCE.VIEW.ASYNC.S` |
+
+完整 effect slice 在普通 shared-memory mbarrier 初始化和 tcgen05 MMA 之间也显式放置 `fence.proxy.async`。这证明当前目标保留了跨 proxy 边界，但三种 PTX scope/state-space 写法汇合到相同核心 SASS 文本，因此不能只凭该助记符反推原始限定符。`FENCE.VIEW.ASYNC.T` 则是当前 `tcgen05.wait::st` 路径的 TMEM store 完成见证；名字相近，不应与 `.S` 的 shared-memory proxy fence 混为一谈。
 
 ## `tcgen05.commit`：MMA 完成通知，不是普通内存 fence
 
-规范上，`tcgen05.commit.cta_group::N.mbarrier::arrive::one` 使 mbarrier 跟踪当前线程此前发出的、同一 CTA group 的异步 `tcgen05.mma`/`cp`/`shift`。这些操作完成后，系统以 count 1 对 mbarrier 执行 cluster-scope arrive。它还隐含先前 tcgen05 操作到该同步点的 `before_thread_sync` 排序，因此紧跟 commit 时通常不需要再写一个显式 `tcgen05.fence::before_thread_sync`。参见 [NVIDIA PTX ISA：tcgen05.commit](https://docs.nvidia.com/cuda/parallel-thread-execution/)。
+规范上，`tcgen05.commit.cta_group::N.mbarrier::arrive::one` 使 mbarrier 跟踪当前线程此前发出的、同一 CTA group 的异步 `tcgen05.mma`/`cp`/`shift`。这些操作完成后，系统以 count 1 对 mbarrier 执行 cluster-scope arrive。它还隐含先前 tcgen05 操作到该同步点的 `before_thread_sync` 排序，因此紧跟 commit 时通常不需要再写一个显式 `tcgen05.fence::before_thread_sync`。参见 [NVIDIA PTX ISA 9.0：tcgen05.commit](https://docs.nvidia.com/cuda/archive/13.0.0/parallel-thread-execution/index.html)。
 
 当前 O3 静态映射完整覆盖 CTA group 1/2、通用（generic）/共享集群（shared::cluster）和组播（multicast）：
 
@@ -65,7 +81,7 @@ NVIDIA PTX ISA 将 release pattern 定义为让本线程在它之前的操作参
 
 ## `mbarrier`：完成状态与普通内存同步的连接点
 
-当前协议矩阵对四个组合分别生成了独立用例：CTA/cluster scope × relaxed/release-acquire。共同生命周期是：
+当前协议矩阵把三个维度正交展开：CTA/cluster scope × arrive relaxed/release × wait relaxed/acquire，共 2×2×2=8 个独立用例。共同生命周期是：
 
 ```ptx
 mbarrier.init.shared::cta.b64 [mbar_obj], 1;
@@ -96,7 +112,7 @@ ERRBAR;
 CGAERRBAR;
 ```
 
-这组差分证明 cluster release/acquire 会改变实际编译降级，但不能把四条 SASS 各自机械归因给 release 或 acquire，因为该 case 同时改变 arrive 和 wait 的语义，周围还有 CTA barrier。CTA scope 的 relaxed 与 release/acquire 在当前 O0/O3 case 中得到相同可见 SASS 骨架——编译器可以利用现有 `BAR.SYNC` 和目标语义消除冗余，不表示 PTX 层的 `.release`/`.acquire` 与 `.relaxed` 等价。
+由于 arrive 和 wait 已分别变化，可以把 release arrive 与 acquire wait 的静态差分独立比较，而不再只比较“relaxed/relaxed”与“release/acquire”两个端点。这组正交矩阵仍不能把某一条 `MEMBAR/ERRBAR` 脱离周围 CTA barrier 和优化上下文解释成固定的一对一翻译。CTA scope 的若干 relaxed/release/acquire 组合可能得到相同可见 SASS 骨架——编译器可以利用现有 `BAR.SYNC` 和目标语义消除冗余，不表示 PTX 层的 `.release`/`.acquire` 与 `.relaxed` 等价。
 
 ### scope 与 state space 不是一回事
 
@@ -108,7 +124,7 @@ CGAERRBAR;
 
 ## `tcgen05.fence`：跨线程 tcgen05 排序的代码移动边界
 
-`tcgen05.fence::before_thread_sync` 把它之前的异步 tcgen05 操作排在后续 tcgen05 与执行排序操作之前。`tcgen05.fence::after_thread_sync` 把后续异步 tcgen05 操作排在先前 tcgen05 与执行排序操作之后。它们和 mbarrier、barrier、morally strong load/store/atomic 等执行排序原语组合，才能建立跨线程 tcgen05 顺序。参见 [NVIDIA PTX ISA：tcgen05.fence](https://docs.nvidia.com/cuda/parallel-thread-execution/)。
+`tcgen05.fence::before_thread_sync` 把它之前的异步 tcgen05 操作排在后续 tcgen05 与执行排序操作之前。`tcgen05.fence::after_thread_sync` 把后续异步 tcgen05 操作排在先前 tcgen05 与执行排序操作之后。它们和 mbarrier、barrier、morally strong load/store/atomic 等执行排序原语组合，才能建立跨线程 tcgen05 顺序。参见 [NVIDIA PTX ISA 9.0：tcgen05.fence](https://docs.nvidia.com/cuda/archive/13.0.0/parallel-thread-execution/index.html)。
 
 典型生产者/消费者协议是：
 
@@ -131,7 +147,7 @@ tcgen05.mma ...;
 
 ## `tcgen05.wait::ld/st`：同线程异步 TMEM I/O 完成
 
-规范上，`wait::ld` 阻塞到当前线程此前发出的所有 `tcgen05.ld` 完成，`wait::st` 对此前 `tcgen05.st` 做同样处理。`.sync.aligned` 还要求 warp 中所有线程执行相同 wait 后才继续。这解决完成和 anti-dependency hazard，不是跨线程同步。参见 [NVIDIA PTX ISA：tcgen05.wait](https://docs.nvidia.com/cuda/parallel-thread-execution/)。
+规范上，`wait::ld` 阻塞到当前线程此前发出的所有 `tcgen05.ld` 完成，`wait::st` 对此前 `tcgen05.st` 做同样处理。`.sync.aligned` 还要求 warp 中所有线程执行相同 wait 后才继续。这解决完成和 anti-dependency hazard，不是跨线程同步。参见 [NVIDIA PTX ISA 9.0：tcgen05.wait](https://docs.nvidia.com/cuda/archive/13.0.0/parallel-thread-execution/index.html)。
 
 `wait::ld` case：
 
@@ -166,13 +182,14 @@ FENCE.VIEW.ASYNC.T;
 
 覆盖机制最多的 case 是 `effect_cg2_st_wait_explicit_fences`：CTA group 2、TMEM store/load wait、三个 tcgen05 fence、MMA commit、cluster acquire wait、global store、dealloc/relinquish 和 mbarrier inval 都在一个函数中。
 
-O3 的关键机器序列包含：
+group-2 effect slice 使用 `.reqnctapercluster 2` 与 `.explicitcluster` 声明 CTA-pair 拓扑，读取 `%cluster_ctarank`，只允许偶数 rank CTA 的 lane 0 发射 MMA/commit，并用 CTA mask `0x3` 执行 multicast completion。O3 的关键机器序列按顺序包含：
 
 ```sass
+FENCE.VIEW.ASYNC.S;
 STTM.x2 ...;
 FENCE.VIEW.ASYNC.T;
-UTCHMMA.2CTA ...;
-UTCBAR.2CTA ...;
+@UP... UTCHMMA.2CTA ...;
+@UP... UTCBAR.2CTA.MULTICAST ...;
 SYNCS.PHASECHK.TRANS64.TRYWAIT ...;
 LDTM.x2 ...;
 STG.E.64 ...;
@@ -197,19 +214,20 @@ UVIRTCOUNT.DEALLOC.SMPOOL ...;
 
 ## 当前覆盖范围
 
-协议层生成器共有 42 个 case：34 个独立协议原语 case 和 8 个完整生命周期 case。每个 case 均以 O0/O1/O2/O3 编译，共 168/168 次通过。8 个完整 case 在四个优化级上执行 32 次 SASS 模式检查，32/32 通过，强制检查 `UTCHMMA`、`UTCBAR`、`SYNCS.PHASECHK`、`LDTM`、`UVIRTCOUNT.DEALLOC.SMPOOL`，带 store 的 case 还检查 `STTM`。
+协议层生成器共有 49 个 case：41 个独立协议原语 case 和 8 个完整生命周期 case。每个 case 均以 O0/O1/O2/O3 编译，共 196/196 次通过；所有 196 个产物都会保存原始 SASS 并做有序序列检查，不再只做子字符串存在性检查。effect slice 还检查 group-2 的 `SR_CgaCtaId`/`.2CTA`/multicast、group-1 不误带 `.2CTA`，以及 MMA/commit 的直接谓词或条件控制流 issuer-gating 见证。
 
-按主要变化机制口径，本文覆盖至少 95% 的当前静态内存一致性/完成协议机制：
+当前静态覆盖用下面的机制清单表达，不再使用缺少封闭总体分母的百分比：
 
 - CTA group 1/2 的 commit，以及通用、shared::cluster、multicast 三种 mbarrier 目标形式。
-- mbarrier 的 CTA/cluster scope 与 relaxed/release-acquire 组合。
+- generic/async proxy 的无限定、shared::cta、shared::cluster 三种 fence。
+- mbarrier 的 CTA/cluster scope、arrive relaxed/release、wait relaxed/acquire 的完整 2×2×2 组合。
 - `before_thread_sync`、`after_thread_sync` 的独立和完整上下文。
 - `wait::ld`、`wait::st` 的独立和完整上下文。
 - 有/无 store wait、有/无显式 fence、CTA group 1/2 的 2×2×2 生命周期矩阵。
 - alloc、dealloc、relinquish、mbarrier init/inval 的资源边界。
-- O0/O1/O2/O3 四个优化级的可汇编性与完整 case 的核心 SASS 模式。
+- O0/O1/O2/O3 四个优化级的可汇编性、原始 SASS、操作顺序、CTA-group 和 issuer-gating 检查。
 
-以下运行时问题不在 95% 覆盖范围之内：
+以下运行时问题不在当前静态覆盖范围之内：
 
 - release/acquire 在真实双线程、双 CTA/cluster 程序中的可见值 litmus test。
 - CTA group 2 的 peer CTA 合法 launch、到达关系和死锁检查。
@@ -228,6 +246,7 @@ UVIRTCOUNT.DEALLOC.SMPOOL ...;
 ## 证据入口
 
 - 生成规则：[`../../generate_protocol_layers.py`](../../generate_protocol_layers.py)
-- 42 个 case 的清单：[`../../results/protocol-layers/sources/manifest.jsonl`](../../results/protocol-layers/sources/manifest.jsonl)
-- 168 次编译与 32 次 SASS 检查报告：[`../../results/protocol-layers/compile_report.json`](../../results/protocol-layers/compile_report.json)
-- 官方规范：[NVIDIA PTX ISA 9.3](https://docs.nvidia.com/cuda/parallel-thread-execution/)
+- 49 个 case 的清单：[`../../results/protocol-layers/sources/manifest.jsonl`](../../results/protocol-layers/sources/manifest.jsonl)
+- 196 次编译与 196 次有序 SASS 检查报告：[`../../results/protocol-layers/compile_report.json`](../../results/protocol-layers/compile_report.json)
+- 保留的逐 case 原始 SASS：[`../../results/protocol-layers/sass/`](../../results/protocol-layers/sass/)
+- 官方规范：[NVIDIA PTX ISA 9.0（CUDA 13.0 archive）](https://docs.nvidia.com/cuda/archive/13.0.0/parallel-thread-execution/index.html)

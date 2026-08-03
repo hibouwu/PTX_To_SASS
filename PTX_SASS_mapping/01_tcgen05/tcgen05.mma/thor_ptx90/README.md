@@ -10,13 +10,13 @@
 |---|---|---|---|---|---|
 | `syntax` | 1,152 | 896 | 896 | 1,648 | 72/72 通过 |
 | `expanded` | 9,216 | 896 | 7,168 | 13,184 | 576/576 通过 |
-| `CTX.protocol` | 34 | — | 34 | — | 136/136 通过 |
+| `CTX.protocol` | 41 | — | 41 | — | 164/164 通过 |
 | `effect_slice` | 8 | — | 8 | — | 32/32 通过 |
-| 预期拒绝探针 | 3 | — | 3 | 3 | 3/3 通过 |
+| 预期拒绝探针 | 11 | — | 11 | 11 | 11/11 通过 |
 
 仓库保留默认生成结果。各层编译摘要和阴性探针诊断保存在 [`validation/`](validation/)。
 
-除协议层 168/168 次汇编通过外，检查器还对 8 个效应切片的四个优化版本执行 32/32 次 `nvdisasm` 操作检查。每个版本必须实际保留 `UTCHMMA`、`UTCBAR`、mbarrier phase wait、`LDTM` 和 TMEM dealloc。带 ST 的切片还必须保留 `STTM`，避免只汇编成功但关键路径被优化删除。
+协议层 49 个 case 在四个优化级共 196/196 次汇编通过；检查器对全部 196 个产物保存原始 SASS 并执行有序操作检查。effect slice 还验证 `UTCHMMA`、`UTCBAR`、mbarrier phase wait、`LDTM`、TMEM dealloc、可选 `STTM`/`FENCE.VIEW.ASYNC.T`、proxy fence、CTA-pair topology 和 issuer-gating，避免只汇编成功但关键路径被优化删除或重排。
 
 这里的 1,152/9,216 是源码实现数，不是唯一 semantic-form 数。隐式 collector discard 与显式 discard，以及无需 `idesc.K` 就能证明等价的 block-scale 拼写，会保留为不同 `source_variant`，但共享同一 `semantic_form_id`。对于依赖 K 值才等价的 `.block16`/`.block32` 别名，生成器不会在 `idesc` 未冻结时强行合并。上下文身份不包含 profile 名称，只由完整规范化赋值计算。
 

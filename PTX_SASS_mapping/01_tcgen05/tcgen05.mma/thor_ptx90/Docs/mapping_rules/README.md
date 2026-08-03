@@ -31,6 +31,8 @@
 | 分块缩放和缩放向量如何体现？ | [`block_scaling.md`](block_scaling.md) |
 | `.ashift` 如何映射，什么组合非法？ | [`ashift.md`](ashift.md) |
 | 多个修饰符同时存在时怎样解释？ | [`interactions.md`](interactions.md) |
+| 这些规则能否用于从核心 SASS 反推 PTX，哪些字段会多对一？ | [`reverse_mapping_rules.md`](reverse_mapping_rules.md) |
+| descriptor 值、核心机器编码位和完整逆向还缺什么？ | [`descriptor_and_encoding.md`](descriptor_and_encoding.md) |
 
 完整函数级 PTX/SASS 对照、上下文和寄存器分析见 [`../tcgen05_mma_PTX到SASS映射规则报告.md`](../tcgen05_mma_PTX到SASS映射规则报告.md)。
 
@@ -111,12 +113,14 @@ collector
 
 内存一致性不属于单个 MMA 修饰符的核心操作码映射。它由 commit、mbarrier、tcgen05 fence、LD/ST wait、scope 和资源生命周期共同构成，见 [`memory_consistency.md`](memory_consistency.md)。
 
+descriptor 的运行时值也不属于核心 MMA encoding word 本身。`idesc`、SMEM descriptor、metadata、zero-column-mask 和 block-scale 地址的可见槽位与内部位域必须分层研究，见 [`descriptor_and_encoding.md`](descriptor_and_encoding.md)。
+
 ## 外围上下文规则速览
 
 | PTX/生成上下文 | 核心 MMA 影响 | 外围 SASS 影响 | 详细规则 |
 |---|---|---|---|
-| 正/负 guard | 部分形态直接增加 `@UPn/@!UPn`；核心助记符不变 | `ISETP/UISETP/PLOP3/BRA/EXIT`，或直接核心谓词化 | [`guard.md`](guard.md) |
-| lane-0 issuer | 规范操作不变；O1–O3 的 168 组稀疏形态发生纯寄存器重编号 | `S2R SR_LANEID`、谓词比较、分支/提前退出，并改变活跃寄存器 | [`issuer.md`](issuer.md) |
+| 正/负 guard | 352 个双 occurrence 设计仅在首条增加 `@UPn/@!UPn`；其余 800 个设计的核心助记符不变且无前缀谓词 | `ISETP/UISETP/PLOP3/BRA/EXIT`，或 collector 序列首条核心谓词化 | [`guard.md`](guard.md) |
+| lane-0 issuer | 规范操作不变；O1–O3 的 168 个精确子集发生纯寄存器重编号 | `S2R SR_LANEID`、谓词比较、分支/提前退出，并改变活跃寄存器 | [`issuer.md`](issuer.md) |
 | identity derived producer | 核心助记符和规范操作不变 | O0 增加 `IADD3/LOP3/MOV/R2UR`；O1–O3 完全消除 | [`operand_generation.md`](operand_generation.md) |
 | completion | 核心 MMA 不变 | 增加 commit、mbarrier、fence 和 wait 协议 | [`memory_consistency.md`](memory_consistency.md) |
 

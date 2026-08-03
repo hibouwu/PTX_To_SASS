@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -17,6 +18,96 @@ from validate_generated import validate_directory
 
 ROOT = Path(__file__).resolve().parent
 OPTIMIZATIONS = ("O0", "O1", "O2", "O3")
+
+
+INSTRUCTION_RE = re.compile(r"/\*[0-9a-f]+\*/\s+(.*?)\s*;", re.IGNORECASE)
+
+
+def operations(disassembly: str) -> list[str]:
+    return [match.group(1).strip() for match in INSTRUCTION_RE.finditer(disassembly)]
+
+
+def ordered_match(ops: list[str], patterns: list[str]) -> tuple[bool, list[dict]]:
+    cursor = 0
+    witnesses = []
+    for pattern in patterns:
+        regex = re.compile(pattern)
+        for index in range(cursor, len(ops)):
+            if regex.search(ops[index]):
+                witnesses.append({"pattern": pattern, "operation_index": index, "operation": ops[index]})
+                cursor = index + 1
+                break
+        else:
+            return False, witnesses
+    return True, witnesses
+
+
+def issuer_gating_witness(ops: list[str], needle: str) -> dict | None:
+    """Locate either direct SASS predication or nearby predicated control flow.
+
+    ptxas may lower a PTX guard to an ``@P``/``@UP`` prefix on the target
+    instruction, or surround the target with a convergent conditional region.
+    Both are observable issuer-gating mechanisms; requiring only the first one
+    rejects valid O0 and CTA-group-1 lowering.
+    """
+    target_index = next((i for i, op in enumerate(ops) if needle in op), None)
+    if target_index is None:
+        return None
+    target = ops[target_index]
+    if target.startswith("@"):
+        return {
+            "target": needle,
+            "mechanism": "instruction_predicate",
+            "target_index": target_index,
+            "operation": target,
+        }
+    window_start = max(0, target_index - 48)
+    candidates = [
+        (i, ops[i])
+        for i in range(window_start, target_index)
+        if ops[i].startswith("@") and "BRA" in ops[i]
+    ]
+    if candidates:
+        index, operation = candidates[-1]
+        return {
+            "target": needle,
+            "mechanism": "predicated_control_flow",
+            "target_index": target_index,
+            "operation_index": index,
+            "operation": operation,
+        }
+    return None
+
+
+def required_sequence(source: str) -> list[str]:
+    if source.startswith("effect_"):
+        sequence = [r"FENCE\.VIEW\.ASYNC\.S"]
+        if "_st_wait_" in source:
+            sequence.extend((r"\bSTTM", r"FENCE\.VIEW\.ASYNC\.T"))
+        sequence.extend(
+            (
+                r"\bUTCHMMA(?:\.2CTA)?\b",
+                r"\bUTCBAR(?:\.2CTA)?(?:\.MULTICAST)?\b",
+                r"SYNCS\.PHASECHK",
+                r"\bLDTM",
+                r"\bSTG",
+                r"UVIRTCOUNT\.DEALLOC\.SMPOOL",
+            )
+        )
+        return sequence
+    if source.startswith("ctx_proxy_fence_"):
+        return [r"FENCE\.VIEW\.ASYNC\.S"]
+    if source.startswith("ctx_commit_"):
+        return [r"\bUTCBAR"]
+    if source.startswith("ctx_alloc_"):
+        return [r"UVIRTCOUNT\.DEALLOC\.SMPOOL"]
+    if source.startswith("ctx_mbarrier_"):
+        return [r"SYNCS\.EXCH", r"SYNCS\.PHASECHK", r"SYNCS\.CCTL\.IV"]
+    if source == "ctx_ld_wait.ptx":
+        return [r"\bLDTM", r"\bSTG"]
+    if source == "ctx_st_wait.ptx":
+        return [r"\bSTTM", r"FENCE\.VIEW\.ASYNC\.T"]
+    return []
 
 
 def compile_one(ptxas: Path, source: Path, output: Path, optimization: str) -> dict:
@@ -70,7 +161,9 @@ def main() -> None:
     )
     source_dir = work_dir / "sources"
     cubin_dir = work_dir / "cubins"
+    sass_dir = work_dir / "sass"
     cubin_dir.mkdir(parents=True)
+    sass_dir.mkdir(parents=True)
     subprocess.run(
         [
             sys.executable,
@@ -116,7 +209,7 @@ def main() -> None:
     compile_failures = [item for item in results if not item["artifact_valid"]]
     sass_checks = []
     for result in results:
-        if not result["artifact_valid"] or result["layer"] != "effect_slice":
+        if not result["artifact_valid"]:
             continue
         disassembly = subprocess.run(
             [str(args.nvdisasm), str(cubin_dir / result["output"])],
@@ -124,28 +217,52 @@ def main() -> None:
             capture_output=True,
             check=True,
         ).stdout
-        required = [
-            "UTCHMMA",
-            "UTCBAR",
-            "SYNCS.PHASECHK",
-            "LDTM",
-            "UVIRTCOUNT.DEALLOC.SMPOOL",
-        ]
-        if "_st_wait_" in result["source"]:
-            required.append("STTM")
-        missing = [pattern for pattern in required if pattern not in disassembly]
+        sass_path = sass_dir / f"{Path(result['output']).stem}.sass"
+        sass_path.write_text(disassembly, encoding="utf-8")
+        ops = operations(disassembly)
+        required = required_sequence(result["source"])
+        ordered, witnesses = ordered_match(ops, required)
+        semantic_failures = []
+        issuer_gating = []
+        if result["source"].startswith("effect_cg2_"):
+            if not any("SR_CgaCtaId" in op for op in ops):
+                semantic_failures.append("missing CTA-rank issuer selection")
+            if not any("UTCHMMA.2CTA" in op for op in ops):
+                semantic_failures.append("missing group-2 MMA")
+            if not any("UTCBAR.2CTA.MULTICAST" in op for op in ops):
+                semantic_failures.append("missing group-2 multicast completion")
+        if result["source"].startswith("effect_cg1_"):
+            if any("UTCHMMA.2CTA" in op or "UTCBAR.2CTA" in op for op in ops):
+                semantic_failures.append("unexpected group-2 operation in group-1 slice")
+        if result["source"].startswith("effect_"):
+            issuer_gating = [
+                witness
+                for needle in ("UTCHMMA", "UTCBAR")
+                if (witness := issuer_gating_witness(ops, needle)) is not None
+            ]
+            if len(issuer_gating) != 2:
+                semantic_failures.append(
+                    "MMA/commit issuer gating is neither directly predicated nor "
+                    "guarded by nearby predicated control flow"
+                )
         sass_checks.append(
             {
                 "source": result["source"],
+                "layer": result["layer"],
                 "optimization": result["optimization"],
-                "required_patterns": required,
-                "missing_patterns": missing,
-                "status": "PASS" if not missing else "FAIL",
+                "sass_file": str(sass_path.relative_to(work_dir)),
+                "sass_sha256": hashlib.sha256(disassembly.encode()).hexdigest(),
+                "instruction_count": len(ops),
+                "required_ordered_patterns": required,
+                "ordered_witnesses": witnesses,
+                "issuer_gating_witnesses": issuer_gating,
+                "semantic_failures": semantic_failures,
+                "status": "PASS" if ordered and not semantic_failures else "FAIL",
             }
         )
     sass_failures = [item for item in sass_checks if item["status"] != "PASS"]
     expected_sass_checks = (
-        generation["layer_case_counts"]["effect_slice"] * len(OPTIMIZATIONS)
+        generation["case_count"] * len(OPTIMIZATIONS)
     )
     if len(sass_checks) != expected_sass_checks:
         raise RuntimeError(
@@ -154,6 +271,12 @@ def main() -> None:
         )
     ptxas_version = subprocess.run(
         [str(args.ptxas), "--version"],
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip().splitlines()
+    nvdisasm_version = subprocess.run(
+        [str(args.nvdisasm), "--version"],
         text=True,
         capture_output=True,
         check=True,
@@ -167,10 +290,13 @@ def main() -> None:
         "optimizations": list(OPTIMIZATIONS),
         "ptxas_sha256": hashlib.sha256(args.ptxas.read_bytes()).hexdigest(),
         "ptxas_version": ptxas_version,
+        "nvdisasm_sha256": hashlib.sha256(args.nvdisasm.read_bytes()).hexdigest(),
+        "nvdisasm_version": nvdisasm_version,
         "compile_attempt_count": len(results),
         "compile_pass_count": len(results) - len(compile_failures),
         "compile_failure_count": len(compile_failures),
         "source_validation": source_validation,
+        "sass_directory": str(sass_dir.relative_to(work_dir)),
         "sass_check_count": len(sass_checks),
         "sass_check_pass_count": len(sass_checks) - len(sass_failures),
         "compile_failures": compile_failures,

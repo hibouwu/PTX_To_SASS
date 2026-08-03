@@ -92,6 +92,65 @@ def target_instructions(section: str) -> list[dict]:
     ]
 
 
+def occurrence_signature_check(
+    manifest_row: dict, occurrence_index: int, sass_target: dict
+) -> dict:
+    """Check source-order attribution against independently visible modifiers."""
+    semantic = manifest_row["semantic_form"]
+    step = semantic["collector_steps"][occurrence_index]
+    operation = sass_target["operation"]
+    required = []
+    forbidden = []
+    if semantic["cta_group"] == 2:
+        required.append(".2CTA")
+    else:
+        forbidden.append(".2CTA")
+    if ".ws" in semantic["variant"]:
+        required.append(".WS")
+    else:
+        forbidden.append(".WS")
+    if step["ashift"]:
+        required.append(".ASHIFT")
+    else:
+        forbidden.append(".ASHIFT")
+    if semantic["scale_vector_semantics"] in {"scale_vec::4X", "block16"}:
+        required.append(".4X")
+    else:
+        forbidden.append(".4X")
+    collector = step["collector_buffer"]
+    collector_op = step["collector_op"]
+    prefix = "A" if collector == "a" else "B"
+    if collector_op == "fill":
+        required.append(f".{prefix}_KEEP")
+        forbidden.append(f".{prefix}_REUSE")
+    elif collector_op == "use":
+        required.extend((f".{prefix}_REUSE", f".{prefix}_KEEP"))
+    elif collector_op == "lastuse":
+        required.append(f".{prefix}_REUSE")
+        forbidden.append(f".{prefix}_KEEP")
+    else:
+        forbidden.extend((f".{prefix}_REUSE", f".{prefix}_KEEP"))
+    if collector and collector.startswith("b"):
+        buffer_index = int(collector[1:])
+        if buffer_index:
+            required.append(f".BUFFER{buffer_index}")
+        forbidden.extend(
+            f".BUFFER{index}" for index in range(1, 4) if index != buffer_index
+        )
+        forbidden.extend((".A_KEEP", ".A_REUSE"))
+    else:
+        forbidden.extend((".BUFFER1", ".BUFFER2", ".BUFFER3", ".B_KEEP", ".B_REUSE"))
+    missing = [token for token in required if token not in operation]
+    unexpected = [token for token in forbidden if token in operation]
+    return {
+        "status": "PASS" if not missing and not unexpected else "FAIL",
+        "required_tokens": required,
+        "forbidden_tokens": forbidden,
+        "missing_tokens": missing,
+        "unexpected_tokens": unexpected,
+    }
+
+
 def liveness_instructions(section: str) -> list[dict]:
     """Parse nvdisasm --life-range-mode count output."""
     return [
@@ -324,6 +383,18 @@ def extract_suite(
                 status = "COMPLETE"
             occurrence_attribution = []
             for occurrence_index in range(max(expected_count, len(sass_targets))):
+                sass_target = (
+                    sass_targets[occurrence_index]
+                    if occurrence_index < len(sass_targets)
+                    else None
+                )
+                signature_check = (
+                    occurrence_signature_check(
+                        manifest_row, occurrence_index, sass_target
+                    )
+                    if occurrence_index < expected_count and sass_target is not None
+                    else None
+                )
                 occurrence_attribution.append(
                     {
                         "occurrence_index": occurrence_index,
@@ -332,13 +403,17 @@ def extract_suite(
                             if occurrence_index < expected_count
                             else None
                         ),
-                        "sass_target": (
-                            sass_targets[occurrence_index]
-                            if occurrence_index < len(sass_targets)
-                            else None
-                        ),
+                        "sass_target": sass_target,
+                        "signature_check": signature_check,
                     }
                 )
+            signature_failures = [
+                item for item in occurrence_attribution
+                if item["signature_check"] is not None
+                and item["signature_check"]["status"] != "PASS"
+            ]
+            if status == "COMPLETE" and signature_failures:
+                status = "SIGNATURE_ORDER_MISMATCH"
             attribution_rows.append(
                 {
                     "case_label": manifest_row["case_label"],
@@ -355,7 +430,7 @@ def extract_suite(
                     "liveness_file": str(
                         Path(result["liveness_file"]).relative_to(output_dir)
                     ),
-                    "attribution_method": "KERNEL_SECTION_AND_SOURCE_ORDER",
+                    "attribution_method": "KERNEL_SECTION_SOURCE_ORDER_WITH_SIGNATURE_VALIDATION",
                     "expected_ptx_occurrence_count": expected_count,
                     "observed_sass_target_count": len(sass_targets),
                     "status": status,
@@ -405,10 +480,10 @@ def extract_suite(
         check=True,
     ).stdout.strip().splitlines()
     summary = {
-        "schema_version": "thor_tcgen05_mma_sass_attribution_v2",
+        "schema_version": "thor_tcgen05_mma_sass_attribution_v3",
         "status": status,
         "attribution_scope": "CORE_MMA_MNEMONIC",
-        "attribution_method": "KERNEL_SECTION_AND_SOURCE_ORDER",
+        "attribution_method": "KERNEL_SECTION_SOURCE_ORDER_WITH_SIGNATURE_VALIDATION",
         "nvdisasm_path": str(nvdisasm),
         "nvdisasm_sha256": hashlib.sha256(nvdisasm.read_bytes()).hexdigest(),
         "nvdisasm_version": nvdisasm_version,

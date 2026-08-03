@@ -48,7 +48,14 @@ add.u32 %d_tmem, %d_tmem, 0;
 add.u32 %a_tmem, %a_tmem, 0;
 xor.b64 %desc_a, %desc_a, 0;
 or.b64 %desc_b, %desc_b, 0;
+add.u32 %meta_tmem, %meta_tmem, 0;
 xor.b32 %idesc, %idesc, 0;
+add.u32 %scale_a_tmem, %scale_a_tmem, 0;
+add.u32 %scale_b_tmem, %scale_b_tmem, 0;
+xor.b64 %zero_mask_desc, %zero_mask_desc, 0;
+or.b32 %enable_u32, %enable_u32, 0;
+xor.b32 %guard_u32, %guard_u32, 0;
+add.u64 %mbar, %mbar, 0;
 ...
 tcgen05.mma.cta_group::1.kind::f16
     [%d_tmem], %desc_a, %desc_b, %idesc,
@@ -129,9 +136,9 @@ O0 的 1,152/1,152 完整序列变化说明 producer 确实进入了未优化编
 
 ## 代表性覆盖口径
 
-本文覆盖操作数生成方式的主要静态变化机制至少 95%：直接参数与恒等派生链、32 位地址/`idesc`、64 位 A/B 描述符、全部已生成核心形态以及 O0–O3 的消除边界。
+本文覆盖当前生成集合中的直接参数与恒等派生链，并对 32 位地址/`idesc`、64 位描述符、谓词输入和 completion 地址执行恒等 producer 变换，同时覆盖全部已生成核心形态以及 O0–O3 的消除边界。非恒等地址运算、descriptor 构造、跨基本块数据流和内存加载 producer 尚未形成封闭集合，因此不声明总体百分比。
 
-这个覆盖率不包含任意真实地址生成算法。若要研究非恒等 producer，需要新增单因素矩阵，分别冻结 offset、stride、descriptor pack、lane dependence 和 memory load。
+这个覆盖清单不包含任意真实地址生成算法。若要研究非恒等 producer，需要新增单因素矩阵，分别冻结 offset、stride、descriptor pack、lane dependence 和 memory load。
 
 ## 证据
 

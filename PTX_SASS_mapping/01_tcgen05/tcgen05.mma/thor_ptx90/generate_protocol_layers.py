@@ -25,6 +25,7 @@ class ProtocolCase:
     parameters: tuple[str, ...]
     registers: tuple[str, ...]
     body: tuple[str, ...]
+    entry_directives: tuple[str, ...] = ()
 
 
 def module_source(case: ProtocolCase) -> str:
@@ -43,6 +44,7 @@ def module_source(case: ProtocolCase) -> str:
         f".visible .entry {case.label}(",
         parameter_text,
         ")",
+        *[f"    {item}" for item in case.entry_directives],
         "{",
         *[f"    {item}" for item in case.registers],
         "    // EFFECT_SLICE_BEGIN",
@@ -101,6 +103,28 @@ def fence_cases() -> list[ProtocolCase]:
             body=(f"tcgen05.fence::{position}_thread_sync;",),
         )
         for position in ("before", "after")
+    ]
+
+
+def proxy_fence_cases() -> list[ProtocolCase]:
+    return [
+        ProtocolCase(
+            label=f"ctx_proxy_fence_{space}",
+            layer="CTX.protocol",
+            coordinates={
+                "family": "async_proxy_fence",
+                "state_space": space,
+                "direction": "bidirectional_generic_async",
+            },
+            declarations=(),
+            parameters=(),
+            registers=(),
+            body=(
+                "fence.proxy.async"
+                + (";" if space == "all" else f".{space.replace('_', '::')};"),
+            ),
+        )
+        for space in ("all", "shared_cta", "shared_cluster")
     ]
 
 
@@ -173,35 +197,36 @@ def commit_cases() -> list[ProtocolCase]:
 def mbarrier_cases() -> list[ProtocolCase]:
     cases = []
     for scope in ("cta", "cluster"):
-        for semantics in ("relaxed", "release_acquire"):
-            arrive_sem = "relaxed" if semantics == "relaxed" else "release"
-            wait_sem = "relaxed" if semantics == "relaxed" else "acquire"
-            label = f"ctx_mbarrier_{scope}_{semantics}"
-            cases.append(
-                ProtocolCase(
-                    label=label,
-                    layer="CTX.protocol",
-                    coordinates={
-                        "family": "mbarrier_lifecycle",
-                        "scope": scope,
-                        "semantics": semantics,
-                        "state_space": "shared_cta",
-                    },
-                    declarations=(".shared .align 8 .b64 mbar_obj;",),
-                    parameters=(),
-                    registers=(".reg .pred %complete;",),
-                    body=(
-                        "mbarrier.init.shared::cta.b64 [mbar_obj], 1;",
-                        "bar.cta.sync 0;",
-                        f"mbarrier.arrive.{arrive_sem}.{scope}.shared::cta.b64 "
-                        "_, [mbar_obj];",
-                        f"mbarrier.try_wait.parity.{wait_sem}.{scope}."
-                        "shared::cta.b64 %complete, [mbar_obj], 0;",
-                        "bar.cta.sync 0;",
-                        "mbarrier.inval.shared::cta.b64 [mbar_obj];",
-                    ),
+        for arrive_sem in ("relaxed", "release"):
+            for wait_sem in ("relaxed", "acquire"):
+                semantics = f"{arrive_sem}_{wait_sem}"
+                label = f"ctx_mbarrier_{scope}_{semantics}"
+                cases.append(
+                    ProtocolCase(
+                        label=label,
+                        layer="CTX.protocol",
+                        coordinates={
+                            "family": "mbarrier_lifecycle",
+                            "scope": scope,
+                            "arrive_semantics": arrive_sem,
+                            "wait_semantics": wait_sem,
+                            "state_space": "shared_cta",
+                        },
+                        declarations=(".shared .align 8 .b64 mbar_obj;",),
+                        parameters=(),
+                        registers=(".reg .pred %complete;",),
+                        body=(
+                            "mbarrier.init.shared::cta.b64 [mbar_obj], 1;",
+                            "bar.cta.sync 0;",
+                            f"mbarrier.arrive.{arrive_sem}.{scope}.shared::cta.b64 "
+                            "_, [mbar_obj];",
+                            f"mbarrier.try_wait.parity.{wait_sem}.{scope}."
+                            "shared::cta.b64 %complete, [mbar_obj], 0;",
+                            "bar.cta.sync 0;",
+                            "mbarrier.inval.shared::cta.b64 [mbar_obj];",
+                        ),
+                    )
                 )
-            )
     return cases
 
 
@@ -262,9 +287,21 @@ def effect_slice_case(
     )
     mask_count = 4 if cta_group == 1 else 8
     mask_decl = f".reg .b32 %mask<{mask_count}>;"
+    rank_setup = (
+        [
+            "mov.u32 %rank, %cluster_ctarank;",
+            "and.b32 %rank_parity, %rank, 1;",
+            "setp.eq.u32 %even_cta, %rank_parity, 0;",
+            "and.pred %issuer, %lane_zero, %even_cta;",
+            "mad.wide.u32 %out_cta, %rank, 8, %out;",
+            "mov.b16 %cta_mask, 0x3;",
+        ]
+        if cta_group == 2
+        else ["mov.pred %issuer, %lane_zero;", "mov.b64 %out_cta, %out;"]
+    )
     body = [
         "mov.u32 %lane, %laneid;",
-        "setp.eq.u32 %issuer, %lane, 0;",
+        "setp.eq.u32 %lane_zero, %lane, 0;",
         f"tcgen05.alloc.cta_group::{cta_group}.sync.aligned."
         "shared::cta.b32 [alloc_slot], 32;",
         "bar.cta.sync 0;",
@@ -273,6 +310,7 @@ def effect_slice_case(
         "ld.param.b64 %desc_b, [p_desc_b];",
         "ld.param.b32 %idesc, [p_idesc];",
         "ld.param.b64 %out, [p_out];",
+        *rank_setup,
         "setp.eq.u32 %enable, 0, 1;",
         "mov.b32 %io0, 0;",
         "mov.b32 %io1, 0;",
@@ -280,8 +318,9 @@ def effect_slice_case(
     body.extend(f"mov.b32 %mask{index}, 0;" for index in range(mask_count))
     body.extend(
         (
-            "@%issuer mbarrier.init.shared::cta.b64 [mbar_obj], 1;",
+            "@%lane_zero mbarrier.init.shared::cta.b64 [mbar_obj], 1;",
             "bar.cta.sync 0;",
+            "fence.proxy.async;",
         )
     )
     if include_store:
@@ -299,8 +338,13 @@ def effect_slice_case(
         (
             f"@%issuer tcgen05.mma.cta_group::{cta_group}.kind::f16 "
             f"[%taddr], %desc_a, %desc_b, %idesc, {masks}, %enable;",
-            f"@%issuer tcgen05.commit.cta_group::{cta_group}."
-            "mbarrier::arrive::one.shared::cluster.b64 [mbar_obj];",
+            (
+                "@%issuer tcgen05.commit.cta_group::2.mbarrier::arrive::one."
+                "shared::cluster.multicast::cluster.b64 [mbar_obj], %cta_mask;"
+                if cta_group == 2
+                else "@%issuer tcgen05.commit.cta_group::1.mbarrier::arrive::one."
+                "shared::cluster.b64 [mbar_obj];"
+            ),
             "EFFECT_WAIT:",
             "mbarrier.try_wait.parity.acquire.cluster.shared::cta.b64 "
             "%complete, [mbar_obj], 0;",
@@ -309,7 +353,7 @@ def effect_slice_case(
             "tcgen05.ld.sync.aligned.32x32b.x2.b32 "
             "{%io0, %io1}, [%taddr];",
             "tcgen05.wait::ld.sync.aligned;",
-            "st.global.v2.b32 [%out], {%io0, %io1};",
+            "@%lane_zero st.global.v2.b32 [%out_cta], {%io0, %io1};",
         )
     )
     if explicit_fences:
@@ -322,7 +366,7 @@ def effect_slice_case(
             f"tcgen05.relinquish_alloc_permit.cta_group::{cta_group}."
             "sync.aligned;",
             "bar.cta.sync 0;",
-            "@%issuer mbarrier.inval.shared::cta.b64 [mbar_obj];",
+            "@%lane_zero mbarrier.inval.shared::cta.b64 [mbar_obj];",
         )
     )
     return ProtocolCase(
@@ -347,13 +391,19 @@ def effect_slice_case(
             ".param .u64 p_out",
         ),
         registers=(
-            ".reg .b32 %taddr, %idesc, %io0, %io1, %lane;",
+            ".reg .b32 %taddr, %idesc, %io0, %io1, %lane, %rank, %rank_parity;",
             ".reg .b64 %desc_a, %desc_b;",
-            ".reg .b64 %out;",
-            ".reg .pred %issuer, %enable, %complete;",
+            ".reg .b64 %out, %out_cta;",
+            ".reg .b16 %cta_mask;",
+            ".reg .pred %lane_zero, %even_cta, %issuer, %enable, %complete;",
             mask_decl,
         ),
         body=tuple(body),
+        entry_directives=(
+            (".reqntid 32", ".reqnctapercluster 2", ".explicitcluster")
+            if cta_group == 2
+            else (".reqntid 32",)
+        ),
     )
 
 
@@ -361,6 +411,7 @@ def all_cases() -> list[ProtocolCase]:
     protocol = (
         allocation_cases()
         + fence_cases()
+        + proxy_fence_cases()
         + commit_cases()
         + mbarrier_cases()
         + ld_st_wait_cases()

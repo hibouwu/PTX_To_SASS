@@ -406,6 +406,17 @@ UTCOMMA.2CTA.4X tmem[UR7], gdesc[UR8],
 
 分块缩放形态没有输出禁用 lane 掩码，因此 group 1→2 不会产生 4→8 个 mask 的准备序列。核心操作数和活跃寄存器相同，只有 `.2CTA` 及其机器编码位发生变化。同时它证明 `.2CTA` 可以和 `.4X` 正交组合，且规则同样适用于 `UTCOMMA` 家族。
 
+## `.2CTA` 的已隔离机器编码位
+
+在 O3 `runtime_zero` 中筛出 424 个具体寄存器完全一致、去掉 `.2CTA` 后整条核心操作文本完全一致的 group 1→2 pair。全部 pair 的两个 64-bit encoding word 只有同一个 XOR 差异：
+
+```text
+word 0 XOR = 0x0000000000000000
+word 1 XOR = 0x0000000000200000
+```
+
+对应实例 `THOR_MMA_000001 → THOR_MMA_000417` 的 word 1 为 `0x0181d80008000006 → 0x0181d80008200006`。因此在当前 Thor 工具链中，`.2CTA` 可归纳为设置 word 1 的 `0x00200000` 单比特，而不是只写成“机器编码发生变化”。分析方法、完整计数和边界见 [`descriptor_and_encoding.md`](descriptor_and_encoding.md)及[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)。
+
 ## 代表性覆盖口径
 
 这里的覆盖率按主要静态编译降级机制计算，不按 192 种精确 semantic form 逐条计数。六组配对覆盖：
@@ -419,7 +430,7 @@ UTCOMMA.2CTA.4X tmem[UR7], gdesc[UR8],
 | completion 的 `UTCBAR→UTCBAR.2CTA` | 对比 4 |
 | 操作码/变体/修饰符组合与活跃寄存器变化 | 对比 5、6 |
 
-按这六类主要静态机制计为 6/6。考虑没有逐条展示所有 kind、collector 和调度填充实例，保守记为至少 95% 的主要变化机制。真实双 CTA 集群协作仍属于运行时验证，不计入静态覆盖率。
+按这六类主要静态机制计为 6/6。没有逐条展示所有 kind、collector 和调度填充实例；真实双 CTA 集群协作仍属于运行时验证，因此不把静态清单外推成总体百分比。
 
 ## 统计总计
 

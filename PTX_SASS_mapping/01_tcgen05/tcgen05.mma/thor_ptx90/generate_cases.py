@@ -166,6 +166,20 @@ def static_context_assignment(case: Case) -> dict:
         assignment["operand_producers"] = {
             "mode": "identity_arithmetic_chain",
             "operations": ["add_zero", "xor_zero", "or_zero"],
+            "covered_inputs": [
+                "d_tmem",
+                "a_tmem",
+                "desc_a",
+                "desc_b",
+                "meta_tmem",
+                "idesc",
+                "scale_a_tmem",
+                "scale_b_tmem",
+                "zero_mask_desc",
+                "enable",
+                "guard",
+                "mbar",
+            ],
         }
     elif case.context_profile == "commit_completion":
         assignment["completion"] = {
@@ -434,7 +448,14 @@ def render_kernel(case: Case, ordinal: int) -> str:
                 "    add.u32 %a_tmem, %a_tmem, 0;",
                 "    xor.b64 %desc_a, %desc_a, 0;",
                 "    or.b64 %desc_b, %desc_b, 0;",
+                "    add.u32 %meta_tmem, %meta_tmem, 0;",
                 "    xor.b32 %idesc, %idesc, 0;",
+                "    add.u32 %scale_a_tmem, %scale_a_tmem, 0;",
+                "    add.u32 %scale_b_tmem, %scale_b_tmem, 0;",
+                "    xor.b64 %zero_mask_desc, %zero_mask_desc, 0;",
+                "    or.b32 %enable_u32, %enable_u32, 0;",
+                "    xor.b32 %guard_u32, %guard_u32, 0;",
+                "    add.u64 %mbar, %mbar, 0;",
             )
         )
 

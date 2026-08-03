@@ -20,7 +20,7 @@
 | `commit_completion` | `completion` | O1 | 1152 | 0 (0.0%) | 0 (0.0%) | 1152 (100.0%) | 1152 (100.0%) |
 | `commit_completion` | `completion` | O2 | 1152 | 0 (0.0%) | 0 (0.0%) | 1152 (100.0%) | 1152 (100.0%) |
 | `commit_completion` | `completion` | O3 | 1152 | 0 (0.0%) | 0 (0.0%) | 1152 (100.0%) | 1152 (100.0%) |
-| `derived_producers` | `operand_producers` | O0 | 1152 | 0 (0.0%) | 0 (0.0%) | 1152 (100.0%) | 852 (74.0%) |
+| `derived_producers` | `operand_producers` | O0 | 1152 | 0 (0.0%) | 0 (0.0%) | 1152 (100.0%) | 1068 (92.7%) |
 | `derived_producers` | `operand_producers` | O1 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `derived_producers` | `operand_producers` | O2 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `derived_producers` | `operand_producers` | O3 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
@@ -59,7 +59,7 @@
 | `commit_completion` | `completion` | O1 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `commit_completion` | `completion` | O2 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `commit_completion` | `completion` | O3 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
-| `derived_producers` | `operand_producers` | O0 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 108 (9.4%) | 556 (48.3%) | 0 (0.0%) |
+| `derived_producers` | `operand_producers` | O0 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 92 (8.0%) | 564 (49.0%) | 0 (0.0%) |
 | `derived_producers` | `operand_producers` | O1 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `derived_producers` | `operand_producers` | O2 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
 | `derived_producers` | `operand_producers` | O3 | 1152 | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) | 0 (0.0%) |
@@ -93,7 +93,7 @@
 - `commit_completion`：改变 `completion` 上下文组。单独改变顶层上下文组 completion。
 - `derived_producers`：改变 `operand_producers` 上下文组。单独改变生产者链。
 - `enable_false`：改变 `enable_input_d` 上下文组。单独改变 D 累加使能常量。
-- `enable_true_mask_ones`：同时改变 `disable_output_lane` 和 `enable_input_d` 上下文组。这是一个联合处理配置，存在联合效应。
+- `enable_true_mask_ones`：改变 `disable_output_lane+enable_input_d; enable_input_d` 上下文组。这是一个联合处理配置，存在联合效应。
 - `guard_negative`：改变 `target_guard` 上下文组。使用负 guard。
 - `guard_positive`：改变 `target_guard` 上下文组。使用正 guard。
 - `lane0_issuer`：改变 `issuer` 上下文组。限制 lane 0 为发射线程。
