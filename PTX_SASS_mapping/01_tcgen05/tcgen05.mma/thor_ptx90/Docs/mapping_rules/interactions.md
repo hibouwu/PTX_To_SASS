@@ -95,9 +95,9 @@ mma.ws.sp
 | 上下文维度 | 主要影响 |
 |---|---|
 | `enable-input-d` 常量 | 核心 MMA 的输入 D 谓词可折叠为 `UPT`/`!UPT` |
-| PTX guard | 核心谓词或外围控制流 |
-| lane 0 issuer | 发射控制、活跃寄存器和寄存器编号 |
-| derived producer | O1–O3 可能优化掉生产者或重排准备序列 |
+| PTX guard | 核心谓词或外围控制流；详见 [`guard.md`](guard.md) |
+| lane 0 issuer | 发射控制、活跃寄存器和寄存器编号；详见 [`issuer.md`](issuer.md) |
+| derived producer | 当前恒等生产链在 O1–O3 全部消除；详见 [`operand_generation.md`](operand_generation.md) |
 | completion | 核心 MMA 后的提交、屏障和等待序列 |
 
 `UPT` 是统一谓词恒真；`!UPT` 是其取反。32,256 组上下文配对中，没有观察到上下文改变核心 MMA 的操作码/修饰符规范形态，但寄存器编号、活跃集合、外围指令和编码仍会变化。详细统计见 [`../tcgen05_mma_上下文差分报告.md`](../tcgen05_mma_上下文差分报告.md)。

@@ -23,6 +23,9 @@
 | `.cta_group::2` 如何进入 SASS？ | [`cta_group.md`](cta_group.md) |
 | `.ws`、`.sp`、`.ws.sp` 分别改变什么？ | [`variant.md`](variant.md) |
 | TS/SS、TMEM/SMEM 描述符如何对应？ | [`operand_source.md`](operand_source.md) |
+| guard 如何变成核心谓词或外围控制流？ | [`guard.md`](guard.md) |
+| lane 0 发射线程如何改变控制流和寄存器？ | [`issuer.md`](issuer.md) |
+| 直接参数与 derived producer 如何影响外围指令？ | [`operand_generation.md`](operand_generation.md) |
 | commit、mbarrier、fence、wait 如何构成内存一致性与完成协议？ | [`memory_consistency.md`](memory_consistency.md) |
 | collector 的 fill/use/lastuse/discard 如何映射？ | [`collector.md`](collector.md) |
 | 分块缩放和缩放向量如何体现？ | [`block_scaling.md`](block_scaling.md) |
@@ -107,6 +110,15 @@ collector
 详细配对数量和变化原因写在各维度文档中，联合判断见 [`interactions.md`](interactions.md)。
 
 内存一致性不属于单个 MMA 修饰符的核心操作码映射。它由 commit、mbarrier、tcgen05 fence、LD/ST wait、scope 和资源生命周期共同构成，见 [`memory_consistency.md`](memory_consistency.md)。
+
+## 外围上下文规则速览
+
+| PTX/生成上下文 | 核心 MMA 影响 | 外围 SASS 影响 | 详细规则 |
+|---|---|---|---|
+| 正/负 guard | 部分形态直接增加 `@UPn/@!UPn`；核心助记符不变 | `ISETP/UISETP/PLOP3/BRA/EXIT`，或直接核心谓词化 | [`guard.md`](guard.md) |
+| lane-0 issuer | 规范操作不变；O1–O3 的 168 组稀疏形态发生纯寄存器重编号 | `S2R SR_LANEID`、谓词比较、分支/提前退出，并改变活跃寄存器 | [`issuer.md`](issuer.md) |
+| identity derived producer | 核心助记符和规范操作不变 | O0 增加 `IADD3/LOP3/MOV/R2UR`；O1–O3 完全消除 | [`operand_generation.md`](operand_generation.md) |
+| completion | 核心 MMA 不变 | 增加 commit、mbarrier、fence 和 wait 协议 | [`memory_consistency.md`](memory_consistency.md) |
 
 ## 证据等级
 
