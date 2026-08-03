@@ -1,0 +1,3796 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_tcgen05_mma_0204.ptx"
+
+// CASE_BEGIN 013057
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"lane":31,"mode":"lane_immediate_branch","producer":"%laneid"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013057(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, 31;
+    @!%issuer bra CASE_END_013057;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013057:
+    ret;
+}
+// CASE_END 013057
+
+// CASE_BEGIN 013058
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"lane_parameter":"p_issuer_lane","mode":"lane_parameter_branch","producer":"%laneid"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013058(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, %issuer_lane_u32;
+    @!%issuer bra CASE_END_013058;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013058:
+    ret;
+}
+// CASE_END 013058
+
+// CASE_BEGIN 013059
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"cta_thread_zero_branch","producer":"%tid.x"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013059(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %thread_index;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %thread_index, %tid.x;
+    setp.eq.u32 %issuer, %thread_index, 0;
+    @!%issuer bra CASE_END_013059;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013059:
+    ret;
+}
+// CASE_END 013059
+
+// CASE_BEGIN 013060
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"lane_zero_and_parameter_predicate","producers":["%laneid","p_guard"],"target_lowering":"direct_predication"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013060(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, 0;
+    setp.ne.u32 %issuer_guard, %guard_u32, 0;
+    and.pred %issuer, %issuer, %issuer_guard;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    @%issuer tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    @%issuer tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013060
+
+// CASE_BEGIN 013061
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"covered_inputs":["d_tmem","a_tmem","desc_a","desc_b","meta_tmem","idesc","scale_a_tmem","scale_b_tmem","zero_mask_desc","enable","guard","mbar"],"mode":"identity_arithmetic_chain","operations":["add_zero","xor_zero","or_zero"]},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013061(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    add.u32 %d_tmem, %d_tmem, 0;
+    add.u32 %a_tmem, %a_tmem, 0;
+    xor.b64 %desc_a, %desc_a, 0;
+    or.b64 %desc_b, %desc_b, 0;
+    add.u32 %meta_tmem, %meta_tmem, 0;
+    xor.b32 %idesc, %idesc, 0;
+    add.u32 %scale_a_tmem, %scale_a_tmem, 0;
+    add.u32 %scale_b_tmem, %scale_b_tmem, 0;
+    xor.b64 %zero_mask_desc, %zero_mask_desc, 0;
+    or.b32 %enable_u32, %enable_u32, 0;
+    xor.b32 %guard_u32, %guard_u32, 0;
+    add.u64 %mbar, %mbar, 0;
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013061
+
+// CASE_BEGIN 013062
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"covered_inputs":["d_tmem","a_tmem","desc_a","desc_b","meta_tmem","idesc","scale_a_tmem","scale_b_tmem","zero_mask_desc","enable","guard","mbar"],"delta_parameter":"p_producer_delta","mode":"runtime_delta_arithmetic_chain","operations":["add_delta","xor_delta"]},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013062(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    cvt.u64.u32 %producer_delta64, %producer_delta;
+    add.u32 %d_tmem, %d_tmem, %producer_delta;
+    add.u32 %a_tmem, %a_tmem, %producer_delta;
+    xor.b64 %desc_a, %desc_a, %producer_delta64;
+    xor.b64 %desc_b, %desc_b, %producer_delta64;
+    add.u32 %meta_tmem, %meta_tmem, %producer_delta;
+    xor.b32 %idesc, %idesc, %producer_delta;
+    add.u32 %scale_a_tmem, %scale_a_tmem, %producer_delta;
+    add.u32 %scale_b_tmem, %scale_b_tmem, %producer_delta;
+    xor.b64 %zero_mask_desc, %zero_mask_desc, %producer_delta64;
+    xor.b32 %enable_u32, %enable_u32, %producer_delta;
+    xor.b32 %guard_u32, %guard_u32, %producer_delta;
+    add.u64 %mbar, %mbar, %producer_delta64;
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013062
+
+// CASE_BEGIN 013063
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"control_flow":"conditional_basic_block","delta_parameter":"p_producer_delta","mode":"branch_selected_runtime_delta","selector":"p_guard_ne_zero"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013063(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .b32 %d_alt, %a_alt, %meta_alt, %idesc_alt;
+    .reg .b32 %scale_a_alt, %scale_b_alt, %enable_alt, %guard_alt;
+    .reg .b64 %desc_a_alt, %desc_b_alt, %zero_mask_alt, %mbar_alt;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    cvt.u64.u32 %producer_delta64, %producer_delta;
+    add.u32 %d_alt, %d_tmem, %producer_delta;
+    add.u32 %a_alt, %a_tmem, %producer_delta;
+    xor.b64 %desc_a_alt, %desc_a, %producer_delta64;
+    xor.b64 %desc_b_alt, %desc_b, %producer_delta64;
+    add.u32 %meta_alt, %meta_tmem, %producer_delta;
+    xor.b32 %idesc_alt, %idesc, %producer_delta;
+    add.u32 %scale_a_alt, %scale_a_tmem, %producer_delta;
+    add.u32 %scale_b_alt, %scale_b_tmem, %producer_delta;
+    xor.b64 %zero_mask_alt, %zero_mask_desc, %producer_delta64;
+    xor.b32 %enable_alt, %enable_u32, %producer_delta;
+    xor.b32 %guard_alt, %guard_u32, %producer_delta;
+    add.u64 %mbar_alt, %mbar, %producer_delta64;
+    setp.ne.u32 %producer_select, %guard_u32, 0;
+    @!%producer_select bra PRODUCER_DONE_013063;
+    mov.b32 %d_tmem, %d_alt;
+    mov.b32 %a_tmem, %a_alt;
+    mov.b64 %desc_a, %desc_a_alt;
+    mov.b64 %desc_b, %desc_b_alt;
+    mov.b32 %meta_tmem, %meta_alt;
+    mov.b32 %idesc, %idesc_alt;
+    mov.b32 %scale_a_tmem, %scale_a_alt;
+    mov.b32 %scale_b_tmem, %scale_b_alt;
+    mov.b64 %zero_mask_desc, %zero_mask_alt;
+    mov.b32 %enable_u32, %enable_alt;
+    mov.b32 %guard_u32, %guard_alt;
+    mov.b64 %mbar, %mbar_alt;
+PRODUCER_DONE_013063:
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013063
+
+// CASE_BEGIN 013064
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"addressing":"fixed_role_offsets","base_parameter":"p_source_ptr","mode":"global_memory_loads"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013064(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    ld.global.u32 %d_tmem, [%source_ptr+0];
+    ld.global.u32 %a_tmem, [%source_ptr+4];
+    ld.global.u64 %desc_a, [%source_ptr+8];
+    ld.global.u64 %desc_b, [%source_ptr+16];
+    ld.global.u32 %meta_tmem, [%source_ptr+24];
+    ld.global.u32 %idesc, [%source_ptr+28];
+    ld.global.u32 %scale_a_tmem, [%source_ptr+32];
+    ld.global.u32 %scale_b_tmem, [%source_ptr+36];
+    ld.global.u64 %zero_mask_desc, [%source_ptr+40];
+    ld.global.u32 %enable_u32, [%source_ptr+48];
+    ld.global.u32 %guard_u32, [%source_ptr+52];
+    ld.global.u64 %mbar, [%source_ptr+56];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013064
+
+// CASE_BEGIN 013065
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"cta_group":1,"mechanism":"mbarrier::arrive::one","mode":"tcgen05_commit"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013065(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    tcgen05.commit.cta_group::1.mbarrier::arrive::one.b64 [%mbar];
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013065
+
+// CASE_BEGIN 013066
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_lastuse","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013066(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::lastuse [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013066
+
+// CASE_BEGIN 013067
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":false,"producer":"compile_time_predicate"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_lastuse","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013067(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, 0, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::lastuse [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013067
+
+// CASE_BEGIN 013068
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":true,"producer":"compile_time_predicate"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_lastuse","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013068(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.eq.u32 %enable, 0, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::lastuse [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013068
+
+// CASE_BEGIN 013069
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"predicate","polarity":"positive","producer":"runtime_parameter_ne_zero"}}
+// source_variant {"collector_spelling":"b1_fill_then_lastuse","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013069(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    @%guard tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    @%guard tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::lastuse [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013069
+
+// CASE_BEGIN 013070
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"predicate","polarity":"negative","producer":"runtime_parameter_ne_zero"}}
+// source_variant {"collector_spelling":"b1_fill_then_lastuse","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013070(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    @!%guard tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    @!%guard tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::lastuse [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013070
+
+// CASE_BEGIN 013071
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"lane_zero_branch","producer":"%laneid"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_lastuse","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013071(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, 0;
+    @!%issuer bra CASE_END_013071;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::lastuse [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013071:
+    ret;
+}
+// CASE_END 013071
+
+// CASE_BEGIN 013072
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"lane":31,"mode":"lane_immediate_branch","producer":"%laneid"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_lastuse","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013072(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, 31;
+    @!%issuer bra CASE_END_013072;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::lastuse [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013072:
+    ret;
+}
+// CASE_END 013072
+
+// CASE_BEGIN 013073
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"lane_parameter":"p_issuer_lane","mode":"lane_parameter_branch","producer":"%laneid"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_lastuse","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013073(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, %issuer_lane_u32;
+    @!%issuer bra CASE_END_013073;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::lastuse [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013073:
+    ret;
+}
+// CASE_END 013073
+
+// CASE_BEGIN 013074
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"cta_thread_zero_branch","producer":"%tid.x"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_lastuse","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013074(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %thread_index;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %thread_index, %tid.x;
+    setp.eq.u32 %issuer, %thread_index, 0;
+    @!%issuer bra CASE_END_013074;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::lastuse [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013074:
+    ret;
+}
+// CASE_END 013074
+
+// CASE_BEGIN 013075
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"lane_zero_and_parameter_predicate","producers":["%laneid","p_guard"],"target_lowering":"direct_predication"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_lastuse","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013075(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, 0;
+    setp.ne.u32 %issuer_guard, %guard_u32, 0;
+    and.pred %issuer, %issuer, %issuer_guard;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    @%issuer tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    @%issuer tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::lastuse [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013075
+
+// CASE_BEGIN 013076
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"covered_inputs":["d_tmem","a_tmem","desc_a","desc_b","meta_tmem","idesc","scale_a_tmem","scale_b_tmem","zero_mask_desc","enable","guard","mbar"],"mode":"identity_arithmetic_chain","operations":["add_zero","xor_zero","or_zero"]},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_lastuse","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013076(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    add.u32 %d_tmem, %d_tmem, 0;
+    add.u32 %a_tmem, %a_tmem, 0;
+    xor.b64 %desc_a, %desc_a, 0;
+    or.b64 %desc_b, %desc_b, 0;
+    add.u32 %meta_tmem, %meta_tmem, 0;
+    xor.b32 %idesc, %idesc, 0;
+    add.u32 %scale_a_tmem, %scale_a_tmem, 0;
+    add.u32 %scale_b_tmem, %scale_b_tmem, 0;
+    xor.b64 %zero_mask_desc, %zero_mask_desc, 0;
+    or.b32 %enable_u32, %enable_u32, 0;
+    xor.b32 %guard_u32, %guard_u32, 0;
+    add.u64 %mbar, %mbar, 0;
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::lastuse [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013076
+
+// CASE_BEGIN 013077
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"covered_inputs":["d_tmem","a_tmem","desc_a","desc_b","meta_tmem","idesc","scale_a_tmem","scale_b_tmem","zero_mask_desc","enable","guard","mbar"],"delta_parameter":"p_producer_delta","mode":"runtime_delta_arithmetic_chain","operations":["add_delta","xor_delta"]},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_lastuse","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013077(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    cvt.u64.u32 %producer_delta64, %producer_delta;
+    add.u32 %d_tmem, %d_tmem, %producer_delta;
+    add.u32 %a_tmem, %a_tmem, %producer_delta;
+    xor.b64 %desc_a, %desc_a, %producer_delta64;
+    xor.b64 %desc_b, %desc_b, %producer_delta64;
+    add.u32 %meta_tmem, %meta_tmem, %producer_delta;
+    xor.b32 %idesc, %idesc, %producer_delta;
+    add.u32 %scale_a_tmem, %scale_a_tmem, %producer_delta;
+    add.u32 %scale_b_tmem, %scale_b_tmem, %producer_delta;
+    xor.b64 %zero_mask_desc, %zero_mask_desc, %producer_delta64;
+    xor.b32 %enable_u32, %enable_u32, %producer_delta;
+    xor.b32 %guard_u32, %guard_u32, %producer_delta;
+    add.u64 %mbar, %mbar, %producer_delta64;
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::lastuse [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013077
+
+// CASE_BEGIN 013078
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"control_flow":"conditional_basic_block","delta_parameter":"p_producer_delta","mode":"branch_selected_runtime_delta","selector":"p_guard_ne_zero"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_lastuse","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013078(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .b32 %d_alt, %a_alt, %meta_alt, %idesc_alt;
+    .reg .b32 %scale_a_alt, %scale_b_alt, %enable_alt, %guard_alt;
+    .reg .b64 %desc_a_alt, %desc_b_alt, %zero_mask_alt, %mbar_alt;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    cvt.u64.u32 %producer_delta64, %producer_delta;
+    add.u32 %d_alt, %d_tmem, %producer_delta;
+    add.u32 %a_alt, %a_tmem, %producer_delta;
+    xor.b64 %desc_a_alt, %desc_a, %producer_delta64;
+    xor.b64 %desc_b_alt, %desc_b, %producer_delta64;
+    add.u32 %meta_alt, %meta_tmem, %producer_delta;
+    xor.b32 %idesc_alt, %idesc, %producer_delta;
+    add.u32 %scale_a_alt, %scale_a_tmem, %producer_delta;
+    add.u32 %scale_b_alt, %scale_b_tmem, %producer_delta;
+    xor.b64 %zero_mask_alt, %zero_mask_desc, %producer_delta64;
+    xor.b32 %enable_alt, %enable_u32, %producer_delta;
+    xor.b32 %guard_alt, %guard_u32, %producer_delta;
+    add.u64 %mbar_alt, %mbar, %producer_delta64;
+    setp.ne.u32 %producer_select, %guard_u32, 0;
+    @!%producer_select bra PRODUCER_DONE_013078;
+    mov.b32 %d_tmem, %d_alt;
+    mov.b32 %a_tmem, %a_alt;
+    mov.b64 %desc_a, %desc_a_alt;
+    mov.b64 %desc_b, %desc_b_alt;
+    mov.b32 %meta_tmem, %meta_alt;
+    mov.b32 %idesc, %idesc_alt;
+    mov.b32 %scale_a_tmem, %scale_a_alt;
+    mov.b32 %scale_b_tmem, %scale_b_alt;
+    mov.b64 %zero_mask_desc, %zero_mask_alt;
+    mov.b32 %enable_u32, %enable_alt;
+    mov.b32 %guard_u32, %guard_alt;
+    mov.b64 %mbar, %mbar_alt;
+PRODUCER_DONE_013078:
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::lastuse [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013078
+
+// CASE_BEGIN 013079
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"addressing":"fixed_role_offsets","base_parameter":"p_source_ptr","mode":"global_memory_loads"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_lastuse","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013079(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    ld.global.u32 %d_tmem, [%source_ptr+0];
+    ld.global.u32 %a_tmem, [%source_ptr+4];
+    ld.global.u64 %desc_a, [%source_ptr+8];
+    ld.global.u64 %desc_b, [%source_ptr+16];
+    ld.global.u32 %meta_tmem, [%source_ptr+24];
+    ld.global.u32 %idesc, [%source_ptr+28];
+    ld.global.u32 %scale_a_tmem, [%source_ptr+32];
+    ld.global.u32 %scale_b_tmem, [%source_ptr+36];
+    ld.global.u64 %zero_mask_desc, [%source_ptr+40];
+    ld.global.u32 %enable_u32, [%source_ptr+48];
+    ld.global.u32 %guard_u32, [%source_ptr+52];
+    ld.global.u64 %mbar, [%source_ptr+56];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::lastuse [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013079
+
+// CASE_BEGIN 013080
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"cta_group":1,"mechanism":"mbarrier::arrive::one","mode":"tcgen05_commit"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b1_fill_then_lastuse","emitted_steps":[{"ashift":false,"collector_buffer":"b1","collector_op":"fill"},{"ashift":false,"collector_buffer":"b1","collector_op":"lastuse"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013080(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b1::lastuse [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    tcgen05.commit.cta_group::1.mbarrier::arrive::one.b64 [%mbar];
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013080
+
+// CASE_BEGIN 013081
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_explicit_discard","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013081(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013081
+
+// CASE_BEGIN 013082
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":false,"producer":"compile_time_predicate"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_explicit_discard","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013082(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, 0, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013082
+
+// CASE_BEGIN 013083
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":true,"producer":"compile_time_predicate"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_explicit_discard","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013083(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.eq.u32 %enable, 0, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013083
+
+// CASE_BEGIN 013084
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"predicate","polarity":"positive","producer":"runtime_parameter_ne_zero"}}
+// source_variant {"collector_spelling":"b2_explicit_discard","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013084(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    @%guard tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013084
+
+// CASE_BEGIN 013085
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"predicate","polarity":"negative","producer":"runtime_parameter_ne_zero"}}
+// source_variant {"collector_spelling":"b2_explicit_discard","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013085(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    @!%guard tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013085
+
+// CASE_BEGIN 013086
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"lane_zero_branch","producer":"%laneid"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_explicit_discard","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013086(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, 0;
+    @!%issuer bra CASE_END_013086;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013086:
+    ret;
+}
+// CASE_END 013086
+
+// CASE_BEGIN 013087
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"lane":31,"mode":"lane_immediate_branch","producer":"%laneid"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_explicit_discard","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013087(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, 31;
+    @!%issuer bra CASE_END_013087;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013087:
+    ret;
+}
+// CASE_END 013087
+
+// CASE_BEGIN 013088
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"lane_parameter":"p_issuer_lane","mode":"lane_parameter_branch","producer":"%laneid"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_explicit_discard","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013088(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, %issuer_lane_u32;
+    @!%issuer bra CASE_END_013088;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013088:
+    ret;
+}
+// CASE_END 013088
+
+// CASE_BEGIN 013089
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"cta_thread_zero_branch","producer":"%tid.x"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_explicit_discard","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013089(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %thread_index;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %thread_index, %tid.x;
+    setp.eq.u32 %issuer, %thread_index, 0;
+    @!%issuer bra CASE_END_013089;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013089:
+    ret;
+}
+// CASE_END 013089
+
+// CASE_BEGIN 013090
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"lane_zero_and_parameter_predicate","producers":["%laneid","p_guard"],"target_lowering":"direct_predication"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_explicit_discard","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013090(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, 0;
+    setp.ne.u32 %issuer_guard, %guard_u32, 0;
+    and.pred %issuer, %issuer, %issuer_guard;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    @%issuer tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013090
+
+// CASE_BEGIN 013091
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"covered_inputs":["d_tmem","a_tmem","desc_a","desc_b","meta_tmem","idesc","scale_a_tmem","scale_b_tmem","zero_mask_desc","enable","guard","mbar"],"mode":"identity_arithmetic_chain","operations":["add_zero","xor_zero","or_zero"]},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_explicit_discard","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013091(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    add.u32 %d_tmem, %d_tmem, 0;
+    add.u32 %a_tmem, %a_tmem, 0;
+    xor.b64 %desc_a, %desc_a, 0;
+    or.b64 %desc_b, %desc_b, 0;
+    add.u32 %meta_tmem, %meta_tmem, 0;
+    xor.b32 %idesc, %idesc, 0;
+    add.u32 %scale_a_tmem, %scale_a_tmem, 0;
+    add.u32 %scale_b_tmem, %scale_b_tmem, 0;
+    xor.b64 %zero_mask_desc, %zero_mask_desc, 0;
+    or.b32 %enable_u32, %enable_u32, 0;
+    xor.b32 %guard_u32, %guard_u32, 0;
+    add.u64 %mbar, %mbar, 0;
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013091
+
+// CASE_BEGIN 013092
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"covered_inputs":["d_tmem","a_tmem","desc_a","desc_b","meta_tmem","idesc","scale_a_tmem","scale_b_tmem","zero_mask_desc","enable","guard","mbar"],"delta_parameter":"p_producer_delta","mode":"runtime_delta_arithmetic_chain","operations":["add_delta","xor_delta"]},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_explicit_discard","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013092(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    cvt.u64.u32 %producer_delta64, %producer_delta;
+    add.u32 %d_tmem, %d_tmem, %producer_delta;
+    add.u32 %a_tmem, %a_tmem, %producer_delta;
+    xor.b64 %desc_a, %desc_a, %producer_delta64;
+    xor.b64 %desc_b, %desc_b, %producer_delta64;
+    add.u32 %meta_tmem, %meta_tmem, %producer_delta;
+    xor.b32 %idesc, %idesc, %producer_delta;
+    add.u32 %scale_a_tmem, %scale_a_tmem, %producer_delta;
+    add.u32 %scale_b_tmem, %scale_b_tmem, %producer_delta;
+    xor.b64 %zero_mask_desc, %zero_mask_desc, %producer_delta64;
+    xor.b32 %enable_u32, %enable_u32, %producer_delta;
+    xor.b32 %guard_u32, %guard_u32, %producer_delta;
+    add.u64 %mbar, %mbar, %producer_delta64;
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013092
+
+// CASE_BEGIN 013093
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"control_flow":"conditional_basic_block","delta_parameter":"p_producer_delta","mode":"branch_selected_runtime_delta","selector":"p_guard_ne_zero"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_explicit_discard","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013093(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .b32 %d_alt, %a_alt, %meta_alt, %idesc_alt;
+    .reg .b32 %scale_a_alt, %scale_b_alt, %enable_alt, %guard_alt;
+    .reg .b64 %desc_a_alt, %desc_b_alt, %zero_mask_alt, %mbar_alt;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    cvt.u64.u32 %producer_delta64, %producer_delta;
+    add.u32 %d_alt, %d_tmem, %producer_delta;
+    add.u32 %a_alt, %a_tmem, %producer_delta;
+    xor.b64 %desc_a_alt, %desc_a, %producer_delta64;
+    xor.b64 %desc_b_alt, %desc_b, %producer_delta64;
+    add.u32 %meta_alt, %meta_tmem, %producer_delta;
+    xor.b32 %idesc_alt, %idesc, %producer_delta;
+    add.u32 %scale_a_alt, %scale_a_tmem, %producer_delta;
+    add.u32 %scale_b_alt, %scale_b_tmem, %producer_delta;
+    xor.b64 %zero_mask_alt, %zero_mask_desc, %producer_delta64;
+    xor.b32 %enable_alt, %enable_u32, %producer_delta;
+    xor.b32 %guard_alt, %guard_u32, %producer_delta;
+    add.u64 %mbar_alt, %mbar, %producer_delta64;
+    setp.ne.u32 %producer_select, %guard_u32, 0;
+    @!%producer_select bra PRODUCER_DONE_013093;
+    mov.b32 %d_tmem, %d_alt;
+    mov.b32 %a_tmem, %a_alt;
+    mov.b64 %desc_a, %desc_a_alt;
+    mov.b64 %desc_b, %desc_b_alt;
+    mov.b32 %meta_tmem, %meta_alt;
+    mov.b32 %idesc, %idesc_alt;
+    mov.b32 %scale_a_tmem, %scale_a_alt;
+    mov.b32 %scale_b_tmem, %scale_b_alt;
+    mov.b64 %zero_mask_desc, %zero_mask_alt;
+    mov.b32 %enable_u32, %enable_alt;
+    mov.b32 %guard_u32, %guard_alt;
+    mov.b64 %mbar, %mbar_alt;
+PRODUCER_DONE_013093:
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013093
+
+// CASE_BEGIN 013094
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"addressing":"fixed_role_offsets","base_parameter":"p_source_ptr","mode":"global_memory_loads"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_explicit_discard","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013094(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    ld.global.u32 %d_tmem, [%source_ptr+0];
+    ld.global.u32 %a_tmem, [%source_ptr+4];
+    ld.global.u64 %desc_a, [%source_ptr+8];
+    ld.global.u64 %desc_b, [%source_ptr+16];
+    ld.global.u32 %meta_tmem, [%source_ptr+24];
+    ld.global.u32 %idesc, [%source_ptr+28];
+    ld.global.u32 %scale_a_tmem, [%source_ptr+32];
+    ld.global.u32 %scale_b_tmem, [%source_ptr+36];
+    ld.global.u64 %zero_mask_desc, [%source_ptr+40];
+    ld.global.u32 %enable_u32, [%source_ptr+48];
+    ld.global.u32 %guard_u32, [%source_ptr+52];
+    ld.global.u64 %mbar, [%source_ptr+56];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013094
+
+// CASE_BEGIN 013095
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"cta_group":1,"mechanism":"mbarrier::arrive::one","mode":"tcgen05_commit"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_explicit_discard","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"discard"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013095(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    tcgen05.commit.cta_group::1.mbarrier::arrive::one.b64 [%mbar];
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013095
+
+// CASE_BEGIN 013096
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013096(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013096
+
+// CASE_BEGIN 013097
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":false,"producer":"compile_time_predicate"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013097(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, 0, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013097
+
+// CASE_BEGIN 013098
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":true,"producer":"compile_time_predicate"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013098(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.eq.u32 %enable, 0, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013098
+
+// CASE_BEGIN 013099
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"predicate","polarity":"positive","producer":"runtime_parameter_ne_zero"}}
+// source_variant {"collector_spelling":"b2_fill","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013099(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    @%guard tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013099
+
+// CASE_BEGIN 013100
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"predicate","polarity":"negative","producer":"runtime_parameter_ne_zero"}}
+// source_variant {"collector_spelling":"b2_fill","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013100(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    @!%guard tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013100
+
+// CASE_BEGIN 013101
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"lane_zero_branch","producer":"%laneid"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013101(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, 0;
+    @!%issuer bra CASE_END_013101;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013101:
+    ret;
+}
+// CASE_END 013101
+
+// CASE_BEGIN 013102
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"lane":31,"mode":"lane_immediate_branch","producer":"%laneid"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013102(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, 31;
+    @!%issuer bra CASE_END_013102;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013102:
+    ret;
+}
+// CASE_END 013102
+
+// CASE_BEGIN 013103
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"lane_parameter":"p_issuer_lane","mode":"lane_parameter_branch","producer":"%laneid"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013103(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, %issuer_lane_u32;
+    @!%issuer bra CASE_END_013103;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013103:
+    ret;
+}
+// CASE_END 013103
+
+// CASE_BEGIN 013104
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"cta_thread_zero_branch","producer":"%tid.x"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013104(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %thread_index;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %thread_index, %tid.x;
+    setp.eq.u32 %issuer, %thread_index, 0;
+    @!%issuer bra CASE_END_013104;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013104:
+    ret;
+}
+// CASE_END 013104
+
+// CASE_BEGIN 013105
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"lane_zero_and_parameter_predicate","producers":["%laneid","p_guard"],"target_lowering":"direct_predication"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013105(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, 0;
+    setp.ne.u32 %issuer_guard, %guard_u32, 0;
+    and.pred %issuer, %issuer, %issuer_guard;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    @%issuer tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013105
+
+// CASE_BEGIN 013106
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"covered_inputs":["d_tmem","a_tmem","desc_a","desc_b","meta_tmem","idesc","scale_a_tmem","scale_b_tmem","zero_mask_desc","enable","guard","mbar"],"mode":"identity_arithmetic_chain","operations":["add_zero","xor_zero","or_zero"]},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013106(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    add.u32 %d_tmem, %d_tmem, 0;
+    add.u32 %a_tmem, %a_tmem, 0;
+    xor.b64 %desc_a, %desc_a, 0;
+    or.b64 %desc_b, %desc_b, 0;
+    add.u32 %meta_tmem, %meta_tmem, 0;
+    xor.b32 %idesc, %idesc, 0;
+    add.u32 %scale_a_tmem, %scale_a_tmem, 0;
+    add.u32 %scale_b_tmem, %scale_b_tmem, 0;
+    xor.b64 %zero_mask_desc, %zero_mask_desc, 0;
+    or.b32 %enable_u32, %enable_u32, 0;
+    xor.b32 %guard_u32, %guard_u32, 0;
+    add.u64 %mbar, %mbar, 0;
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013106
+
+// CASE_BEGIN 013107
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"covered_inputs":["d_tmem","a_tmem","desc_a","desc_b","meta_tmem","idesc","scale_a_tmem","scale_b_tmem","zero_mask_desc","enable","guard","mbar"],"delta_parameter":"p_producer_delta","mode":"runtime_delta_arithmetic_chain","operations":["add_delta","xor_delta"]},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013107(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    cvt.u64.u32 %producer_delta64, %producer_delta;
+    add.u32 %d_tmem, %d_tmem, %producer_delta;
+    add.u32 %a_tmem, %a_tmem, %producer_delta;
+    xor.b64 %desc_a, %desc_a, %producer_delta64;
+    xor.b64 %desc_b, %desc_b, %producer_delta64;
+    add.u32 %meta_tmem, %meta_tmem, %producer_delta;
+    xor.b32 %idesc, %idesc, %producer_delta;
+    add.u32 %scale_a_tmem, %scale_a_tmem, %producer_delta;
+    add.u32 %scale_b_tmem, %scale_b_tmem, %producer_delta;
+    xor.b64 %zero_mask_desc, %zero_mask_desc, %producer_delta64;
+    xor.b32 %enable_u32, %enable_u32, %producer_delta;
+    xor.b32 %guard_u32, %guard_u32, %producer_delta;
+    add.u64 %mbar, %mbar, %producer_delta64;
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013107
+
+// CASE_BEGIN 013108
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"control_flow":"conditional_basic_block","delta_parameter":"p_producer_delta","mode":"branch_selected_runtime_delta","selector":"p_guard_ne_zero"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013108(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .b32 %d_alt, %a_alt, %meta_alt, %idesc_alt;
+    .reg .b32 %scale_a_alt, %scale_b_alt, %enable_alt, %guard_alt;
+    .reg .b64 %desc_a_alt, %desc_b_alt, %zero_mask_alt, %mbar_alt;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    cvt.u64.u32 %producer_delta64, %producer_delta;
+    add.u32 %d_alt, %d_tmem, %producer_delta;
+    add.u32 %a_alt, %a_tmem, %producer_delta;
+    xor.b64 %desc_a_alt, %desc_a, %producer_delta64;
+    xor.b64 %desc_b_alt, %desc_b, %producer_delta64;
+    add.u32 %meta_alt, %meta_tmem, %producer_delta;
+    xor.b32 %idesc_alt, %idesc, %producer_delta;
+    add.u32 %scale_a_alt, %scale_a_tmem, %producer_delta;
+    add.u32 %scale_b_alt, %scale_b_tmem, %producer_delta;
+    xor.b64 %zero_mask_alt, %zero_mask_desc, %producer_delta64;
+    xor.b32 %enable_alt, %enable_u32, %producer_delta;
+    xor.b32 %guard_alt, %guard_u32, %producer_delta;
+    add.u64 %mbar_alt, %mbar, %producer_delta64;
+    setp.ne.u32 %producer_select, %guard_u32, 0;
+    @!%producer_select bra PRODUCER_DONE_013108;
+    mov.b32 %d_tmem, %d_alt;
+    mov.b32 %a_tmem, %a_alt;
+    mov.b64 %desc_a, %desc_a_alt;
+    mov.b64 %desc_b, %desc_b_alt;
+    mov.b32 %meta_tmem, %meta_alt;
+    mov.b32 %idesc, %idesc_alt;
+    mov.b32 %scale_a_tmem, %scale_a_alt;
+    mov.b32 %scale_b_tmem, %scale_b_alt;
+    mov.b64 %zero_mask_desc, %zero_mask_alt;
+    mov.b32 %enable_u32, %enable_alt;
+    mov.b32 %guard_u32, %guard_alt;
+    mov.b64 %mbar, %mbar_alt;
+PRODUCER_DONE_013108:
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013108
+
+// CASE_BEGIN 013109
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"addressing":"fixed_role_offsets","base_parameter":"p_source_ptr","mode":"global_memory_loads"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013109(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    ld.global.u32 %d_tmem, [%source_ptr+0];
+    ld.global.u32 %a_tmem, [%source_ptr+4];
+    ld.global.u64 %desc_a, [%source_ptr+8];
+    ld.global.u64 %desc_b, [%source_ptr+16];
+    ld.global.u32 %meta_tmem, [%source_ptr+24];
+    ld.global.u32 %idesc, [%source_ptr+28];
+    ld.global.u32 %scale_a_tmem, [%source_ptr+32];
+    ld.global.u32 %scale_b_tmem, [%source_ptr+36];
+    ld.global.u64 %zero_mask_desc, [%source_ptr+40];
+    ld.global.u32 %enable_u32, [%source_ptr+48];
+    ld.global.u32 %guard_u32, [%source_ptr+52];
+    ld.global.u64 %mbar, [%source_ptr+56];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013109
+
+// CASE_BEGIN 013110
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"cta_group":1,"mechanism":"mbarrier::arrive::one","mode":"tcgen05_commit"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013110(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    tcgen05.commit.cta_group::1.mbarrier::arrive::one.b64 [%mbar];
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013110
+
+// CASE_BEGIN 013111
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013111(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013111
+
+// CASE_BEGIN 013112
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":false,"producer":"compile_time_predicate"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013112(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, 0, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013112
+
+// CASE_BEGIN 013113
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":true,"producer":"compile_time_predicate"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013113(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.eq.u32 %enable, 0, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013113
+
+// CASE_BEGIN 013114
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"predicate","polarity":"positive","producer":"runtime_parameter_ne_zero"}}
+// source_variant {"collector_spelling":"b2_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013114(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    @%guard tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    @%guard tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013114
+
+// CASE_BEGIN 013115
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"current_thread"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"predicate","polarity":"negative","producer":"runtime_parameter_ne_zero"}}
+// source_variant {"collector_spelling":"b2_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013115(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    @!%guard tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    @!%guard tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013115
+
+// CASE_BEGIN 013116
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"lane_zero_branch","producer":"%laneid"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013116(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, 0;
+    @!%issuer bra CASE_END_013116;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013116:
+    ret;
+}
+// CASE_END 013116
+
+// CASE_BEGIN 013117
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"lane":31,"mode":"lane_immediate_branch","producer":"%laneid"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013117(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, 31;
+    @!%issuer bra CASE_END_013117;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013117:
+    ret;
+}
+// CASE_END 013117
+
+// CASE_BEGIN 013118
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"lane_parameter":"p_issuer_lane","mode":"lane_parameter_branch","producer":"%laneid"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013118(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, %issuer_lane_u32;
+    @!%issuer bra CASE_END_013118;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013118:
+    ret;
+}
+// CASE_END 013118
+
+// CASE_BEGIN 013119
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"cta_thread_zero_branch","producer":"%tid.x"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013119(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %thread_index;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %thread_index, %tid.x;
+    setp.eq.u32 %issuer, %thread_index, 0;
+    @!%issuer bra CASE_END_013119;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+CASE_END_013119:
+    ret;
+}
+// CASE_END 013119
+
+// CASE_BEGIN 013120
+// semantic_form {"a_form":"tmem_address","collector_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"cta_group":1,"kind":"i8","scale_input_d":null,"scale_vector_semantics":null,"variant":"mma.ws","zero_column_mask":true}
+// static_context_assignment {"completion":{"mode":"none"},"disable_output_lane":{"mode":"not_present"},"enable_input_d":{"known_value":null,"producer":"runtime_parameter_ne_zero"},"issuer":{"mode":"lane_zero_and_parameter_predicate","producers":["%laneid","p_guard"],"target_lowering":"direct_predication"},"operand_producers":{"mode":"direct_parameters"},"target_guard":{"mode":"unpredicated"}}
+// source_variant {"collector_spelling":"b2_fill_then_use","emitted_steps":[{"ashift":false,"collector_buffer":"b2","collector_op":"fill"},{"ashift":false,"collector_buffer":"b2","collector_op":"use"}],"kernel_template":"thor_tcgen05_mma_v4","scale_vector_spelling":"omitted"}
+.visible .entry thor_tcgen05_mma_013120(
+    .param .u32 p_d_tmem,
+    .param .u32 p_a_tmem,
+    .param .u64 p_desc_a,
+    .param .u64 p_desc_b,
+    .param .u32 p_meta_tmem,
+    .param .u32 p_idesc,
+    .param .u32 p_scale_a_tmem,
+    .param .u32 p_scale_b_tmem,
+    .param .u64 p_zero_mask_desc,
+    .param .u32 p_enable,
+    .param .u32 p_guard,
+    .param .u64 p_mbar,
+    .param .u32 p_issuer_lane,
+    .param .u32 p_producer_delta,
+    .param .u64 p_source_ptr
+)
+{
+    .reg .b32 %d_tmem, %a_tmem, %meta_tmem, %idesc;
+    .reg .b32 %scale_a_tmem, %scale_b_tmem, %enable_u32, %guard_u32;
+    .reg .b32 %issuer_lane_u32, %producer_delta;
+    .reg .b64 %desc_a, %desc_b, %zero_mask_desc, %mbar, %source_ptr, %producer_delta64;
+    .reg .pred %enable, %guard, %issuer, %issuer_guard, %producer_select, %indexed_guard;
+    .reg .u32 %lane;
+    ld.param.b32 %d_tmem, [p_d_tmem];
+    ld.param.b32 %a_tmem, [p_a_tmem];
+    ld.param.b64 %desc_a, [p_desc_a];
+    ld.param.b64 %desc_b, [p_desc_b];
+    ld.param.b32 %meta_tmem, [p_meta_tmem];
+    ld.param.b32 %idesc, [p_idesc];
+    ld.param.b32 %scale_a_tmem, [p_scale_a_tmem];
+    ld.param.b32 %scale_b_tmem, [p_scale_b_tmem];
+    ld.param.b64 %zero_mask_desc, [p_zero_mask_desc];
+    ld.param.b32 %enable_u32, [p_enable];
+    ld.param.b32 %guard_u32, [p_guard];
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b32 %issuer_lane_u32, [p_issuer_lane];
+    ld.param.b32 %producer_delta, [p_producer_delta];
+    ld.param.b64 %source_ptr, [p_source_ptr];
+    setp.ne.u32 %enable, %enable_u32, 0;
+    setp.ne.u32 %guard, %guard_u32, 0;
+    mov.u32 %lane, %laneid;
+    setp.eq.u32 %issuer, %lane, 0;
+    setp.ne.u32 %issuer_guard, %guard_u32, 0;
+    and.pred %issuer, %issuer, %issuer_guard;
+    // TARGET_PATTERN_BEGIN
+    // target_occurrence 0
+    @%issuer tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // target_occurrence 1
+    @%issuer tcgen05.mma.ws.cta_group::1.kind::i8.collector::b2::use [%d_tmem], [%a_tmem], %desc_b, %idesc, %enable, %zero_mask_desc;
+    // TARGET_PATTERN_END
+    ret;
+}
+// CASE_END 013120

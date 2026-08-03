@@ -51,7 +51,23 @@ renumber_only =
 
 ## 扩展 issuer 与 producer lowering
 
-生成器已经加入扩展 issuer/producer profile，但当前 attribution 尚未包含：`branched_producers, compound_predicated_issuer, dynamic_lane_issuer, global_load_producers, lane31_issuer, nonidentity_producers, thread0_issuer`。运行完整 `check_all.sh` 后本节会自动生成分类、公式和反例计数。
+新增 issuer/producer profile 已完成 O3 单因素配对，跨四种 branch issuer 的分类不一致数为 0，全部手写公式 mismatch=0。
+
+| profile | design | 核心结果与数量 | 核心 mnemonic 变化 | 完整 kernel 序列变化 | 指令数变化 | 公式 |
+|---|---:|---|---:|---:|---:|---|
+| `branched_producers` | 1152 | `renumber_only` 1152 | 0 | 1152 | 1152 | all generated designs -> renumber_only |
+| `compound_predicated_issuer` | 1152 | `external_control_flow` 656；`first_occurrence_core_predication` 496 | 0 | 1152 | 1056 | step_count == 2 -> first occurrence predicated; otherwise external control flow |
+| `derived_producers` | 1152 | `stable_layout` 1152 | 0 | 0 | 0 | identity chain at O3 -> stable_layout |
+| `dynamic_lane_issuer` | 1152 | `renumber_only` 168；`stable_layout` 984 | 0 | 1152 | 520 | same renumber_only condition as lane0_issuer |
+| `global_load_producers` | 1152 | `renumber_only` 468；`stable_layout` 684 | 0 | 1152 | 1152 | mma.sp: tmem A or block-scale kind; mma.ws.sp: tmem A or zero-column-mask |
+| `lane0_issuer` | 1152 | `renumber_only` 168；`stable_layout` 984 | 0 | 1152 | 592 | same renumber_only condition as lane0_issuer |
+| `lane31_issuer` | 1152 | `renumber_only` 168；`stable_layout` 984 | 0 | 1152 | 592 | same renumber_only condition as lane0_issuer |
+| `nonidentity_producers` | 1152 | `renumber_only` 1152 | 0 | 1152 | 1056 | all generated designs -> renumber_only |
+| `thread0_issuer` | 1152 | `renumber_only` 168；`stable_layout` 984 | 0 | 1152 | 824 | same renumber_only condition as lane0_issuer |
+
+四种 branch issuer（lane 0、lane 31、动态 lane、CTA thread 0）对核心映射使用同一条 168/984 重编号分类；差异只落在外围线程标识读取、比较、分支和寄存器布局。compound predicated issuer 的规则更简单：双 occurrence collector 序列只谓词化第一条，单 occurrence 形态使用外围控制流。
+
+identity producer 在 O3 完全消除；非恒等算术和分支选择 producer 保留外围计算并使全部核心发生纯重编号；global-load producer 保持核心助记符和规范操作不变，其中 468 个设计纯重编号、684 个布局稳定。
 
 ## PTX source alias 的编码等价性
 
@@ -132,7 +148,9 @@ word 0 的高两位、低 opcode 子字段和 word 1 的 kind 两位共同决定
 | 无核心 predicate → `@UP1` | 232 | word 0 清除 `0x0000000000006000` | word 1 高位随调度布局变化 `0x01ee000000000000` |
 | `@UP1 → @!UP1` | 352 | word 0 置位 `0x0000000000008000` | 无 |
 
-当前 attribution 尚未包含 v4 定向谓词探针；完成 Thor 重跑后，本节会自动生成 `UP0..UP6` guard/enable selector 与哨兵值的逐值断言。
+定向谓词活跃压力探针进一步冻结完整 selector：核心 guard 的 UP 编号直接写入 word 0 `[14:12]`，`UP0..UP6 → 0..6`，值 7 表示无 guard；word 0 bit 15 是 negate。
+
+enable 谓词使用独立字段：word 1 `[25:23]` 直接编码 `UP0..UP6`，值 7 表示 `UPT`，word 1 bit 26 是 enable negate；完整逐值计数见生成 JSON。
 
 ## 核心寄存器槽位 bitfield
 
@@ -140,15 +158,15 @@ word 0 的高两位、低 opcode 子字段和 word 1 的 kind 两位共同决定
 
 | SASS 操作数角色 | encoding 字段 | occurrence | 观测 UR 值 | mismatch |
 |---|---|---:|---|---:|
-| `source_a` | word 0 `[31:24]` | 52736 | `4,5,6,7,8,11,13,16,17` | 0 |
-| `source_b` | word 0 `[39:32]` | 52736 | `4,6,8,10,12,16,18` | 0 |
-| `destination` | word 1 `[7:0]` | 52736 | `4,6,10,12,16,18` | 0 |
-| `auxiliary_mask_or_metadata` | word 0 `[47:40]` | 52736 | `4,6,8,10,14,16,18` | 0 |
-| `extra_scale_or_zero_mask` | word 0 `[55:48]` | 37088 | `6,8,10,12` | 0 |
+| `source_a` | word 0 `[31:24]` | 99000 | `4,5,6,7,8,9,11,13,15,16,17,22` | 0 |
+| `source_b` | word 0 `[39:32]` | 99000 | `4,6,8,10,12,16,18,24` | 0 |
+| `destination` | word 1 `[7:0]` | 99000 | `4,6,7,8,10,12,13,14,15,16,17,18` | 0 |
+| `auxiliary_mask_or_metadata` | word 0 `[47:40]` | 99000 | `4,6,8,10,12,14,16,18` | 0 |
+| `extra_scale_or_zero_mask` | word 0 `[55:48]` | 68814 | `6,8,10,12,14,16,18,20` | 0 |
 
-`idesc[URn]` 在 52736 条 occurrence 中始终满足 `idesc_ur = auxiliary_ur XOR 1`，mismatch=0；当前分配把 auxiliary/idesc 作为偶/奇相邻对，尚未观察到独立 idesc 槽位。extra 槽位另有 240 个只改变该 UR 的上下文 pair 验证，mismatch=0。
+`idesc[URn]` 在 99000 条 occurrence 中始终满足 `idesc_ur = auxiliary_ur XOR 1`，mismatch=0；当前分配把 auxiliary/idesc 作为偶/奇相邻对，尚未观察到独立 idesc 槽位。extra 槽位另有 240 个只改变该 UR 的上下文 pair 验证，mismatch=0。
 
-当前已发布 attribution 中的 enable predicate 主要为 `UP0`，共 42848 条动态谓词 occurrence；v4 定向 sweep 将在 Thor 重跑后把 word 1 `[25:23]` 的逐编号证据写入本报告。
+常规矩阵中的 enable predicate 主要为 `UP0,UP1,UP2,UP3,UP4,UP5,UP6`，共 89106 条动态谓词 occurrence；v4 定向 sweep 通过同时保持七个统一谓词活跃，独立恢复 word 1 `[25:23]` 字段。
 
 ## 可回放的正向与逆向规则
 
