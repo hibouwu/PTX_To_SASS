@@ -106,7 +106,7 @@ bN::use     → .B_REUSE.B_KEEP + [BUFFERn]
 bN::lastuse → .B_REUSE + [BUFFERn]
 ```
 
-外围指令选择集合是空集：collector 不选择额外的 load、move、predicate、branch 或 barrier 指令。fill/use/lastuse/discard 就编码在 `UTC*MMA` 的 A/B 操作数修饰符中，不存在某条单独的"collector fill SASS 指令"。
+外围指令选择集合是空集：collector 不选择额外的 load、move、predicate、branch 或 barrier 指令。fill/use/lastuse/discard 就编码在 `UTC*MMA` 的 A/B 操作数修饰符中，不存在某条单独的“collector fill SASS 指令”。
 
 四组严格配对结果如下：
 
@@ -127,7 +127,7 @@ collector 状态
     → 不额外生成准备、控制或完成指令
 ```
 
-需要区分"修饰符的影响"和"PTX 序列本来就更长"。`fill→use` 有两条 MMA，当然会比单条 `discard` 产生更多核心指令（这不是 `use` 自动展开了外围 SASS，而是输入 PTX 本身包含两条目标指令）。上表只比较目标指令数相同的状态序列。
+需要区分“修饰符的影响”和“PTX 序列本来就更长”。`fill→use` 有两条 MMA，当然会比单条 `discard` 产生更多核心指令（这不是 `use` 自动展开了外围 SASS，而是输入 PTX 本身包含两条目标指令）。上表只比较目标指令数相同的状态序列。
 
 ## collector 的已隔离机器编码字段
 

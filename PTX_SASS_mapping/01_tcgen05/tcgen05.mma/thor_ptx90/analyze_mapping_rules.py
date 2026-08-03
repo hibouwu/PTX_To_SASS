@@ -1123,6 +1123,15 @@ def analyze_canonical_mapping(
         "ambiguous_inverse_rule_count": sum(
             rule["candidate_count"] > 1 for rule in inverse_rules
         ),
+        "candidate_count_distribution": {
+            str(candidate_count): rule_count
+            for candidate_count, rule_count in sorted(
+                Counter(rule["candidate_count"] for rule in inverse_rules).items()
+            )
+        },
+        "max_candidate_count": max(
+            (rule["candidate_count"] for rule in inverse_rules), default=0
+        ),
         "roundtrip_mismatch_count": roundtrip_mismatch_count,
         "forward_rules": forward_rules,
         "inverse_rules": inverse_rules,
@@ -1580,7 +1589,7 @@ def write_markdown(path: Path, report: dict) -> None:
         "",
         f"> 当前输入与工具链已写入生成 JSON：ptxas SHA-256 `{report['toolchain']['ptxas_sha256']}`，nvdisasm SHA-256 `{report['toolchain']['nvdisasm_sha256']}`。",
         "",
-        "## guard lowering 的精确分类",
+        "## guard 编译降级的精确分类",
         "",
         f"正 guard 的 1,152 个单因素设计分为：{', '.join(f'`{key}` {value}' for key, value in guard['outcome_counts'].items())}。正负极性分类不一致的设计数为 {guard['polarity_mismatch_count']}。",
         "",
@@ -1604,7 +1613,7 @@ def write_markdown(path: Path, report: dict) -> None:
     ]
     lines.extend(
         [
-            "## lane-0 issuer 的核心重编号条件",
+            "## lane-0 issuer（发射线程）的核心重编号条件",
             "",
             f"lane-0 issuer 的 1,152 个单因素设计分为：{', '.join(f'`{key}` {value}' for key, value in issuer['outcome_counts'].items())}。",
             "",
@@ -1632,7 +1641,7 @@ def write_markdown(path: Path, report: dict) -> None:
             "",
             "这里的预测目标只是在 O3 核心 MMA 上是否发生纯物理寄存器重编号；lane-0 issuer 对所有设计的完整控制流和活跃寄存器仍有影响。",
             "",
-            "## 扩展 issuer 与 producer lowering",
+            "## 扩展 issuer 与 producer 编译降级",
             "",
         ]
     )
@@ -1666,7 +1675,7 @@ def write_markdown(path: Path, report: dict) -> None:
         )
     lines.extend(
         [
-            "## PTX source alias 的编码等价性",
+            "## PTX 源码别名（source alias）的编码等价性",
             "",
             f"在同一 semantic form 内比较 O3 `runtime_zero` 的 source spelling，共有 {aliases['pair_count']} 对。{aliases['same_operation_count']}/{aliases['pair_count']} 对生成完全相同的具体核心 SASS 操作文本，{aliases['same_encoding_count']}/{aliases['pair_count']} 对连两个 64-bit encoding word 也完全相同。",
             "",
@@ -1708,7 +1717,7 @@ def write_markdown(path: Path, report: dict) -> None:
             "",
             "候选配对会因等价 source spelling 和同组重复实例形成笛卡尔积，因此表中把独立 witness 组作为证据规模，把候选配对仅作为一致性重复数；每组的 witness ID、左右 PTX、SASS、encoding、置位 mask 和清位 mask 均保存在生成 JSON。所有行都只有一个稳定 XOR mask，其中 `.4X` 是清位，其余当前字段是置位或表中注明的方向；B buffer 的 `B0/B1/B2/B3` 对应 word 1 的两位字段 `0x0000/0x8000/0x10000/0x18000`。这里描述的是当前 Thor 工具链输出，不把 bit 编号外推到其他架构。`A/B_REUSE` 和 predicate 因伴随调度控制变化而在下一节单独分解。",
             "",
-            "## opcode、kind 与隐式 scale 编码",
+            "## opcode、kind 与隐式 scale 的编码",
             "",
             "标准非 block-scale kind 在具体操作数完全相同的 O3 pair 上形成 word 1 的两位字段；每一行均只有一个 XOR mask：",
             "",
@@ -1725,7 +1734,7 @@ def write_markdown(path: Path, report: dict) -> None:
     lines.extend(
         [
             "",
-            "因此 `f16` 与 `tf32` 在当前动态 `idesc` 契约下是核心机器编码 alias；`f16/tf32=0b00`、`i8=0b01`、`f8f6f4=0b11` 对应 word 1 的 `0x300` 两位字段。`UTCOMMA` 相对 `UTCQMMA` 还组合使用 word 0 的 opcode 位，不能只看这两位判断全部 block-scale 家族。",
+            "因此 `f16` 与 `tf32` 在当前动态 `idesc` 契约下是核心机器编码别名（alias）；`f16/tf32 = 0b00`、`i8 = 0b01`、`f8f6f4 = 0b11` 对应 word 1 的 `0x300` 两位字段。`UTCOMMA` 相对 `UTCQMMA` 还组合使用 word 0 的 opcode 位，不能只看这两位判断全部 block-scale 家族。",
             "",
             "在 block-scale 且具体寄存器完全相同的 pair 中，`UTCOMMA → UTCQMMA` 的 composite opcode 变化还取决于 A 来源：",
             "",
@@ -1755,7 +1764,7 @@ def write_markdown(path: Path, report: dict) -> None:
     lines.extend(
         [
             "",
-            "## `A/B_REUSE` 与 predicate 编码",
+            "## `A/B_REUSE` 与 predicate（谓词）编码",
             "",
             "`fill → use` 的第二条核心指令同时改变 REUSE payload 和高位调度/控制字段。对全部 pair 求方向交集后，可以把稳定 modifier 位与可变控制位分开：",
             "",
@@ -1782,11 +1791,20 @@ def write_markdown(path: Path, report: dict) -> None:
         ]
     )
     if guard_index["observed"]:
+        guard_probe_counts = "、".join(
+            f"`{item['sass_predicate']}` {sum(item['field_value_counts'].values())} 条"
+            for item in guard_index["observed"]
+        )
+        enable_probe_counts = "、".join(
+            f"`{item['sass_predicate']}` {sum(item['field_value_counts'].values())} 条"
+            for item in enable_index["observed"]
+            if item["sass_predicate"] in {f"UP{index}" for index in range(1, 7)}
+        )
         lines.extend(
             [
                 "定向谓词活跃压力探针进一步冻结完整 selector：核心 guard 的 UP 编号直接写入 word 0 `[14:12]`，`UP0..UP6 → 0..6`，值 7 表示无 guard；word 0 bit 15 是 negate。",
                 "",
-                "enable 谓词使用独立字段：word 1 `[25:23]` 直接编码 `UP0..UP6`，值 7 表示 `UPT`，word 1 bit 26 是 enable negate；完整逐值计数见生成 JSON。",
+                f"guard selector 的定向证据共 {guard_index['probe_occurrence_count']} 个 occurrence（{guard_probe_counts}）。enable 谓词使用独立字段：word 1 `[25:23]` 直接编码 `UP0..UP6`，值 7 表示 `UPT`，word 1 bit 26 是 enable negate；稀有编号定向证据为 {enable_probe_counts}，`UP0` 与哨兵值另由常规矩阵提供大量重复。完整逐值计数见生成 JSON。",
                 "",
             ]
         )
@@ -1799,7 +1817,7 @@ def write_markdown(path: Path, report: dict) -> None:
         )
     lines.extend(
         [
-            "## 核心寄存器槽位 bitfield",
+            "## 核心寄存器槽位 bitfield（位字段）",
             "",
             "把全部 O0/O1/O2/O3 attribution 中反汇编显示的 UR 编号直接回放到 encoding word，得到以下五个 8-bit 槽位，所有检查均为零 mismatch：",
             "",
@@ -1829,6 +1847,11 @@ def write_markdown(path: Path, report: dict) -> None:
             "",
             f"分析器已经生成 [`canonical_mapping_rules.json`](../../results/rule-mining/canonical_mapping_rules.json)：包含 {canonical['forward_rule_count']} 条 semantic-form→核心 SASS/semantic-payload 正向规则和 {canonical['inverse_rule_count']} 条 SASS/semantic-payload→候选 semantic-form 逆向规则；其中 {canonical['ambiguous_inverse_rule_count']} 条逆向规则必须返回候选集合。正向→逆向逐条回放 mismatch={canonical['roundtrip_mismatch_count']}。",
             "",
+            "逆向候选规模分布为 " + "、".join(
+                f"{candidate_count} 个候选的规则 {rule_count} 条"
+                for candidate_count, rule_count in canonical["candidate_count_distribution"].items()
+            ) + f"；最大候选集合为 {canonical['max_candidate_count']}。因此这里的“逆向规则”是可枚举候选关系，不是单值反编译器。",
+            "",
             "## 从核心 SASS 反推 PTX 字段",
             "",
             f"分析集合为 O3 `runtime_zero` 的 {inverse['occurrence_count']} 个目标 occurrence，共有 {inverse['unique_ptx_instruction_count']} 种 PTX 目标指令文本和 {inverse['sass_signature_count']} 种去除具体寄存器编号后的核心 SASS signature。出现多 PTX 拼写或字段歧义的 signature 有 {inverse['collision_signature_count']} 个，其中存在语义字段歧义的有 {inverse['semantic_collision_signature_count']} 个。",
@@ -1854,25 +1877,17 @@ def write_markdown(path: Path, report: dict) -> None:
             "",
             "## 主要多对一实例",
             "",
+            "| 核心 SASS signature | PTX 目标拼写 | occurrence | 实际歧义字段 |",
+            "|---|---:|---:|---|",
         ]
     )
-    for index, collision in enumerate(inverse["top_collision_groups"][:6], start=1):
+    for collision in inverse["top_collision_groups"][:6]:
         fields = "；".join(
-            f"`{field}`={','.join(values)}" for field, values in collision["ambiguous_fields"].items()
+            f"`{field}`=" + ",".join(f"`{value}`" for value in values)
+            for field, values in collision["ambiguous_fields"].items()
         ) or "仅 PTX 拼写不同"
-        lines.extend(
-            [
-                f"### {index}. `{collision['sass_signature']}`",
-                "",
-                f"该 signature 汇合 {collision['ptx_spelling_count']} 种 PTX 目标拼写、{collision['occurrence_count']} 个 occurrence；歧义字段：{fields}。",
-                "",
-            ]
-        )
-        for spelling in collision["ptx_spellings"][:4]:
-            lines.append(f"- `{spelling}`")
-        if len(collision["ptx_spellings"]) > 4:
-            lines.append(f"- 其余 {len(collision['ptx_spellings']) - 4} 种拼写省略；完整集合见[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)。")
-        lines.append("")
+        lines.append(f"| `{collision['sass_signature']}` | {collision['ptx_spelling_count']} | {collision['occurrence_count']} | {fields} |")
+    lines.extend(["", "表中只列出现次数最高的六组；全部 collision、每组候选 PTX 拼写与字段取值见[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)。", ""])
     lines.extend(
         [
             "## 规则使用边界",
@@ -1881,14 +1896,15 @@ def write_markdown(path: Path, report: dict) -> None:
             "- 核心 SASS 的可恢复性不包含外围指令。某些 source/context 信息虽然不在核心中，仍可能从完整 kernel 恢复。",
             "- 逆向 signature 分析会规范化具体寄存器编号，因此不能用该小节预测物理寄存器分配；上一节的机器编码位结论使用的是未规范化且寄存器文本完全相同的严格 witness，不受此限制。",
             "- descriptor 的动态内容尚未枚举，因此 `idesc`、SMEM descriptor 的形状、类型、布局、stride 和 swizzle 位型仍属于未解决层。",
+            "- v4 新增的 opcode composite、`A/B_REUSE`、完整 predicate selector、隐式 kind/scale 别名、寄存器槽位和扩展 issuer/producer 机制目前只在一组 Thor 工具链二进制上完成 O0–O3 验证；独立双二进制复现只覆盖 v3 范围，不能把 v3 的复现强度自动外推到 v4 新增结论。",
             "",
             "## 证据入口",
             "",
             "- 规则挖掘器：[`../../analyze_mapping_rules.py`](../../analyze_mapping_rules.py)",
             "- 完整机器可读结果：[`../../results/rule-mining/mapping_rule_analysis.json`](../../results/rule-mining/mapping_rule_analysis.json)",
             "- 生成 manifest：[`../../results/expanded/sources/manifest.jsonl`](../../results/expanded/sources/manifest.jsonl)",
-            "- 核心 SASS attribution：[`../../results/expanded/sass/sass_attribution.jsonl`](../../results/expanded/sass/sass_attribution.jsonl)",
-            "- 上下文统计：[`../tcgen05_mma_上下文差分报告.md`](../tcgen05_mma_上下文差分报告.md)",
+            "- 核心 SASS attribution 汇总：[`../../results/expanded/sass/sass_report.json`](../../results/expanded/sass/sass_report.json)；逐记录 `sass_attribution.jsonl` 不随 Git 发布，使用前须核对本页生成 JSON 中记录的输入 SHA-256",
+            "- 上下文统计：[`../../Docs/tcgen05_mma_上下文差分报告.md`](../../Docs/tcgen05_mma_上下文差分报告.md)",
             "",
         ]
     )
@@ -1908,11 +1924,26 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    output_dir = reset_owned_directory(
-        args.output_dir,
-        owner="thor_tcgen05_mapping_rule_mining",
-        protected=(ROOT,),
-    )
+    comparison_report_path = args.differences.parent / "comparison_report.json"
+    if comparison_report_path.is_file():
+        comparison_report = json.loads(comparison_report_path.read_text(encoding="utf-8"))
+        expected_hashes = {
+            args.manifest: comparison_report.get("input_manifest_sha256"),
+            args.attribution: comparison_report.get("input_sass_attribution_sha256"),
+            args.differences: comparison_report.get("differences_sha256"),
+        }
+        mismatched_inputs = []
+        for path, expected in expected_hashes.items():
+            if not expected:
+                continue
+            observed = sha256_file(path)
+            if observed != expected:
+                mismatched_inputs.append(f"{path}: expected {expected}, observed {observed}")
+        if mismatched_inputs:
+            raise ValueError(
+                "rule-mining inputs do not match context comparison provenance; "
+                "refusing to replace published output:\n" + "\n".join(mismatched_inputs)
+            )
     manifests = list(read_jsonl(args.manifest))
     manifest_by_implementation = {
         row["source_implementation_id"]: row for row in manifests
@@ -2058,6 +2089,11 @@ def main() -> None:
     )
     if canonical_mapping["roundtrip_mismatch_count"]:
         raise ValueError("canonical forward/inverse mapping roundtrip failed")
+    output_dir = reset_owned_directory(
+        args.output_dir,
+        owner="thor_tcgen05_mapping_rule_mining",
+        protected=(ROOT,),
+    )
     canonical_path = output_dir / "canonical_mapping_rules.json"
     canonical_path.write_text(
         json.dumps(canonical_mapping, indent=2, sort_keys=True) + "\n",

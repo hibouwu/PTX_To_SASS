@@ -19,7 +19,7 @@
 1. 核心计算指令由 PTX 中的计算类型、操作数来源、协作线程块（Cooperative Thread Array，CTA）数量、权重驻留（weight-stationary）模式、分块缩放（block scaling）和操作数收集器（collector）状态共同决定。
 2. 外围指令序列由 guard、发射线程、操作数生成方式和完成协议共同决定。
 
-在本次 32,256 组配对比较中，外围上下文没有一次改变核心矩阵乘加（Matrix Multiply-Accumulate，MMA）指令的 SASS 指令家族。`UTCHMMA`、`UTCQMMA`、`UTCIMMA` 或 `UTCOMMA` 选哪一个，取决于“执行何种矩阵运算”，不取决于“由哪个线程发射”或“后续如何完成同步”。
+在本次 64,548 组配对比较中，外围上下文没有一次改变核心矩阵乘加（Matrix Multiply-Accumulate，MMA）指令的 SASS 指令家族。`UTCHMMA`、`UTCQMMA`、`UTCIMMA` 或 `UTCOMMA` 选哪一个，取决于“执行何种矩阵运算”，不取决于“由哪个线程发射”或“后续如何完成同步”。
 
 但是，“核心指令家族不变”不等于“生成的机器代码不变”。上下文仍然会改变以下内容：
 
@@ -40,6 +40,119 @@ PTX 所处上下文
 ```
 
 这里的编译降级（lowering）指编译器把抽象的 PTX 指令逐步转化为具体硬件指令的过程。PTX 是 NVIDIA GPU 的虚拟指令集，SASS 是绑定特定 GPU 架构的机器指令。
+
+## 当前受约束域内的正向选择算法
+
+下面的算法把本项目已经验证的规则合并成一条可执行的选择流程。它描述的是当前 PTX ISA 9.0、`sm_110a`、生成矩阵和 CUDA 13.0 工具链上的观测模型，不声称等同于 `ptxas` 内部实现。输入不满足已验证合法性约束时必须返回 `REJECT_OR_OUT_OF_DOMAIN`，不能继续机械拼接 SASS 修饰符。
+
+```text
+select_tcgen05_mma(ptx, context):
+    f = parse(
+        opcode_variant, cta_group, kind, a_form,
+        block_scale, scale_vector, ashift,
+        collector_steps,
+        sparse_metadata, zero_column_mask,
+        destination, idesc, enable
+    )
+
+    c = parse_context(
+        optimization, guard, issuer, producer, completion
+    )
+
+    step_count = len(f.collector_steps)
+
+    1. validate(f)
+       - CTA group 只能是 1 或 2；WS 只能使用 group 1
+       - ashift 只允许普通/稀疏非 WS、非 block-scale 的 TS 形态
+       - 普通/稀疏 MMA 选择 A collector；WS/WS.SP 选择 B0..B3 collector
+       - 标准 kind={f16,tf32,f8f6f4,i8} 不使用 block scale
+       - mxf8f6f4 使用 1X 规范语义；mxf4 使用 2X/block32
+       - mxf4nvf4 使用 2X/4X/block16/block32，且不能省略 scale-vector 拼写
+       - block scale 只属于 mma/mma.sp，不属于 WS/WS.SP
+       - collector sequence 只能是 discard、fill 或 fill→{use,lastuse} 的已验证状态路径
+       - idesc、enable、mask、metadata、scale-factor 等操作数必须按形态齐全
+       - 失败：REJECT_OR_OUT_OF_DOMAIN
+
+    2. 选择核心家族
+       f16 或 tf32          -> UTCHMMA
+       f8f6f4 或 mxf8f6f4  -> UTCQMMA
+       i8                   -> UTCIMMA
+       mxf4 或 mxf4nvf4    -> UTCOMMA
+
+    3. 叠加主助记符修饰符
+       cta_group == 2       -> .2CTA
+       variant 是 WS       -> .WS
+       ashift               -> .ASHIFT
+       scale 语义是 4X/合法 block16 alias -> .4X
+       2X/合法 block32 alias 不产生同名 SASS 后缀
+
+    4. 构造核心操作数形态
+       SS                   -> A=gdesc, B=gdesc
+       TS                   -> A=tmem,  B=gdesc
+       destination          -> tmem
+       sparse               -> 加入 metadata tmem 操作数；不添加 .SP
+       block_scale          -> 加入 A/B scale-factor tmem 操作数
+       zero_column_mask     -> 加入额外 UR 操作数
+       idesc                -> 使用与 auxiliary 槽位相邻的 idesc[UR]
+       enable               -> 末尾 UP/UPT/!UPT 操作数
+
+    5. 映射 collector 状态
+       A: discard/fill/use/lastuse
+          -> 无 / A_KEEP / A_REUSE.A_KEEP / A_REUSE
+       B: discard/fill/use/lastuse
+          -> 无 / B_KEEP / B_REUSE.B_KEEP / B_REUSE
+       B buffer 0/1/2/3     -> 无 / BUFFER1 / BUFFER2 / BUFFER3
+
+    6. 降级外围上下文
+       producer             -> select_producer_lowering(f, c)
+       issuer + guard       -> select_control_lowering(f, c)
+       constant enable      -> O1-O3 折叠为 UPT/!UPT
+       completion           -> 选择 commit/mbarrier/fence/wait 后继协议
+
+    7. 完成机器编码
+       - 编码 family、modifier、guard/enable selector 和五个 UR 槽位
+       - 物理寄存器编号与 word 1 高位调度/控制由最终上下文决定
+
+    return core_sass, surrounding_sass, encoding_constraints
+```
+
+两个上下文子程序在当前 profile 域内进一步展开为：
+
+```text
+select_control_lowering(f, c):
+    if c.issuer == compound_predicated_issuer:
+        return first_occurrence_core_predication if step_count == 2
+               else external_control_flow
+
+    if c.issuer in {lane0, lane31, dynamic_lane, thread0}:
+        emit lane/thread read + compare + branch/early-exit
+        core_layout = renumber_only iff
+            a_form == TS and (
+                (variant == mma.sp and kind in {mxf4,mxf4nvf4,mxf8f6f4}) or
+                (variant == mma.ws.sp and zero_column_mask)
+            )
+
+    if c.guard is present:
+        first_occurrence_core_predication iff
+            step_count == 2 and (
+                variant in {mma.sp,mma.ws.sp} or
+                (kind in {f16,tf32,f8f6f4,i8} and not zero_column_mask)
+            )
+        otherwise external_control_flow
+
+select_producer_lowering(f, c):
+    direct_parameters         -> 参数装载基线
+    identity_chain + O1-O3    -> 完全消除
+    identity_chain + O0       -> 保留恒等算术和搬运
+    nonidentity or branched   -> 保留外围数据流；全部设计纯重编号
+    global_load               -> 保留 load；renumber_only iff
+        (variant == mma.sp and (a_form == TS or
+         kind in {mxf4,mxf4nvf4,mxf8f6f4})) or
+        (variant == mma.ws.sp and (a_form == TS or zero_column_mask))
+        otherwise stable_layout
+```
+
+这里的公式只预测当前生成 profile 中的路径类别或核心布局差分，不预测具体物理寄存器编号。步骤 2–5 的 896 条 semantic-form 正向规则已写入 [`results/rule-mining/canonical_mapping_rules.json`](../results/rule-mining/canonical_mapping_rules.json)并完成 round-trip；步骤 6 的完整公式和反例计数见 [`mapping_rules/context_lowering.md`](mapping_rules/context_lowering.md)及 [`mapping_rules/reverse_mapping_rules.md`](mapping_rules/reverse_mapping_rules.md)。完成与内存一致性协议见 [`mapping_rules/memory_consistency.md`](mapping_rules/memory_consistency.md)。完整 30 项静态拒绝边界见 [`mapping_rules/interactions.md`](mapping_rules/interactions.md#完整阴性探针目录)。
 
 ## 从一条 PTX 指令开始
 
@@ -141,13 +254,13 @@ PTX 的 `.ws` 表示权重驻留模式：让 B 操作数在硬件内部保持和
 | PTX 变体（variant） | SASS |
 |---|---|
 | `mma` | 普通 MMA 助记符 |
-| `mma.sp` | 普通 MMA 助记符，稀疏信息进入操作数或编码 |
+| `mma.sp` | 普通 MMA 助记符；metadata 进入额外操作数契约，不添加 `.SP` |
 | `mma.ws` | 添加 `.WS` |
-| `mma.ws.sp` | 添加 `.WS`，稀疏信息进入操作数或编码 |
+| `mma.ws.sp` | 添加 `.WS`；metadata 进入额外操作数契约，不添加 `.SP` |
 
 变体（variant）指同一基础指令的语义变体。`.sp` 表示稀疏（sparse）矩阵形式，额外需要元数据（metadata）来描述哪些元素存在。
 
-一个重要发现：`.sp` 没有直接变成可见的 `.SP` SASS 修饰符。不能只看 SASS 助记符判断一条指令是不是稀疏 MMA，必须同时检查操作数位置和机器编码。
+一个重要发现：`.sp` 没有直接变成可见的 `.SP` SASS 修饰符，也没有已证明可在发生碰撞的核心 signature 中独立恢复的 sparse opcode bit。稀疏语义首先由 metadata 操作数及其 producer 契约承载；metadata 槽位可能改变具体核心编码，但仅凭规范化核心 SASS 或核心 encoding 仍可能无法区分 dense 与 sparse，逆向时必须返回候选集合。
 
 ### `.ashift` 直接映射为 `.ASHIFT`
 
@@ -309,7 +422,7 @@ B collector 用于权重驻留形式：
 
 O0 到 O3 是四个编译优化级：O0 尽量少优化以便观察原始降级过程，O1 启用基础优化，O2 启用更完整的优化，O3 是最高常用优化级。
 
-在当前微型 kernel 中，O2 和 O3 的全部 13,184 个目标出现位置（occurrence）的核心操作文本、编码和活跃寄存器计数完全相同。出现位置指 PTX 源码中一条实际出现的目标指令。
+在当前微型 kernel 中，O2 和 O3 的全部 24,750 个目标出现位置（occurrence）的核心操作文本、编码和活跃寄存器计数完全相同。出现位置指 PTX 源码中一条实际出现的目标指令。
 
 ### guard 有两种降级方式
 
@@ -325,26 +438,30 @@ O2/O3 的 1,152 组 guard 比较中：352 组改变了核心规范操作，508 �
 
 正 guard 和负 guard 的变化数量相同。guard 的真假极性会改变具体条件，但没有改变编译器采用哪类降级路径的覆盖范围。
 
-### lane-0 发射线程主要改变寄存器压力
+### 多种发射线程形态改变外围控制流和寄存器布局
 
-发射线程（issuer）是实际发射 MMA 指令的线程。`lane0_issuer` 配置文件限制 lane 0 成为发射者。
+发射线程（issuer）是实际到达并发射 MMA 指令的线程。v4 覆盖 lane 0、lane 31、参数指定动态 lane、`%tid.x == 0` 和 lane 条件与参数 guard 合取的 compound issuer。
 
-在 O1/O2/O3 下：核心规范操作变化为 0，1,152/1,152 组核心活跃寄存器数发生变化，168 组核心物理寄存器发生纯重编号（全部来自稀疏 `.sp` 变体）。
+四种 branch issuer 在 O1–O3 都不改变核心助记符或规范操作，并共享同一条 168/984 核心布局分类：168 个设计发生纯物理寄存器重编号，984 个布局稳定。它们仍会改变线程标识读取、比较、分支/提前退出、寄存器活跃区间和完整 kernel。compound issuer 则在双 occurrence 形态中只谓词化第一条，在单 occurrence 形态中使用外围控制流。完整公式见 [`mapping_rules/context_lowering.md`](mapping_rules/context_lowering.md#issuer线程选择控制流和寄存器重编号)。
 
-只比较操作码会漏掉发射线程对资源使用的影响。
+只比较操作码会漏掉发射线程对控制流、资源使用和具体机器编码的影响。
 
-### derived producer 在优化后被消除
+### producer 是否消除取决于数据流结构
 
-producer 是产生目标指令输入值的前序计算。`derived_producers` 配置文件通过额外计算得到描述符、地址或谓词，而不是直接使用参数。
+producer 是产生目标指令输入值的前序计算。v4 将它分为直接参数、恒等算术链、非恒等参数运算、分支合流和 global load 五类。
 
-结果是：O0 的完整 kernel 序列发生变化，但 O1/O2/O3 的完整规范化 kernel 序列完全不变。这些额外 producer 在 O1 以上被编译器吸收或消除。
+- `derived_producers` 中的 `add 0`、`xor 0`、`or 0` 恒等链只在 O0 保留；O1–O3 与直接参数基线完全相同。
+- `nonidentity_producers` 和 `branched_producers` 在 O1–O3 都保留外围数据流，并使 1,152/1,152 个设计的核心发生纯重编号。
+- `global_load_producers` 保留 load 和地址数据流；468/1,152 个设计纯重编号，684/1,152 个布局稳定。
+
+因此只能写“已验证的恒等 producer 在 O1 以上被消除”，不能写成一般性的“producer 会被优化消除”。完整分类见 [`mapping_rules/context_lowering.md`](mapping_rules/context_lowering.md#producer直接参数恒等链和真实数据流)。
 
 ### completion 改变后继协议，不改变核心 MMA
 
 completion 是 MMA 发出后如何确认完成的协议，包括 commit 和 mbarrier。
 
 - commit 表示提交此前发出的异步张量核心操作。
-- mbarrier 是内存屏障（memory barrier），一种记录异步工作到达和完成状态的同步对象。
+- mbarrier 是分 phase 的 memory-barrier 同步对象，用于记录到达和完成状态；它不是一条可以替代 commit、proxy fence 或普通内存 release/acquire 的通用 fence。
 
 `commit_completion` 在所有优化级都会改变完整 kernel 序列和指令数，但不会改变核心 MMA 助记符、核心操作数或核心寄存器布局。completion 应当建模为 MMA 的后继协议，而不是 MMA 操作码的组成部分。
 
@@ -365,16 +482,16 @@ SASS 使用真实物理寄存器。本文涉及四类：
 2. 类别变化：例如 `UP0 → UPT`，从可写谓词变成特殊恒真谓词。
 3. 别名关系变化：原本两个操作数引用同一个寄存器，后来变成不同寄存器，或反过来。别名指两个操作数是否指向同一个物理寄存器。
 
-32,256 组上下文比较的结果：
+64,548 组上下文比较的结果：
 
 | 现象 | 数量 | 比例 |
 |---|---|---|
-| 核心寄存器布局变化 | 10,344 | 32.1% |
-| 其中仅重编号 | 1,320 | 4.1% |
-| 寄存器类别变化 | 9,024 | 28.0% |
-| 别名关系变化 | 9,024 | 28.0% |
-| 核心位置活跃数变化 | 15,488 | 48.0% |
-| kernel 峰值活跃数变化 | 17,592 | 54.5% |
+| 核心寄存器布局变化 | 21,975 | 34.0% |
+| 其中仅重编号 | 11,442 | 17.7% |
+| 寄存器类别变化 | 10,533 | 16.3% |
+| 别名关系变化 | 10,533 | 16.3% |
+| 核心位置活跃数变化 | 24,624 | 38.1% |
+| kernel 峰值活跃数变化 | 47,197 | 73.1% |
 
 活跃寄存器指在某条指令位置之前已经保存了值、并且之后还可能被使用的寄存器。kernel 峰值活跃数是整个 kernel 中同时活跃寄存器数量的最大值。
 
@@ -395,10 +512,10 @@ SS 比 TS 平均多约一个活跃 UGPR。共享内存 A 描述符比 TMEM A 地
 
 | 比较对象 | 发生变化的配对 |
 |---|---|
-| 核心 MMA 助记符 | 0 / 32,256 |
-| 核心规范操作 | 9,024 / 32,256 |
-| 完整 kernel 规范序列 | 28,800 / 32,256 |
-| kernel 指令数 | 17,396 / 32,256 |
+| 核心 MMA 助记符 | 0 / 64,548 |
+| 核心规范操作 | 10,533 / 64,548 |
+| 完整 kernel 规范序列 | 61,092 / 64,548 |
+| kernel 指令数 | 44,503 / 64,548 |
 
 规范操作是把具体寄存器编号和指令地址消除后得到的可比较形式。例如 `UR4` 和 `UR9` 都会抽象成“第一个 UGPR”，但 R、UR、P、UP 的类别不会混合。这个过程叫规范化（normalization）。
 
@@ -447,11 +564,17 @@ collector fill/use/lastuse/discard
 guard
     → 直接 SASS 谓词化或外围控制路径
 
-lane0 issuer
-    → 核心操作码通常不变，但活跃寄存器改变
+lane0/lane31/dynamic-lane/thread0 issuer
+    → 核心家族和规范操作不变；外围控制流、活跃区间和部分物理编号改变
 
-derived producer + O1 以上
-    → 当前测试中的额外 producer 被优化消除
+compound issuer
+    → 双 occurrence 只谓词化首条；单 occurrence 使用外围控制流
+
+identity producer + O1 以上
+    → 已验证的恒等算术链被完全消除
+
+nonidentity/branched/global-load producer
+    → 保留外围数据流；核心家族不变，具体寄存器可能重编号
 
 completion
     → 改变后继序列，不改变核心 MMA
@@ -467,7 +590,7 @@ completion
 - A、B、D 的精确数据类型组合；
 - row-major 或 column-major 方向（major 指数据以行还是以列为主要连续方向）；
 - SMEM 描述符的步长（stride，相邻行或列在地址上的距离）和地址重排（swizzle，为改善存储访问分布而做的地址重排）；
-- descriptor 内部字段。它们在本研究中是显式排除的不透明参数；`.2CTA`、`.ASHIFT`、`.A/B_KEEP`、`.A/B_REUSE`、`.BUFFER1/2/3`、`.4X`、`.WS`、标准 kind、guard/enable predicate 和五个 UR 槽位均已有编码断言，完整 witness 见映射规则索引中的逆向报告。
+- 描述符内部字段。本研究将描述符视为显式排除的不透明参数；`.2CTA`、`.ASHIFT`、`.A/B_KEEP`、`.A/B_REUSE`、`.BUFFER1/2/3`、`.4X`、`.WS`、标准 kind、guard/enable 谓词和五个统一寄存器（UR）槽位均已有编码断言，完整 witness 见映射规则索引中的逆向报告。
 
 当前用例把这些描述符当作不透明 kernel 参数，可以证明 `ptxas` 接受语法并生成 SASS，但不能反推出描述符内部字段；内部字段不在本项目的静态映射范围内。
 
@@ -480,33 +603,33 @@ completion
 - 上述 kind、CTA group、TS/SS、WS、ASHIFT 和 collector 映射在当前样本中稳定，反例数为 0。
 - 上下文对核心操作、寄存器和完整 kernel 的影响可以被配对测量。
 - 协议层的 49 个静态用例（41 个独立协议原语和 8 个完整生命周期）在 O0/O1/O2/O3 全部通过编译与有序 SASS 检查。
-- 当前已发布 Thor 结果的十一个已知非法组合得到目标行上的预期拒绝；v4 已扩展为 30 类 qualifier、collector、CTA group、kind/scale、变体和缺失/多余操作数边界，本地 30/30 通过，等待 Thor 最终重跑。
+- 30 类 qualifier、collector、CTA group、kind/scale、变体和缺失/多余操作数边界均在 Thor 上得到预期拒绝，30/30 通过。
 
-v4 已把 opcode composite、`A/B_REUSE`、guard/enable predicate 全编号、隐式 kind/scale、五个寄存器槽位、idesc 相邻配对压力见证、非恒等 producer 和更多 issuer lowering 纳入自动断言，并生成可回放的正向规则与逆向候选集合。当前只差 Thor 上的 O0/O1/O2/O3 最终重跑；descriptor 值继续视为不透明寄存器操作数，word 1 高位 scheduling/control 作为编译器 codebook 单独记录。
+v4 已把操作码复合字段、`A/B_REUSE`、guard/enable 谓词全编号、隐式 kind/scale 别名、五个寄存器槽位、idesc 相邻配对压力见证、非恒等 producer 和更多发射线程编译降级纳入自动断言，并生成可回放的正向规则与逆向候选集合。Thor 上的 O0/O1/O2/O3 最终重跑已经通过。描述符值继续视为不透明寄存器操作数，word 1 高位调度/控制字段作为编译器编码簿（codebook）单独记录。
 
 ## 实验规模和证据来源
 
 | 层次 | 结果 |
 |---|---|
 | syntax 源码实现 | 1,152 |
-| semantic form | 896 |
-| expanded 源码实现 | 9,216 |
-| expanded 逻辑设计点（logical design） | 7,168 |
+| semantic form | 897（其中 896 个常规映射形态） |
+| expanded 源码实现 | 17,290 |
+| expanded 逻辑设计点（logical design） | 13,450 |
 | syntax 编译 | 72 / 72 通过 |
-| expanded 编译 | 576 / 576 通过 |
-| SASS 归属配对 | 36,864 / 36,864 完成 |
-| SASS 目标出现位置 | 52,736 |
-| 上下文配对比较 | 32,256 / 32,256 完成 |
+| expanded 编译 | 1,084 / 1,084 通过 |
+| SASS case 归属配对 | 69,160 / 69,160 完成 |
+| SASS 目标出现位置 | 99,000 / 99,000 完成 |
+| 上下文配对比较 | 64,548 / 64,548 完成 |
 | 协议层编译 | 196 / 196 通过 |
 | 全部协议 case 有序 SASS 检查 | 196 / 196 通过 |
-| 阴性探针 | 当前 Thor 11/11；v4 本地 30/30 |
+| 阴性探针 | Thor 30/30 得到预期拒绝 |
 
 逻辑设计点是 semantic form 与适用静态上下文组合后的逻辑实验点。归属配对（attribution）是把 PTX 中的目标出现位置与 SASS 中对应核心指令配对。
 
 主要机器可读来源：
 
 - `results/expanded/sources/manifest.jsonl`：每条源码实现的实验坐标。
-- `results/expanded/sass/sass_attribution.jsonl`：PTX 与核心 SASS 的配对。
+- `results/expanded/sass/sass_report.json`：PTX 与核心 SASS 归属的完整性汇总；逐记录 `sass_attribution.jsonl` 是不随 Git 发布的运行时产物，使用前须核对规则 JSON 记录的 SHA-256。
 - `results/context-comparison/context_summary.csv`：上下文差分汇总。
 - `results/context-comparison/comparison_report.json`：输入与输出哈希。
 - `results/protocol-layers/compile_report.json`：协议层验证。

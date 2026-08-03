@@ -4,7 +4,7 @@
 
 > 当前输入与工具链已写入生成 JSON：ptxas SHA-256 `a1941a04ca4fd233b2fbe50c625b1e72b3d5f79ebe80209a272c85482dfbb487`，nvdisasm SHA-256 `bc40070d596fa49b81c0905ca1d05e457aaec071280f742997d4a0b511781b25`。
 
-## guard lowering 的精确分类
+## guard 编译降级的精确分类
 
 正 guard 的 1,152 个单因素设计分为：`external_control_flow` 800, `first_occurrence_core_predication` 352。正负极性分类不一致的设计数为 0。
 
@@ -25,7 +25,7 @@ first_occurrence_core_predication =
 
 352 个 `first_occurrence_core_predication` 样本的 occurrence 谓词形状全部是 `(true, false)`：只有 collector 序列第一条核心 MMA 带 `@UPn/@!UPn`，第二条不重复携带 guard。其余 800 个设计的所有核心 occurrence 都不带 guard，由外围控制流实现条件执行。正负 guard 只改变谓词极性，不改变上述路径分类。完整预测分组保存在[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)中。
 
-## lane-0 issuer 的核心重编号条件
+## lane-0 issuer（发射线程）的核心重编号条件
 
 lane-0 issuer 的 1,152 个单因素设计分为：`renumber_only` 168, `stable_layout` 984。
 
@@ -49,7 +49,7 @@ renumber_only =
 
 这里的预测目标只是在 O3 核心 MMA 上是否发生纯物理寄存器重编号；lane-0 issuer 对所有设计的完整控制流和活跃寄存器仍有影响。
 
-## 扩展 issuer 与 producer lowering
+## 扩展 issuer 与 producer 编译降级
 
 新增 issuer/producer profile 已完成 O3 单因素配对，跨四种 branch issuer 的分类不一致数为 0，全部手写公式 mismatch=0。
 
@@ -69,7 +69,7 @@ renumber_only =
 
 identity producer 在 O3 完全消除；非恒等算术和分支选择 producer 保留外围计算并使全部核心发生纯重编号；global-load producer 保持核心助记符和规范操作不变，其中 468 个设计纯重编号、684 个布局稳定。
 
-## PTX source alias 的编码等价性
+## PTX 源码别名（source alias）的编码等价性
 
 在同一 semantic form 内比较 O3 `runtime_zero` 的 source spelling，共有 384 对。384/384 对生成完全相同的具体核心 SASS 操作文本，384/384 对连两个 64-bit encoding word 也完全相同。
 
@@ -99,7 +99,7 @@ identity producer 在 O3 完全消除；非恒等算术和分支选择 producer 
 
 候选配对会因等价 source spelling 和同组重复实例形成笛卡尔积，因此表中把独立 witness 组作为证据规模，把候选配对仅作为一致性重复数；每组的 witness ID、左右 PTX、SASS、encoding、置位 mask 和清位 mask 均保存在生成 JSON。所有行都只有一个稳定 XOR mask，其中 `.4X` 是清位，其余当前字段是置位或表中注明的方向；B buffer 的 `B0/B1/B2/B3` 对应 word 1 的两位字段 `0x0000/0x8000/0x10000/0x18000`。这里描述的是当前 Thor 工具链输出，不把 bit 编号外推到其他架构。`A/B_REUSE` 和 predicate 因伴随调度控制变化而在下一节单独分解。
 
-## opcode、kind 与隐式 scale 编码
+## opcode、kind 与隐式 scale 的编码
 
 标准非 block-scale kind 在具体操作数完全相同的 O3 pair 上形成 word 1 的两位字段；每一行均只有一个 XOR mask：
 
@@ -110,7 +110,7 @@ identity producer 在 O3 完全消除；非恒等算术和分支选择 producer 
 | `f16 → i8` | 272 | 272 | `0x0000000000000000` | `0x0000000000000100` | 置位 |
 | `f8f6f4 → i8` | 272 | 272 | `0x0000000000000000` | `0x0000000000000200` | 清位 |
 
-因此 `f16` 与 `tf32` 在当前动态 `idesc` 契约下是核心机器编码 alias；`f16/tf32=0b00`、`i8=0b01`、`f8f6f4=0b11` 对应 word 1 的 `0x300` 两位字段。`UTCOMMA` 相对 `UTCQMMA` 还组合使用 word 0 的 opcode 位，不能只看这两位判断全部 block-scale 家族。
+因此 `f16` 与 `tf32` 在当前动态 `idesc` 契约下是核心机器编码别名（alias）；`f16/tf32 = 0b00`、`i8 = 0b01`、`f8f6f4 = 0b11` 对应 word 1 的 `0x300` 两位字段。`UTCOMMA` 相对 `UTCQMMA` 还组合使用 word 0 的 opcode 位，不能只看这两位判断全部 block-scale 家族。
 
 在 block-scale 且具体寄存器完全相同的 pair 中，`UTCOMMA → UTCQMMA` 的 composite opcode 变化还取决于 A 来源：
 
@@ -132,7 +132,7 @@ word 0 的高两位、低 opcode 子字段和 word 1 的 kind 两位共同决定
 | `mxf4 block32 ↔ mxf4nvf4 2X` | 56 | 112 | 112 | 112 |
 | `mxf4nvf4 block16 ↔ 4X` | 56 | 56 | 56 | 56 |
 
-## `A/B_REUSE` 与 predicate 编码
+## `A/B_REUSE` 与 predicate（谓词）编码
 
 `fill → use` 的第二条核心指令同时改变 REUSE payload 和高位调度/控制字段。对全部 pair 求方向交集后，可以把稳定 modifier 位与可变控制位分开：
 
@@ -150,9 +150,9 @@ word 0 的高两位、低 opcode 子字段和 word 1 的 kind 两位共同决定
 
 定向谓词活跃压力探针进一步冻结完整 selector：核心 guard 的 UP 编号直接写入 word 0 `[14:12]`，`UP0..UP6 → 0..6`，值 7 表示无 guard；word 0 bit 15 是 negate。
 
-enable 谓词使用独立字段：word 1 `[25:23]` 直接编码 `UP0..UP6`，值 7 表示 `UPT`，word 1 bit 26 是 enable negate；完整逐值计数见生成 JSON。
+guard selector 的定向证据共 7 个 occurrence（`UP0` 1 条、`UP1` 1 条、`UP2` 1 条、`UP3` 1 条、`UP4` 1 条、`UP5` 1 条、`UP6` 1 条）。enable 谓词使用独立字段：word 1 `[25:23]` 直接编码 `UP0..UP6`，值 7 表示 `UPT`，word 1 bit 26 是 enable negate；稀有编号定向证据为 `UP1` 1 条、`UP2` 1 条、`UP3` 1 条、`UP4` 1 条、`UP5` 1 条、`UP6` 1 条，`UP0` 与哨兵值另由常规矩阵提供大量重复。完整逐值计数见生成 JSON。
 
-## 核心寄存器槽位 bitfield
+## 核心寄存器槽位 bitfield（位字段）
 
 把全部 O0/O1/O2/O3 attribution 中反汇编显示的 UR 编号直接回放到 encoding word，得到以下五个 8-bit 槽位，所有检查均为零 mismatch：
 
@@ -171,6 +171,8 @@ enable 谓词使用独立字段：word 1 `[25:23]` 直接编码 `UP0..UP6`，值
 ## 可回放的正向与逆向规则
 
 分析器已经生成 [`canonical_mapping_rules.json`](../../results/rule-mining/canonical_mapping_rules.json)：包含 896 条 semantic-form→核心 SASS/semantic-payload 正向规则和 300 条 SASS/semantic-payload→候选 semantic-form 逆向规则；其中 300 条逆向规则必须返回候选集合。正向→逆向逐条回放 mismatch=0。
+
+逆向候选规模分布为 2 个候选的规则 184 条、4 个候选的规则 100 条、8 个候选的规则 16 条；最大候选集合为 8。因此这里的“逆向规则”是可枚举候选关系，不是单值反编译器。
 
 ## 从核心 SASS 反推 PTX 字段
 
@@ -196,65 +198,16 @@ enable 谓词使用独立字段：word 1 `[25:23]` 直接编码 `UP0..UP6`，值
 
 ## 主要多对一实例
 
-### 1. `UTCOMMA gdesc[UR{0}], gdesc[UR{1}], tmem[UR{2}], tmem[UR{3}], idesc[UR{4}], tmem[UR{5}], UP{0}`
+| 核心 SASS signature | PTX 目标拼写 | occurrence | 实际歧义字段 |
+|---|---:|---:|---|
+| `UTCOMMA gdesc[UR{0}], gdesc[UR{1}], tmem[UR{2}], tmem[UR{3}], idesc[UR{4}], tmem[UR{5}], UP{0}` | 20 | 20 | `collector_spelling`=`"explicit_discard"`,`"implicit_discard"`；`kind`=`"mxf4"`,`"mxf4nvf4"`；`opcode_variant`=`"tcgen05.mma"`,`"tcgen05.mma.sp"`；`scale_vector_semantics`=`"block32"`,`"scale_vec::2X"`；`scale_vector_spelling`=`"block32"`,`"omitted"`,`"scale_vec::2X"`；`sparse`=`false`,`true` |
+| `UTCOMMA tmem[UR{0}], gdesc[UR{1}], tmem[UR{2}], tmem[UR{3}], idesc[UR{4}], tmem[UR{5}], UP{0}` | 20 | 20 | `collector_spelling`=`"explicit_discard"`,`"implicit_discard"`；`kind`=`"mxf4"`,`"mxf4nvf4"`；`opcode_variant`=`"tcgen05.mma"`,`"tcgen05.mma.sp"`；`scale_vector_semantics`=`"block32"`,`"scale_vec::2X"`；`scale_vector_spelling`=`"block32"`,`"omitted"`,`"scale_vec::2X"`；`sparse`=`false`,`true` |
+| `UTCOMMA.2CTA gdesc[UR{0}], gdesc[UR{1}], tmem[UR{2}], tmem[UR{3}], idesc[UR{4}], tmem[UR{5}], UP{0}` | 20 | 20 | `collector_spelling`=`"explicit_discard"`,`"implicit_discard"`；`kind`=`"mxf4"`,`"mxf4nvf4"`；`opcode_variant`=`"tcgen05.mma"`,`"tcgen05.mma.sp"`；`scale_vector_semantics`=`"block32"`,`"scale_vec::2X"`；`scale_vector_spelling`=`"block32"`,`"omitted"`,`"scale_vec::2X"`；`sparse`=`false`,`true` |
+| `UTCOMMA.2CTA tmem[UR{0}], gdesc[UR{1}], tmem[UR{2}], tmem[UR{3}], idesc[UR{4}], tmem[UR{5}], UP{0}` | 20 | 20 | `collector_spelling`=`"explicit_discard"`,`"implicit_discard"`；`kind`=`"mxf4"`,`"mxf4nvf4"`；`opcode_variant`=`"tcgen05.mma"`,`"tcgen05.mma.sp"`；`scale_vector_semantics`=`"block32"`,`"scale_vec::2X"`；`scale_vector_spelling`=`"block32"`,`"omitted"`,`"scale_vec::2X"`；`sparse`=`false`,`true` |
+| `UTCOMMA gdesc[UR{0}].A_KEEP, gdesc[UR{1}], tmem[UR{2}], tmem[UR{3}], idesc[UR{4}], tmem[UR{5}], UP{0}` | 10 | 30 | `collector_spelling`=`"fill"`,`"fill_then_lastuse"`,`"fill_then_use"`；`kind`=`"mxf4"`,`"mxf4nvf4"`；`opcode_variant`=`"tcgen05.mma"`,`"tcgen05.mma.sp"`；`scale_vector_semantics`=`"block32"`,`"scale_vec::2X"`；`scale_vector_spelling`=`"block32"`,`"omitted"`,`"scale_vec::2X"`；`sparse`=`false`,`true` |
+| `UTCOMMA tmem[UR{0}].A_KEEP, gdesc[UR{1}], tmem[UR{2}], tmem[UR{3}], idesc[UR{4}], tmem[UR{5}], UP{0}` | 10 | 30 | `collector_spelling`=`"fill"`,`"fill_then_lastuse"`,`"fill_then_use"`；`kind`=`"mxf4"`,`"mxf4nvf4"`；`opcode_variant`=`"tcgen05.mma"`,`"tcgen05.mma.sp"`；`scale_vector_semantics`=`"block32"`,`"scale_vec::2X"`；`scale_vector_spelling`=`"block32"`,`"omitted"`,`"scale_vec::2X"`；`sparse`=`false`,`true` |
 
-该 signature 汇合 20 种 PTX 目标拼写、20 个 occurrence；歧义字段：`opcode_variant`="tcgen05.mma","tcgen05.mma.sp"；`sparse`=false,true；`kind`="mxf4","mxf4nvf4"；`scale_vector_semantics`="block32","scale_vec::2X"；`scale_vector_spelling`="block32","omitted","scale_vec::2X"；`collector_spelling`="explicit_discard","implicit_discard"。
-
-- `tcgen05.mma.cta_group::1.kind::mxf4.block_scale [%d_tmem], %desc_a, %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::1.kind::mxf4.block_scale.block32 [%d_tmem], %desc_a, %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::1.kind::mxf4.block_scale.block32.collector::a::discard [%d_tmem], %desc_a, %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::1.kind::mxf4.block_scale.collector::a::discard [%d_tmem], %desc_a, %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- 其余 16 种拼写省略；完整集合见[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)。
-
-### 2. `UTCOMMA tmem[UR{0}], gdesc[UR{1}], tmem[UR{2}], tmem[UR{3}], idesc[UR{4}], tmem[UR{5}], UP{0}`
-
-该 signature 汇合 20 种 PTX 目标拼写、20 个 occurrence；歧义字段：`opcode_variant`="tcgen05.mma","tcgen05.mma.sp"；`sparse`=false,true；`kind`="mxf4","mxf4nvf4"；`scale_vector_semantics`="block32","scale_vec::2X"；`scale_vector_spelling`="block32","omitted","scale_vec::2X"；`collector_spelling`="explicit_discard","implicit_discard"。
-
-- `tcgen05.mma.cta_group::1.kind::mxf4.block_scale [%d_tmem], [%a_tmem], %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::1.kind::mxf4.block_scale.block32 [%d_tmem], [%a_tmem], %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::1.kind::mxf4.block_scale.block32.collector::a::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::1.kind::mxf4.block_scale.collector::a::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- 其余 16 种拼写省略；完整集合见[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)。
-
-### 3. `UTCOMMA.2CTA gdesc[UR{0}], gdesc[UR{1}], tmem[UR{2}], tmem[UR{3}], idesc[UR{4}], tmem[UR{5}], UP{0}`
-
-该 signature 汇合 20 种 PTX 目标拼写、20 个 occurrence；歧义字段：`opcode_variant`="tcgen05.mma","tcgen05.mma.sp"；`sparse`=false,true；`kind`="mxf4","mxf4nvf4"；`scale_vector_semantics`="block32","scale_vec::2X"；`scale_vector_spelling`="block32","omitted","scale_vec::2X"；`collector_spelling`="explicit_discard","implicit_discard"。
-
-- `tcgen05.mma.cta_group::2.kind::mxf4.block_scale [%d_tmem], %desc_a, %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::2.kind::mxf4.block_scale.block32 [%d_tmem], %desc_a, %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::2.kind::mxf4.block_scale.block32.collector::a::discard [%d_tmem], %desc_a, %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::2.kind::mxf4.block_scale.collector::a::discard [%d_tmem], %desc_a, %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- 其余 16 种拼写省略；完整集合见[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)。
-
-### 4. `UTCOMMA.2CTA tmem[UR{0}], gdesc[UR{1}], tmem[UR{2}], tmem[UR{3}], idesc[UR{4}], tmem[UR{5}], UP{0}`
-
-该 signature 汇合 20 种 PTX 目标拼写、20 个 occurrence；歧义字段：`opcode_variant`="tcgen05.mma","tcgen05.mma.sp"；`sparse`=false,true；`kind`="mxf4","mxf4nvf4"；`scale_vector_semantics`="block32","scale_vec::2X"；`scale_vector_spelling`="block32","omitted","scale_vec::2X"；`collector_spelling`="explicit_discard","implicit_discard"。
-
-- `tcgen05.mma.cta_group::2.kind::mxf4.block_scale [%d_tmem], [%a_tmem], %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::2.kind::mxf4.block_scale.block32 [%d_tmem], [%a_tmem], %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::2.kind::mxf4.block_scale.block32.collector::a::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::2.kind::mxf4.block_scale.collector::a::discard [%d_tmem], [%a_tmem], %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- 其余 16 种拼写省略；完整集合见[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)。
-
-### 5. `UTCOMMA gdesc[UR{0}].A_KEEP, gdesc[UR{1}], tmem[UR{2}], tmem[UR{3}], idesc[UR{4}], tmem[UR{5}], UP{0}`
-
-该 signature 汇合 10 种 PTX 目标拼写、30 个 occurrence；歧义字段：`opcode_variant`="tcgen05.mma","tcgen05.mma.sp"；`sparse`=false,true；`kind`="mxf4","mxf4nvf4"；`scale_vector_semantics`="block32","scale_vec::2X"；`scale_vector_spelling`="block32","omitted","scale_vec::2X"；`collector_spelling`="fill","fill_then_lastuse","fill_then_use"。
-
-- `tcgen05.mma.cta_group::1.kind::mxf4.block_scale.block32.collector::a::fill [%d_tmem], %desc_a, %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::1.kind::mxf4.block_scale.collector::a::fill [%d_tmem], %desc_a, %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::1.kind::mxf4.block_scale.scale_vec::2X.collector::a::fill [%d_tmem], %desc_a, %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::1.kind::mxf4nvf4.block_scale.block32.collector::a::fill [%d_tmem], %desc_a, %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- 其余 6 种拼写省略；完整集合见[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)。
-
-### 6. `UTCOMMA tmem[UR{0}].A_KEEP, gdesc[UR{1}], tmem[UR{2}], tmem[UR{3}], idesc[UR{4}], tmem[UR{5}], UP{0}`
-
-该 signature 汇合 10 种 PTX 目标拼写、30 个 occurrence；歧义字段：`opcode_variant`="tcgen05.mma","tcgen05.mma.sp"；`sparse`=false,true；`kind`="mxf4","mxf4nvf4"；`scale_vector_semantics`="block32","scale_vec::2X"；`scale_vector_spelling`="block32","omitted","scale_vec::2X"；`collector_spelling`="fill","fill_then_lastuse","fill_then_use"。
-
-- `tcgen05.mma.cta_group::1.kind::mxf4.block_scale.block32.collector::a::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::1.kind::mxf4.block_scale.collector::a::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::1.kind::mxf4.block_scale.scale_vec::2X.collector::a::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- `tcgen05.mma.cta_group::1.kind::mxf4nvf4.block_scale.block32.collector::a::fill [%d_tmem], [%a_tmem], %desc_b, %idesc, [%scale_a_tmem], [%scale_b_tmem], %enable;`
-- 其余 6 种拼写省略；完整集合见[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)。
+表中只列出现次数最高的六组；全部 collision、每组候选 PTX 拼写与字段取值见[生成 JSON](../../results/rule-mining/mapping_rule_analysis.json)。
 
 ## 规则使用边界
 
@@ -262,11 +215,12 @@ enable 谓词使用独立字段：word 1 `[25:23]` 直接编码 `UP0..UP6`，值
 - 核心 SASS 的可恢复性不包含外围指令。某些 source/context 信息虽然不在核心中，仍可能从完整 kernel 恢复。
 - 逆向 signature 分析会规范化具体寄存器编号，因此不能用该小节预测物理寄存器分配；上一节的机器编码位结论使用的是未规范化且寄存器文本完全相同的严格 witness，不受此限制。
 - descriptor 的动态内容尚未枚举，因此 `idesc`、SMEM descriptor 的形状、类型、布局、stride 和 swizzle 位型仍属于未解决层。
+- v4 新增的 opcode composite、`A/B_REUSE`、完整 predicate selector、隐式 kind/scale 别名、寄存器槽位和扩展 issuer/producer 机制目前只在一组 Thor 工具链二进制上完成 O0–O3 验证；独立双二进制复现只覆盖 v3 范围，不能把 v3 的复现强度自动外推到 v4 新增结论。
 
 ## 证据入口
 
 - 规则挖掘器：[`../../analyze_mapping_rules.py`](../../analyze_mapping_rules.py)
 - 完整机器可读结果：[`../../results/rule-mining/mapping_rule_analysis.json`](../../results/rule-mining/mapping_rule_analysis.json)
 - 生成 manifest：[`../../results/expanded/sources/manifest.jsonl`](../../results/expanded/sources/manifest.jsonl)
-- 核心 SASS attribution：[`../../results/expanded/sass/sass_attribution.jsonl`](../../results/expanded/sass/sass_attribution.jsonl)
-- 上下文统计：[`../tcgen05_mma_上下文差分报告.md`](../tcgen05_mma_上下文差分报告.md)
+- 核心 SASS attribution 汇总：[`../../results/expanded/sass/sass_report.json`](../../results/expanded/sass/sass_report.json)；逐记录 `sass_attribution.jsonl` 不随 Git 发布，使用前须核对本页生成 JSON 中记录的输入 SHA-256
+- 上下文统计：[`../../Docs/tcgen05_mma_上下文差分报告.md`](../../Docs/tcgen05_mma_上下文差分报告.md)

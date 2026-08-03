@@ -4,25 +4,25 @@
 
 ## 已验证结果
 
-验证环境为 CUDA 13.0 `ptxas` V13.0.88，二进制 SHA-256 为 `daba837a68265cae38c832d13399b61dab811891de9b8914defddef143b849f2`。
+验证环境为 NVIDIA Thor（compute capability 11.0）、CUDA 13.0 `ptxas` V13.0.88 和 `nvdisasm` V13.0.85；二进制 SHA-256 分别为 `a1941a04ca4fd233b2fbe50c625b1e72b3d5f79ebe80209a272c85482dfbb487` 与 `bc40070d596fa49b81c0905ca1d05e457aaec071280f742997d4a0b511781b25`。
 
-下表是当前已发布 Thor 结果；v4 最终矩阵已完成本地 O3 全量预验证，等待一次 Thor O0/O1/O2/O3 重跑后替换本表。
+下表是 v4 最终矩阵在 Thor 上的 O0/O1/O2/O3 完整结果。
 
 | 集合 | 源码实现 | semantic form | logical design | occurrence | O0/O1/O2/O3 汇编 |
 |---|---|---|---|---|---|
 | `syntax` | 1,152 | 896 | 896 | 1,648 | 72/72 通过 |
-| `expanded` | 9,216 | 896 | 7,168 | 13,184 | 576/576 通过 |
+| `expanded` | 17,290 | 897 | 13,450 | 24,750 | 1,084/1,084 通过 |
 | `CTX.protocol` | 41 | — | 41 | — | 164/164 通过 |
 | `effect_slice` | 8 | — | 8 | — | 32/32 通过 |
-| 预期拒绝探针 | 11 | — | 11 | 11 | 11/11 通过 |
+| 预期拒绝探针 | 30 | — | 30 | 30 | 30/30 通过 |
 
 仓库保留默认生成结果。各层编译摘要和阴性探针诊断保存在 [`validation/`](validation/)。
 
-v4 最终矩阵生成 17,290 个 expanded 实现、897 个 semantic form、13,450 个 logical design、24,750 个 occurrence 和 271 个 shard；本地 O3 为 271/271 编译通过、24,750/24,750 occurrence 归属、16,137/16,137 上下文配对完成，30/30 个阴性探针得到预期拒绝。新增的 10 个定向实现只用于恢复 guard/enable `UP0..UP6` 和 idesc 相邻配对，不与全部 semantic form 做无意义的笛卡尔积；阴性矩阵同时覆盖 qualifier 合法性和缺失/多余操作数、mask 数量、metadata、scale-factor 契约。
+v4 最终矩阵生成 17,290 个 expanded 实现、897 个 semantic form、13,450 个 logical design、24,750 个 occurrence 和 271 个 shard；Thor 上 1,084/1,084 次四优化级编译通过，69,160/69,160 个 case attribution 和 99,000/99,000 个 occurrence attribution 完成，64,548/64,548 个上下文配对完成，30/30 个阴性探针得到预期拒绝。新增的 10 个定向实现只用于恢复 guard/enable `UP0..UP6` 和 idesc 相邻配对，不与全部 semantic form 做无意义的笛卡尔积；阴性矩阵同时覆盖 qualifier 合法性和缺失/多余操作数、mask 数量、metadata、scale-factor 契约。
 
 协议层 49 个 case 在四个优化级共 196/196 次汇编通过；检查器对全部 196 个产物保存原始 SASS 并执行有序操作检查。effect slice 还验证 `UTCHMMA`、`UTCBAR`、mbarrier phase wait、`LDTM`、TMEM dealloc、可选 `STTM`/`FENCE.VIEW.ASYNC.T`、proxy fence、CTA-pair topology 和 issuer-gating，避免只汇编成功但关键路径被优化删除或重排。
 
-这里的 1,152/9,216 是源码实现数，不是唯一 semantic-form 数。隐式 collector discard 与显式 discard，以及无需 `idesc.K` 就能证明等价的 block-scale 拼写，会保留为不同 `source_variant`，但共享同一 `semantic_form_id`。对于依赖 K 值才等价的 `.block16`/`.block32` 别名，生成器不会在 `idesc` 未冻结时强行合并。上下文身份不包含 profile 名称，只由完整规范化赋值计算。
+这里的 1,152/17,290 是源码实现数，不是唯一 semantic-form 数。隐式 collector discard 与显式 discard，以及无需 `idesc.K` 就能证明等价的 block-scale 拼写，会保留为不同 `source_variant`，但共享同一 `semantic_form_id`。对于依赖 K 值才等价的 `.block16`/`.block32` 别名，生成器不会在 `idesc` 未冻结时强行合并。上下文身份不包含 profile 名称，只由完整规范化赋值计算。
 
 ## 生成范围
 
@@ -54,7 +54,9 @@ PTX ISA 9.0 的通用 `tcgen05.mma` 文法还列出 `scale-input-d`，但 CUDA 1
 ./check_all.sh
 ```
 
-默认使用 4 个并行任务，完整运行结果写入本目录的 `results/`。其中包括 cubin、SASS、活跃寄存器反汇编、逐配对 JSONL 和完整日志。`results/.gitignore` 会阻止 `.cubin`、`.sass` 和体积较大的逐记录 `.jsonl` 文件进入 Git。
+默认使用 4 个并行任务，完整运行结果写入本目录的 `results/`。其中包括 cubin、SASS、活跃寄存器反汇编、逐配对 JSONL 和完整日志。`results/.gitignore` 会阻止 `.cubin` 和体积较大的逐记录 `.jsonl` 文件进入 Git；原始与活跃寄存器 SASS 当前作为可审计证据保留在仓库中。
+
+逐记录 `results/expanded/sass/sass_attribution.jsonl` 和 `results/context-comparison/context_differences.jsonl` 是运行时产物，不随 Git 发布，本地残留副本可能来自旧矩阵，不能仅凭文件存在就当作当前 v4 证据。v4 规则报告记录的预期 SHA-256 分别为 `31666e88af2367c40ed1099c4199f48cd6a958a52fefed7a0e26beafa1d0fa5b` 和 `a7e7fb3a8eead24e55987392ea9214b4cfb6d7515ef0146a417fec99de79224b`；使用逐记录数据前必须先与 [`results/rule-mining/mapping_rule_analysis.json`](results/rule-mining/mapping_rule_analysis.json) 的 `inputs` 核对。仓库内受版本控制的 v4 证据包括 manifest、PTX、raw/liveness SASS、compile/SASS/context 汇总、规则 JSON 和 canonical JSON。
 
 最终适合直接阅读的中文报告发布到 `Docs/tcgen05_mma_上下文差分报告.md`。按单个修饰符或语义维度查规则时，从 [`Docs/mapping_rules/README.md`](Docs/mapping_rules/README.md) 进入。需要跨维度解释和完整函数级 PTX/SASS 时，阅读 [`Docs/tcgen05_mma_PTX到SASS映射规则报告.md`](Docs/tcgen05_mma_PTX到SASS映射规则报告.md)。
 
@@ -131,11 +133,4 @@ python3 check_negative_probes.py
 
 成功 `ptxas -arch=sm_110a` 仅证明 CUDA 13 工具链接受该 PTX 语法并能为 Thor 生成 cubin。所有描述符、TMEM 地址和 mbarrier 地址仍是原始参数。没有冻结合法的描述符位型、分配 TMEM 或在 Thor 上执行。因此这些用例是 `STATIC_ASSEMBLY_ONLY`，不能据此升级为 `SEMANTIC_PASS`。
 
-效应切片保持 alloc/dealloc/relinquish 的 warp collective 源码形态，并只将 MMA、commit 和 mbarrier 管理限制为 issuer thread。但 `.cta_group::2` 仍需要 Thor 实机以 peer CTA/cluster launch 验证。静态汇编不能证明双 CTA 参与契约成立。
-
-后续实机阶段必须另外加入：
-
-- 按 kind/shape/type/major/swizzle 生成的合法 `idesc` 和 SMEM 描述符
-- Thor 实机有效的 descriptor/TMEM 分配与跨线程 canonical lifecycle
-- 数值 oracle、非法组合阴性对照和 Compute Sanitizer
-- Thor 上的 driver/runtime 身份及逐 workload 的实际路径证据
+效应切片保持 alloc/dealloc/relinquish 的 warp collective 源码形态，并只将 MMA、commit 和 mbarrier 管理限制为 issuer thread。当前研究范围到静态汇编、反汇编和可回放映射规则为止，不把合法描述符值、TMEM 实际分配、数值结果、双 CTA 运行时参与契约或 driver/runtime 路径纳入完成条件；文档中的 `PASS` 均不得解释成这些运行时性质已经验证。

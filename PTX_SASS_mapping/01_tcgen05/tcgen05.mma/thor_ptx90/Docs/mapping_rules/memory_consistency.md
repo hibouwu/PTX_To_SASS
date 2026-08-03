@@ -8,7 +8,7 @@
 
 ## 先说结论
 
-`tcgen05` 的内存一致性不能只看一条 fence，而要把四类机制分开：
+`tcgen05` 的内存一致性不能只看一条 fence，而要把五类机制分开：
 
 | 机制 | 回答的问题 | 主要 PTX 原语 | 当前 SASS 见证 |
 |---|---|---|---|
@@ -22,7 +22,7 @@
 
 - `tcgen05.mma`/`tcgen05.cp` 对 shared memory 的访问属于 async proxy；普通 shared-memory load/store 属于 generic proxy。跨 proxy 传递数据时需要 `fence.proxy.async`，普通 `membar`、mbarrier phase 完成或 `tcgen05.fence` 不能自动替代它。
 - `tcgen05.commit` 跟踪先前 `tcgen05.mma`/`cp`/`shift` 的完成，并在完成后触发 mbarrier arrive。它不是面向所有普通内存访问的通用 fence。
-- `mbarrier` 的"phase 已完成"和普通内存的 release/acquire 可见性是相关但不同的属性。`.relaxed` 只检查 phase，不提供普通内存排序与可见性保证。
+- `mbarrier` 的“phase 已完成”和普通内存的 release/acquire 可见性是相关但不同的属性。`.relaxed` 只检查 phase，不提供普通内存排序与可见性保证。
 - `tcgen05.wait::ld/st` 等待当前线程先前的 TMEM load/store 完成，并要求 warp 对齐执行。它不是 CTA/集群线程同步，也不能单独把数据发布给另一个线程。
 
 ## 一条完整 happens-before 链需要什么
@@ -92,7 +92,7 @@ bar.cta.sync 0;
 mbarrier.inval.shared::cta.b64 [mbar_obj];
 ```
 
-初始化、phase 检查和失效在四种 case 中都能看到同一骨架：
+初始化、phase 检查和失效在 8 种 case 中都能看到同一骨架：
 
 ```sass
 SYNCS.EXCH.64 URZ, [UR6], UR4;
@@ -120,7 +120,7 @@ CGAERRBAR;
 
 - `.cluster` 是内存同步范围（memory synchronization scope），决定哪些线程能直接观察同步效果。
 - `.shared::cta` 是 mbarrier 对象所在的地址空间。
-- 两者可以同时出现，不能把 `.shared::cta` 误读为"只能做 CTA scope 同步"。
+- 两者可以同时出现，不能把 `.shared::cta` 误读为“只能做 CTA scope 同步”。
 
 ## `tcgen05.fence`：跨线程 tcgen05 排序的代码移动边界
 
@@ -143,7 +143,7 @@ tcgen05.mma ...;
 
 独立 `ctx_fence_before` 和 `ctx_fence_after` 在 O0/O3 都只留下参数装载、`NOP` 与 `EXIT`，没有独立 fence SASS。空 kernel 中没有可供排序的前后操作，约束可以被消除。
 
-在 8 个完整生命周期 case 中，加入三个显式 fence 后，`UTCHMMA`/`UTCBAR`/`SYNCS`/`LDTM`/`STTM` 的核心选择不变，但 `BAR.SYNC.DEFER_BLOCKING` 的位置、寄存器分配和 `NOP` 调度发生变化。`tcgen05.fence` 是上下文相关的排序约束，不能建立"每条 PTX fence 必须对应一个同名 SASS 操作码"的规则。
+在 8 个完整生命周期 case 中，加入三个显式 fence 后，`UTCHMMA`/`UTCBAR`/`SYNCS`/`LDTM`/`STTM` 的核心选择不变，但 `BAR.SYNC.DEFER_BLOCKING` 的位置、寄存器分配和 `NOP` 调度发生变化。`tcgen05.fence` 是上下文相关的排序约束，不能建立“每条 PTX fence 必须对应一个同名 SASS 操作码”的规则。
 
 ## `tcgen05.wait::ld/st`：同线程异步 TMEM I/O 完成
 
@@ -162,7 +162,7 @@ LDTM.x2 R4, tmem[UR4];
 STG.E.64 desc[UR4][R2.64], R4;
 ```
 
-当前 O3 case 没有单独的 wait 助记符，完成约束被吸收到 `LDTM` 与后续使用的调度/依赖中。不能把这一观察推广为所有上下文中 `wait::ld` 都"无指令"。
+当前 O3 case 没有单独的 wait 助记符，完成约束被吸收到 `LDTM` 与后续使用的调度/依赖中。不能把这一观察推广为所有上下文中 `wait::ld` 都“无指令”。
 
 `wait::st` case：
 
@@ -201,7 +201,7 @@ UVIRTCOUNT.DEALLOC.SMPOOL ...;
 
 ## 资源生命周期为什么单独算一层
 
-`tcgen05.alloc`/`dealloc`/`relinquish_alloc_permit` 和 `mbarrier.init`/`inval` 规定资源何时建立、归还和可复用。它们防止"仍有异步使用时就回收 TMEM/mbarrier"这类生命周期错误，但不能替代完成等待和内存排序：
+`tcgen05.alloc`/`dealloc`/`relinquish_alloc_permit` 和 `mbarrier.init`/`inval` 规定资源何时建立、归还和可复用。它们防止“仍有异步使用时就回收 TMEM/mbarrier”这类生命周期错误，但不能替代完成等待和内存排序：
 
 ```text
 完成确认

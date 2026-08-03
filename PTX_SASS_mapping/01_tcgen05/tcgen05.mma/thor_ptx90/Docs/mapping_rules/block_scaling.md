@@ -12,7 +12,7 @@
 | `block16` 规范别名 | `UTCOMMA.4X` |
 | `block32` 规范别名 | `UTCOMMA`，无独立 `.BLOCK32` |
 
-看到"没有同名后缀"不能推断缩放信息被丢弃。信息可能由操作码家族、操作数、指令描述符（instruction descriptor，`idesc`）或机器编码共同表达。
+看到“没有同名后缀”不能推断缩放信息被丢弃。信息可能由操作码家族、操作数、指令描述符（instruction descriptor，`idesc`）或机器编码共同表达。
 
 ## 专有名词
 
@@ -57,7 +57,7 @@ scale vector 不是脱离 `kind` 独立选择操作码：
 - `mxf4` 和 `mxf4nvf4` 的已覆盖规范形态进入 `UTCOMMA`。
 - `.4X` 只在相应的 `UTCOMMA` 规范形态中可见。
 
-这里的规则应读作"在已覆盖合法 kind 和 scale-vector 组合中"，不能写成任意 `scale_vec::1X` 都无条件对应 `UTCQMMA`。
+这里的规则应读作“在已覆盖合法 kind 和 scale-vector 组合中”，不能写成任意 `scale_vec::1X` 都无条件对应 `UTCQMMA`。
 
 ## 与 `.ashift` 的边界
 
@@ -69,7 +69,7 @@ scale vector 不是脱离 `kind` 独立选择操作码：
 
 ## 分块缩放是否改变外围 SASS
 
-要把"启用分块缩放"和"已经启用后选择哪种 scale vector"分开回答。
+要把“启用分块缩放”和“已经启用后选择哪种 scale vector”分开回答。
 
 ### 启用分块缩放：会改变外围编译降级
 
