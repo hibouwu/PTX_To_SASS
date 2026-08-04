@@ -1,0 +1,35 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.visible .entry k(.param .u32 p_t,.param .u64 p_o)
+.reqntid 32
+{
+    .reg .b32 %r<6>,%t<6>,%taddr; .reg .b64 %o,%a<6>;
+    ld.param.b32 %taddr,[p_t]; ld.param.b64 %o,[p_o];
+    add.s32 %t0,%taddr,0;
+    add.s32 %t1,%taddr,64;
+    add.s32 %t2,%taddr,128;
+    add.s32 %t3,%taddr,192;
+    add.s32 %t4,%taddr,256;
+    add.s32 %t5,%taddr,320;
+    tcgen05.ld.sync.aligned.16x64b.x1.b32 {%r0},[%t0];
+    tcgen05.ld.sync.aligned.16x64b.x1.b32 {%r1},[%t1];
+    tcgen05.ld.sync.aligned.16x64b.x1.b32 {%r2},[%t2];
+    tcgen05.ld.sync.aligned.16x64b.x1.b32 {%r3},[%t3];
+    tcgen05.ld.sync.aligned.16x64b.x1.b32 {%r4},[%t4];
+    tcgen05.ld.sync.aligned.16x64b.x1.b32 {%r5},[%t5];
+    tcgen05.wait::ld.sync.aligned;
+    add.s64 %a0,%o,0;
+    st.volatile.global.b32 [%a0],%r5;
+    add.s64 %a1,%o,4;
+    st.volatile.global.b32 [%a1],%r4;
+    add.s64 %a2,%o,8;
+    st.volatile.global.b32 [%a2],%r3;
+    add.s64 %a3,%o,12;
+    st.volatile.global.b32 [%a3],%r2;
+    add.s64 %a4,%o,16;
+    st.volatile.global.b32 [%a4],%r1;
+    add.s64 %a5,%o,20;
+    st.volatile.global.b32 [%a5],%r0;
+    ret;
+}

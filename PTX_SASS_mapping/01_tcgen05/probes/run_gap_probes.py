@@ -236,6 +236,107 @@ def probe_gpr_pressure(outdir: Path) -> dict:
     return {"probe": "gpr_pressure", "claim_ref": "P1-3", "cases": {"live200": report}}
 
 
+def probe_consume_order(outdir: Path) -> dict:
+    """机制区分：6 条 LDTM 在不同消费顺序下的屏障放置。
+
+    假设 A（队列内按序完成）预测：等待所需下标最大的生产者即隐含其余，
+    逆序消费时只需一个屏障、后续消费者零等待。
+    假设 B（每个消费边界独立设屏障）预测：逆序时每个消费者各等各的。
+    partial 变体同时暴露无消费者的 tcgen05.ld 是否被死代码消除。
+    """
+    n = 6
+    orders = {
+        "inorder": [0, 1, 2, 3, 4, 5],
+        "reverse": [5, 4, 3, 2, 1, 0],
+        "interleave": [1, 4, 0, 5, 2, 3],
+        "partial": [2],
+    }
+    cases = {}
+    for name, order in orders.items():
+        addr = "\n".join(f"    add.s32 %t{i},%taddr,{i*64};" for i in range(n))
+        lds = "\n".join(
+            f"    tcgen05.ld.sync.aligned.16x64b.x1.b32 {{%r{i}}},[%t{i}];"
+            for i in range(n))
+        acc_lines = [f"    mov.b32 %s,%r{order[0]};"]
+        acc_lines += [f"    xor.b32 %s,%s,%r{i};" for i in order[1:]]
+        acc = "\n".join(acc_lines)
+        body = f""".visible .entry k(.param .u32 p_t,.param .u64 p_o)
+.reqntid 32
+{{
+    .reg .b32 %r<{n}>,%t<{n}>,%taddr,%s; .reg .b64 %o;
+    ld.param.b32 %taddr,[p_t]; ld.param.b64 %o,[p_o];
+{addr}
+{lds}
+    tcgen05.wait::ld.sync.aligned;
+{acc}
+    st.global.b32 [%o],%s;
+    ret;
+}}
+"""
+        report = compile_and_disasm(f"consume_{name}", body, outdir)
+        insns = report.get("instructions", [])
+        report["observation"] = {
+            "ldtm": [{"text": i["text"], "word1": i["word1"]}
+                     for i in pick(insns, r"^LDTM")],
+            "consumers": [{"text": i["text"], "word1": i["word1"]}
+                          for i in pick(insns, r"^(LOP3|MOV|IMAD|STG)")],
+            "ldtm_count": len(pick(insns, r"^LDTM")),
+        }
+        cases[name] = report
+    return {"probe": "consume_order", "claim_ref": "机制假设A/B区分",
+            "cases": cases}
+
+
+def probe_consume_order_v2(outdir: Path) -> dict:
+    """机制区分修正版：以 volatile store 钉死消费顺序。
+
+    v1（probe_consume_order）的 xor 链被 ptxas 重结合为 LOP3 归约树，
+    PTX 层的消费顺序未存活到 SASS，处理变量失真（评审指出）。本版每个
+    LDTM 结果由一条 st.volatile.global 独立消费，volatile 禁止合并与重排，
+    消费顺序在 SASS 层可逐条核验后再解释屏障放置。
+    """
+    n = 6
+    orders = {
+        "inorder": [0, 1, 2, 3, 4, 5],
+        "reverse": [5, 4, 3, 2, 1, 0],
+        "interleave": [1, 4, 0, 5, 2, 3],
+    }
+    cases = {}
+    for name, order in orders.items():
+        addr = "\n".join(f"    add.s32 %t{i},%taddr,{i*64};" for i in range(n))
+        lds = "\n".join(
+            f"    tcgen05.ld.sync.aligned.16x64b.x1.b32 {{%r{i}}},[%t{i}];"
+            for i in range(n))
+        st = "\n".join(
+            f"    add.s64 %a{k},%o,{k*4};\n"
+            f"    st.volatile.global.b32 [%a{k}],%r{i};"
+            for k, i in enumerate(order))
+        body = f""".visible .entry k(.param .u32 p_t,.param .u64 p_o)
+.reqntid 32
+{{
+    .reg .b32 %r<{n}>,%t<{n}>,%taddr; .reg .b64 %o,%a<{n}>;
+    ld.param.b32 %taddr,[p_t]; ld.param.b64 %o,[p_o];
+{addr}
+{lds}
+    tcgen05.wait::ld.sync.aligned;
+{st}
+    ret;
+}}
+"""
+        report = compile_and_disasm(f"consume_v2_{name}", body, outdir)
+        insns = report.get("instructions", [])
+        report["observation"] = {
+            "intended_order": order,
+            "ldtm": [{"text": i["text"], "word1": i["word1"]}
+                     for i in pick(insns, r"^LDTM")],
+            "stg": [{"text": i["text"], "word1": i["word1"]}
+                    for i in pick(insns, r"^STG")],
+        }
+        cases[name] = report
+    return {"probe": "consume_order_v2", "claim_ref": "机制假设A/B区分(处理变量已核验)",
+            "cases": cases}
+
+
 def probe_splice(outdir: Path) -> dict:
     """P0-3：同一段代码单独编译与拼接编译时目标指令 word 1 的差异。"""
     def seg(i: int) -> str:
@@ -286,6 +387,8 @@ def main() -> int:
         probe_reqntid(args.outdir),
         probe_ur_reuse(args.outdir),
         probe_gpr_pressure(args.outdir),
+        probe_consume_order(args.outdir),
+        probe_consume_order_v2(args.outdir),
         probe_splice(args.outdir),
     ]
     summary = {"schema_version": "tcgen05_gap_probes_v1",

@@ -16,6 +16,12 @@
    `st` 的消费者是覆盖源寄存器的后续指令，因为 `wait::st` 保护的正是源寄存器
    在被异步读走之前不被改写。没有消费者，等待没有任何可观测效应。
 2. 一个不含 wait 的同构对照 case，用于单因素差分。
+
+已证实的坐标失真（probes/results/consume_partial 及本套件复核）：无消费者的
+`tcgen05.ld` 会被 ptxas 整条死代码消除，`consumer=False` 的 ld case 中
+`prior_queue=single/double/quad` 实际上是空队列；`st` 因存储副作用不受影响。
+因此 ld 侧 `consumer=False` 各 case 的真实观测是"队列被消除"这一负面证据本身，
+其 `prior_queue` 坐标不代表在飞深度。解释相关数据时必须按此口径。
 """
 
 from suite_runtime import Case, Spec

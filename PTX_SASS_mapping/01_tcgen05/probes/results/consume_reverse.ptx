@@ -1,0 +1,30 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.visible .entry k(.param .u32 p_t,.param .u64 p_o)
+.reqntid 32
+{
+    .reg .b32 %r<6>,%t<6>,%taddr,%s; .reg .b64 %o;
+    ld.param.b32 %taddr,[p_t]; ld.param.b64 %o,[p_o];
+    add.s32 %t0,%taddr,0;
+    add.s32 %t1,%taddr,64;
+    add.s32 %t2,%taddr,128;
+    add.s32 %t3,%taddr,192;
+    add.s32 %t4,%taddr,256;
+    add.s32 %t5,%taddr,320;
+    tcgen05.ld.sync.aligned.16x64b.x1.b32 {%r0},[%t0];
+    tcgen05.ld.sync.aligned.16x64b.x1.b32 {%r1},[%t1];
+    tcgen05.ld.sync.aligned.16x64b.x1.b32 {%r2},[%t2];
+    tcgen05.ld.sync.aligned.16x64b.x1.b32 {%r3},[%t3];
+    tcgen05.ld.sync.aligned.16x64b.x1.b32 {%r4},[%t4];
+    tcgen05.ld.sync.aligned.16x64b.x1.b32 {%r5},[%t5];
+    tcgen05.wait::ld.sync.aligned;
+    mov.b32 %s,%r5;
+    xor.b32 %s,%s,%r4;
+    xor.b32 %s,%s,%r3;
+    xor.b32 %s,%s,%r2;
+    xor.b32 %s,%s,%r1;
+    xor.b32 %s,%s,%r0;
+    st.global.b32 [%o],%s;
+    ret;
+}
