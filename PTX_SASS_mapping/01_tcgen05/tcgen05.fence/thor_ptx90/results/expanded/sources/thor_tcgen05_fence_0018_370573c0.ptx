@@ -1,0 +1,30 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_tcgen05_fence_0018_370573c0.ptx"
+
+
+// OPCODE tcgen05.fence
+// COORDINATES {"adjacent":"ld","direction":"after","fence_present":false,"sync":"none"}
+.visible .entry thor_tcgen05_fence_0018_370573c0(
+    .param .u32 p_taddr,
+    .param .u64 p_out
+)
+    .reqntid 128
+{
+    .reg .b32 %taddr, %r0, %r1, %s;
+    .reg .b64 %out;
+    // PREPARATION_BEGIN
+    ld.param.b32 %taddr, [p_taddr];
+    ld.param.b64 %out, [p_out];
+    tcgen05.ld.sync.aligned.32x32b.x2.b32 {%r0, %r1}, [%taddr];
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    tcgen05.wait::ld.sync.aligned;
+    xor.b32 %s, %r0, %r1;
+    st.global.b32 [%out], %s;
+    // OBSERVATION_END
+    ret;
+}

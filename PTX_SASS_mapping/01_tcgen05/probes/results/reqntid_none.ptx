@@ -1,0 +1,14 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.visible .entry k(.param .u32 p_d, .param .u64 p_da, .param .u64 p_db, .param .u32 p_idesc, .param .u32 p_en)
+{
+    .reg .b32 %d,%idesc,%enu; .reg .b64 %da,%db; .reg .pred %en; .reg .b32 %m<4>;
+    ld.param.b32 %d,[p_d]; ld.param.b64 %da,[p_da]; ld.param.b64 %db,[p_db];
+    ld.param.b32 %idesc,[p_idesc];
+    ld.param.b32 %enu,[p_en];
+    setp.ne.u32 %en,%enu,0;
+    mov.b32 %m0,0; mov.b32 %m1,0; mov.b32 %m2,0; mov.b32 %m3,0;
+    tcgen05.mma.cta_group::1.kind::f16 [%d], %da, %db, %idesc, {%m0,%m1,%m2,%m3}, %en;
+    ret;
+}

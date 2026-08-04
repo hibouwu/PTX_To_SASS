@@ -1,0 +1,45 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_tma_bulktensor_0010_a9124728.ptx"
+
+
+// OPCODE cp.async.bulk.tensor
+// COORDINATES {"cache_hint":false,"context":"baseline","cta_group":"none","direction":"load","dst_space":"cluster","mode":"tile","multicast":false,"rank":5}
+.visible .entry thor_tma_bulktensor_0010_a9124728(
+    .param .u64 p_tmap,
+    .param .u64 p_out
+)
+    .reqntid 128
+{
+    .shared .align 128 .b8 smem[1024];
+    .shared .align 8 .b64 mbar;
+    .reg .b32 %saddr, %maddr, %c0, %c1, %c2, %c3, %c4, %v;
+    .reg .b16 %h0, %h1, %h2, %hmask;
+    .reg .b64 %tmap, %out;
+    // PREPARATION_BEGIN
+    ld.param.b64 %tmap, [p_tmap];
+    ld.param.b64 %out, [p_out];
+    mov.u32 %saddr, smem;
+    mov.u32 %maddr, mbar;
+    mov.u32 %c0, 0;
+    mov.u32 %c1, 0;
+    mov.u32 %c2, 0;
+    mov.u32 %c3, 0;
+    mov.u32 %c4, 0;
+    mov.b16 %h0, 0;
+    mov.b16 %h1, 0;
+    mov.b16 %h2, 0;
+    mov.b16 %hmask, 3;
+    mbarrier.init.shared::cta.b64 [%maddr], 1;
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    cp.async.bulk.tensor.5d.shared::cluster.global.tile.mbarrier::complete_tx::bytes [%saddr], [%tmap, {%c0, %c1, %c2, %c3, %c4}], [%maddr];
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    bar.sync 0;
+    ld.shared.b32 %v, [%saddr];
+    st.global.b32 [%out], %v;
+    // OBSERVATION_END
+    ret;
+}

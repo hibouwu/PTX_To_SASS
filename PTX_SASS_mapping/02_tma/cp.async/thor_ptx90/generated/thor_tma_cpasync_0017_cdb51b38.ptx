@@ -1,0 +1,36 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_tma_cpasync_0017_cdb51b38.ptx"
+
+
+// OPCODE cp.async
+// COORDINATES {"cache_hint":true,"cache_op":"cg","context":"baseline","ignore_src":false,"impl":"canonical","prefetch":"none","size":16,"src_size":null}
+.visible .entry thor_tma_cpasync_0017_cdb51b38(
+    .param .u64 p_g,
+    .param .u64 p_out
+)
+    .reqntid 128
+{
+    .shared .align 16 .b8 smem[256];
+    .reg .b32 %saddr, %v;
+    .reg .b64 %g, %out;
+    .reg .b64 %pol;
+    // PREPARATION_BEGIN
+    ld.param.b64 %g, [p_g];
+    ld.param.b64 %out, [p_out];
+    mov.u32 %saddr, smem;
+    createpolicy.fractional.L2::evict_last.b64 %pol, 1.0;
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    cp.async.cg.shared.global.L2::cache_hint [%saddr], [%g], 16, %pol;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    cp.async.commit_group;
+    cp.async.wait_group 0;
+    bar.sync 0;
+    ld.shared.b32 %v, [%saddr];
+    st.global.b32 [%out], %v;
+    // OBSERVATION_END
+    ret;
+}

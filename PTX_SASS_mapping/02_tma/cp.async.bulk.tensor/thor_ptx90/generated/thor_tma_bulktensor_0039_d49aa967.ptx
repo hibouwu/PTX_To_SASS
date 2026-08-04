@@ -1,0 +1,40 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_tma_bulktensor_0039_d49aa967.ptx"
+
+
+// OPCODE cp.async.bulk.tensor
+// COORDINATES {"cache_hint":false,"context":"baseline","cta_group":"none","direction":"store","dst_space":"global","mode":"im2col_no_offs","multicast":false,"rank":3}
+.visible .entry thor_tma_bulktensor_0039_d49aa967(
+    .param .u64 p_tmap,
+    .param .u64 p_out
+)
+    .reqntid 128
+{
+    .shared .align 128 .b8 smem[1024];
+    .reg .b32 %saddr, %c0, %c1, %c2, %c3, %c4, %t0;
+    .reg .b64 %tmap, %out;
+    // PREPARATION_BEGIN
+    ld.param.b64 %tmap, [p_tmap];
+    ld.param.b64 %out, [p_out];
+    mov.u32 %saddr, smem;
+    mov.u32 %c0, 0;
+    mov.u32 %c1, 0;
+    mov.u32 %c2, 0;
+    mov.u32 %c3, 0;
+    mov.u32 %c4, 0;
+    mov.u32 %t0, %tid.x;
+    st.shared.b32 [%saddr], %t0;
+    bar.sync 0;
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    cp.async.bulk.tensor.3d.global.shared::cta.im2col_no_offs.bulk_group [%tmap, {%c0, %c1, %c2}], [%saddr];
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    cp.async.bulk.commit_group;
+    cp.async.bulk.wait_group 0;
+    st.global.b32 [%out], %t0;
+    // OBSERVATION_END
+    ret;
+}

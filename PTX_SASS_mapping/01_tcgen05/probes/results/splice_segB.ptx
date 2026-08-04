@@ -1,0 +1,16 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.visible .entry k(.param .u32 p_t, .param .u64 p_out)
+.reqntid 32
+{
+    .reg .b32 %r<8>,%t<8>,%s<8>,%taddr; .reg .b64 %out,%o<8>;
+    ld.param.b32 %taddr,[p_t]; ld.param.b64 %out,[p_out];
+    add.s32 %t1,%taddr,64;
+    tcgen05.ld.sync.aligned.16x64b.x1.b32 {%r1},[%t1];
+    tcgen05.wait::ld.sync.aligned;
+    xor.b32 %s1,%r1,2;
+    add.s64 %o1,%out,4;
+    st.global.b32 [%o1],%s1;
+    ret;
+}

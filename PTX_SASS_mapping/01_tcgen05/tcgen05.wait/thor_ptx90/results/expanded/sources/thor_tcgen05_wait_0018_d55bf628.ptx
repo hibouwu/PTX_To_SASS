@@ -1,0 +1,29 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_tcgen05_wait_0018_d55bf628.ptx"
+
+
+// OPCODE tcgen05.wait
+// COORDINATES {"consumer":false,"prior_queue":"single","wait":"st","wait_present":false}
+.visible .entry thor_tcgen05_wait_0018_d55bf628(
+    .param .u32 p_taddr,
+    .param .u64 p_out
+)
+    .reqntid 32
+{
+    .reg .b32 %taddr, %r0, %r1, %s;
+    .reg .b64 %out;
+    // PREPARATION_BEGIN
+    ld.param.b32 %taddr, [p_taddr];
+    ld.param.b64 %out, [p_out];
+    mov.b32 %r0, %tid.x;
+    mov.b32 %r1, %tid.x;
+    tcgen05.st.sync.aligned.32x32b.x2.b32 [%taddr], {%r0, %r1};
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    // OBSERVATION_END
+    ret;
+}
