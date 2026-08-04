@@ -1,0 +1,28 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_tcgen05_st_0028_ac8fe733.ptx"
+
+
+// OPCODE tcgen05.st
+// COORDINATES {"producer":"tid","repeat":2,"shape":"32x32b","taddr_source":"direct","unpack":true}
+.visible .entry thor_tcgen05_st_0028_ac8fe733(
+    .param .u32 p_taddr
+)
+    .reqntid 32
+{
+    .reg .b32 %r<2>;
+    .reg .b32 %taddr;
+    // PREPARATION_BEGIN
+    ld.param.b32 %taddr, [p_taddr];
+    mov.b32 %r0, %tid.x;
+    mov.b32 %r1, %tid.x;
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    tcgen05.st.sync.aligned.32x32b.x2.unpack::16b.b32 [%taddr], {%r0, %r1};
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    tcgen05.wait::st.sync.aligned;
+    // OBSERVATION_END
+    ret;
+}

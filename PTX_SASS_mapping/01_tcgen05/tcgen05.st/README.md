@@ -1,6 +1,8 @@
 # `tcgen05.st`
 
-状态：`NOT_STARTED`
+状态：`FRAMEWORK_VALIDATED`（静态实验框架已通过 CUDA 13.0 O0–O3 自检；规则文档待由结果继续归纳）
+
+实验入口：[`thor_ptx90/`](thor_ptx90/)
 
 ## 研究边界
 
@@ -18,4 +20,4 @@
 
 ## 完成门槛
 
-需要静态归属、源寄存器到 TMEM 布局、wait 交互、越界/未对齐阴性探针和读回校验；成功发射不等于 store 已完成。
+需要静态归属、源寄存器 tuple 槽位、wait 交互、地址/shape 阴性探针、O0–O3 lowering、机器编码和 producer 对照；成功发射不等于 store 已完成，运行时读回不属于完成条件。

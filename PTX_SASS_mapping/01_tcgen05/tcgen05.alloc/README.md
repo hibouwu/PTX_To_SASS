@@ -1,6 +1,8 @@
 # `tcgen05.alloc`
 
-状态：`NOT_STARTED`
+状态：`FRAMEWORK_VALIDATED`（静态实验框架已通过 CUDA 13.0 O0–O3 自检；规则文档待由结果继续归纳）
+
+实验入口：[`thor_ptx90/`](thor_ptx90/)
 
 ## 研究边界
 
@@ -17,4 +19,4 @@
 
 ## 完成门槛
 
-需要同时给出合法/非法文法、核心分配 SASS、地址准备、结果发布、CTA group 交互、机器编码和实机资源生命周期验证；仅在 MMA effect slice 中观察到分配序列不算本指令已完成。
+需要同时给出合法/非法文法、完整分配 lowering、地址准备、结果发布、CTA group 交互、机器编码及 O0–O3 稳定性；仅在 MMA effect slice 中观察到分配序列不算本指令已完成。实机资源生命周期不属于本静态映射课题的完成条件。

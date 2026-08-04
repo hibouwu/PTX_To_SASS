@@ -1,6 +1,8 @@
 # `tcgen05.fence`
 
-状态：`NOT_STARTED`
+状态：`FRAMEWORK_VALIDATED`（静态实验框架已通过 CUDA 13.0 O0–O3 自检；规则文档待由结果继续归纳）
+
+实验入口：[`thor_ptx90/`](thor_ptx90/)
 
 ## 研究边界
 
@@ -18,4 +20,4 @@
 
 ## 完成门槛
 
-必须同时提供静态 CFG/def-use 证据和实机 litmus test，明确哪些结论是代码生成观察、哪些是内存模型语义；NOP 或 barrier 位置变化不能直接升级为独立 fence opcode 规则。
+必须提供静态 CFG/def-use、O0–O3 代码移动对照、完整相邻 effect slice 和空 lowering 证据，明确区分代码生成观察与 PTX 规范语义；NOP 或 barrier 位置变化不能直接升级为独立 fence opcode 规则。实机 litmus 不属于完成条件。

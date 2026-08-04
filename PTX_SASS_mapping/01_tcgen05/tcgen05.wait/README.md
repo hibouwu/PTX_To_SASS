@@ -1,6 +1,8 @@
 # `tcgen05.wait`
 
-状态：`NOT_STARTED`
+状态：`FRAMEWORK_VALIDATED`（静态实验框架已通过 CUDA 13.0 O0–O3 自检；规则文档待由结果继续归纳）
+
+实验入口：[`thor_ptx90/`](thor_ptx90/)
 
 ## 研究边界
 
@@ -18,4 +20,4 @@
 
 ## 完成门槛
 
-需要把核心 wait/fence SASS 与调度 NOP 分开归属，并用有/无 wait 的实机对照验证完成语义；不能从反汇编中出现 `FENCE.VIEW.ASYNC.T` 单独推出跨线程可见性。
+需要把 wait/fence SASS、显式空 lowering 和调度 NOP 分开归属，并通过空队列、单操作、多操作及交错队列的静态对照归纳规则；不能从反汇编中出现 `FENCE.VIEW.ASYNC.T` 单独推出跨线程可见性，运行时完成语义不属于完成条件。

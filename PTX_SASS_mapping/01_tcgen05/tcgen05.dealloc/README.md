@@ -1,6 +1,8 @@
 # `tcgen05.dealloc`
 
-状态：`NOT_STARTED`
+状态：`FRAMEWORK_VALIDATED`（静态实验框架已通过 CUDA 13.0 O0–O3 自检；规则文档待由结果继续归纳）
+
+实验入口：[`thor_ptx90/`](thor_ptx90/)
 
 ## 研究边界
 
@@ -17,4 +19,4 @@
 
 ## 完成门槛
 
-静态映射之外必须以实机用例验证未完成操作前回收、正确等待后回收、CTA group 2 peer 生命周期和重复分配；不得把成功汇编解释成安全回收。
+需要覆盖 nCols、CTA group、地址 producer、guard、前序操作和 O0–O3 lowering，归纳完整回收序列及机器编码。成功汇编只表示静态接受，不能解释成安全回收；运行时资源安全不属于完成条件。

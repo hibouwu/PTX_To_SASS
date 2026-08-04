@@ -1,6 +1,8 @@
 # `tcgen05.commit`
 
-状态：`NOT_STARTED`
+状态：`FRAMEWORK_VALIDATED`（静态实验框架已通过 CUDA 13.0 O0–O3 自检；规则文档待由结果继续归纳）
+
+实验入口：[`thor_ptx90/`](thor_ptx90/)
 
 ## 研究边界
 
@@ -18,4 +20,4 @@
 
 ## 完成门槛
 
-需要独立冻结 commit 文法、核心 `UTCBAR*`、地址和 mask lowering、前序操作交互、机器编码与实机 mbarrier phase 行为。现有 [`tcgen05.mma` 内存一致性文档](../tcgen05.mma/thor_ptx90/Docs/mapping_rules/memory_consistency.md)只能作为已有见证入口。
+需要独立冻结 commit 文法、核心 `UTCBAR*`、地址和 mask lowering、前序操作交互、机器编码，以及 mbarrier phase 序列在静态 effect slice 中的保留方式。现有 [`tcgen05.mma` 内存一致性文档](../tcgen05.mma/thor_ptx90/Docs/mapping_rules/memory_consistency.md)只能作为已有见证入口；运行时 phase 行为不属于完成条件。

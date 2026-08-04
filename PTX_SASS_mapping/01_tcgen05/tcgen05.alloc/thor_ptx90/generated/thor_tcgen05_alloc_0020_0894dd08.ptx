@@ -1,0 +1,28 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_tcgen05_alloc_0020_0894dd08.ptx"
+
+.shared .align 4 .b32 alloc_slot;
+
+// OPCODE tcgen05.alloc
+// COORDINATES {"cta_group":2,"ncols":512,"state_space":"shared_cta"}
+.visible .entry thor_tcgen05_alloc_0020_0894dd08(
+)
+    .reqntid 32
+    .reqnctapercluster 2
+    .explicitcluster
+{
+    .reg .b32 %taddr;
+    // PREPARATION_BEGIN
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    tcgen05.alloc.cta_group::2.sync.aligned.shared::cta.b32 [alloc_slot], 512;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    ld.shared::cta.b32 %taddr, [alloc_slot];
+    tcgen05.dealloc.cta_group::2.sync.aligned.b32 %taddr, 512;
+    tcgen05.relinquish_alloc_permit.cta_group::2.sync.aligned;
+    // OBSERVATION_END
+    ret;
+}

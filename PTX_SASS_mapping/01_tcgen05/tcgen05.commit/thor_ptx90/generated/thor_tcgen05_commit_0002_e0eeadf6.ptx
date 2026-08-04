@@ -1,0 +1,27 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_tcgen05_commit_0002_e0eeadf6.ptx"
+
+
+// OPCODE tcgen05.commit
+// COORDINATES {"cta_group":1,"multicast":true,"prior_operation":"none","state_space":"generic"}
+.visible .entry thor_tcgen05_commit_0002_e0eeadf6(
+    .param .u64 p_mbar,
+    .param .u16 p_mask
+)
+    .reqntid 32
+{
+    .reg .b64 %mbar;
+    .reg .b16 %mask;
+    // PREPARATION_BEGIN
+    ld.param.b64 %mbar, [p_mbar];
+    ld.param.b16 %mask, [p_mask];
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    tcgen05.commit.cta_group::1.mbarrier::arrive::one.multicast::cluster.b64 [%mbar], %mask;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    // OBSERVATION_END
+    ret;
+}

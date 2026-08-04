@@ -1,0 +1,47 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_tcgen05_ld_0016_47ea8703.ptx"
+
+
+// OPCODE tcgen05.ld
+// COORDINATES {"consumer":"xor_sink","pack":true,"repeat":8,"shape":"16x128b","taddr_source":"direct"}
+.visible .entry thor_tcgen05_ld_0016_47ea8703(
+    .param .u32 p_taddr,
+    .param .u64 p_out
+)
+    .reqntid 32
+{
+    .reg .b32 %r<16>;
+    .reg .b32 %taddr, %sink;
+    .reg .b64 %out;
+    // PREPARATION_BEGIN
+    ld.param.b32 %taddr, [p_taddr];
+    ld.param.b64 %out, [p_out];
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    tcgen05.ld.sync.aligned.16x128b.x8.pack::16b.b32 {%r0, %r1, %r2, %r3, %r4, %r5, %r6, %r7, %r8, %r9, %r10, %r11, %r12, %r13, %r14, %r15}, [%taddr];
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    tcgen05.wait::ld.sync.aligned;
+    mov.b32 %sink, 0;
+    xor.b32 %sink, %sink, %r0;
+    xor.b32 %sink, %sink, %r1;
+    xor.b32 %sink, %sink, %r2;
+    xor.b32 %sink, %sink, %r3;
+    xor.b32 %sink, %sink, %r4;
+    xor.b32 %sink, %sink, %r5;
+    xor.b32 %sink, %sink, %r6;
+    xor.b32 %sink, %sink, %r7;
+    xor.b32 %sink, %sink, %r8;
+    xor.b32 %sink, %sink, %r9;
+    xor.b32 %sink, %sink, %r10;
+    xor.b32 %sink, %sink, %r11;
+    xor.b32 %sink, %sink, %r12;
+    xor.b32 %sink, %sink, %r13;
+    xor.b32 %sink, %sink, %r14;
+    xor.b32 %sink, %sink, %r15;
+    st.global.b32 [%out], %sink;
+    // OBSERVATION_END
+    ret;
+}

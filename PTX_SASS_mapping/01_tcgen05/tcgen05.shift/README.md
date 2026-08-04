@@ -1,6 +1,8 @@
 # `tcgen05.shift`
 
-状态：`NOT_STARTED`
+状态：`FRAMEWORK_VALIDATED`（静态实验框架已通过 CUDA 13.0 O0–O3 自检；规则文档待由结果继续归纳）
+
+实验入口：[`thor_ptx90/`](thor_ptx90/)
 
 ## 研究边界
 
@@ -18,4 +20,4 @@
 
 ## 完成门槛
 
-需要先确认目标工具链 capability，再进行合法文法、核心归属、机器编码、完成协议和实机 TMEM 内容验证。若 `sm_110a` 拒绝规范形态，应记录为 `TARGET_UNSUPPORTED`，不能记成规范非法。
+需要先确认目标工具链 capability，再完成合法文法、`UTCSHIFT` 归属、机器编码、producer/guard lowering 和完成协议 effect slice。若 `sm_110a` 拒绝规范形态，应记录为 `TARGET_UNSUPPORTED`，不能记成规范非法；实机 TMEM 内容不属于完成条件。

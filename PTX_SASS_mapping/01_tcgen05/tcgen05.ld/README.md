@@ -1,6 +1,8 @@
 # `tcgen05.ld`
 
-状态：`NOT_STARTED`
+状态：`FRAMEWORK_VALIDATED`（静态实验框架已通过 CUDA 13.0 O0–O3 自检；规则文档待由结果继续归纳）
+
+实验入口：[`thor_ptx90/`](thor_ptx90/)
 
 ## 研究边界
 
@@ -18,4 +20,4 @@
 
 ## 完成门槛
 
-需要核心 `LDTM` 归属、每个 PTX 结果与 SASS register tuple 的槽位映射、wait 交互、O0–O3 lowering 和实机数值 oracle；只验证编译成功不足以说明 TMEM 布局。
+需要核心 `LDTM` 归属、每个 PTX 结果与 SASS register tuple 的槽位映射、wait 交互、O0–O3 lowering、机器编码和可观察 sink；只验证编译成功不足以说明寄存器槽位映射，实机数值 oracle 不属于完成条件。

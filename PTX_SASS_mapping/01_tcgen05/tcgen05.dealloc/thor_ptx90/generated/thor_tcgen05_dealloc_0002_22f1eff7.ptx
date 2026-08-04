@@ -1,0 +1,26 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_tcgen05_dealloc_0002_22f1eff7.ptx"
+
+.shared .align 4 .b32 alloc_slot;
+
+// OPCODE tcgen05.dealloc
+// COORDINATES {"address_source":"alloc_result","cta_group":1,"ncols":64}
+.visible .entry thor_tcgen05_dealloc_0002_22f1eff7(
+)
+    .reqntid 32
+{
+    .reg .b32 %taddr;
+    // PREPARATION_BEGIN
+    tcgen05.alloc.cta_group::1.sync.aligned.shared::cta.b32 [alloc_slot], 64;
+    ld.shared::cta.b32 %taddr, [alloc_slot];
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    tcgen05.dealloc.cta_group::1.sync.aligned.b32 %taddr, 64;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    tcgen05.relinquish_alloc_permit.cta_group::1.sync.aligned;
+    // OBSERVATION_END
+    ret;
+}
