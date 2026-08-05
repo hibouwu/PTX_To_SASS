@@ -1,0 +1,14 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.visible .entry k()
+.reqntid 32
+{
+    .shared .align 4 .b32 slot;
+    .reg .b32 %taddr;
+    tcgen05.alloc.cta_group::1.sync.aligned.shared::cta.b32 [slot], 32;
+    ld.shared::cta.b32 %taddr, [slot];
+    tcgen05.dealloc.cta_group::1.sync.aligned.b32 %taddr, 32;
+    tcgen05.relinquish_alloc_permit.cta_group::1.sync.aligned;
+    ret;
+}

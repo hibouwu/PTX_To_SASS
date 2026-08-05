@@ -337,6 +337,74 @@ def probe_consume_order_v2(outdir: Path) -> dict:
             "cases": cases}
 
 
+def probe_wait_diff(outdir: Path) -> dict:
+    """wait::ld 零指令主张的单因素对照。
+
+    两个 kernel 仅差一行 `tcgen05.wait::ld.sync.aligned;`。预期：指令序列
+    相同（至多差 NOP 定界），差异只落在相邻指令的 word 1。此前该主张误锚
+    在单臂的 async_depth_1 上，本探针补齐差分证据。
+    """
+    def body(with_wait: bool) -> str:
+        wait_line = "    tcgen05.wait::ld.sync.aligned;\n" if with_wait else ""
+        return f""".visible .entry k(.param .u32 p_t,.param .u64 p_o)
+.reqntid 32
+{{
+    .reg .b32 %r0,%taddr,%s; .reg .b64 %o;
+    ld.param.b32 %taddr,[p_t]; ld.param.b64 %o,[p_o];
+    tcgen05.ld.sync.aligned.16x64b.x1.b32 {{%r0}},[%taddr];
+{wait_line}    mov.b32 %s,0;
+    xor.b32 %s,%s,%r0;
+    st.global.b32 [%o],%s;
+    ret;
+}}
+"""
+    cases = {}
+    for name, flag in (("with_wait", True), ("without_wait", False)):
+        report = compile_and_disasm(f"wait_diff_{name}", body(flag), outdir)
+        insns = report.get("instructions", [])
+        report["observation"] = {
+            "mnemonics": [i["text"].split()[0] for i in insns],
+            "word1_by_insn": [{"text": i["text"][:40], "word1": i["word1"]}
+                              for i in insns],
+        }
+        cases[name] = report
+    return {"probe": "wait_diff", "claim_ref": "wait::ld 零指令(单因素对照)",
+            "cases": cases}
+
+
+def probe_alloc_lifecycle(outdir: Path) -> dict:
+    """屏障语义佐证：alloc 生命周期 lowering 中的 DEPBAR.LE 阈值等待。
+
+    `DEPBAR.LE SBn, imm` 等待记分牌值不大于阈值，该语义只对计数器成立，
+    是"屏障是计数器"假设的独立静态证据（与 consume_order_v2 的
+    SB1 多生产者共享互相印证）。本探针把该证据固化在 probes/results，
+    避免引用会话临时产物或各套件被 gitignore 的 results 目录。
+    """
+    body = """.visible .entry k()
+.reqntid 32
+{
+    .shared .align 4 .b32 slot;
+    .reg .b32 %taddr;
+    tcgen05.alloc.cta_group::1.sync.aligned.shared::cta.b32 [slot], 32;
+    ld.shared::cta.b32 %taddr, [slot];
+    tcgen05.dealloc.cta_group::1.sync.aligned.b32 %taddr, 32;
+    tcgen05.relinquish_alloc_permit.cta_group::1.sync.aligned;
+    ret;
+}
+"""
+    report = compile_and_disasm("alloc_lifecycle", body, outdir)
+    insns = report.get("instructions", [])
+    report["observation"] = {
+        "depbar": [{"text": i["text"], "word1": i["word1"]}
+                   for i in pick(insns, r"^DEPBAR")],
+        "utcatomsws": [i["text"] for i in pick(insns, r"^UTCATOMSWS")],
+        "uvirtcount": [i["text"] for i in pick(insns, r"^UVIRTCOUNT")],
+        "nanosleep": len(pick(insns, r"^NANOSLEEP")),
+    }
+    return {"probe": "alloc_lifecycle", "claim_ref": "屏障计数器语义佐证",
+            "cases": {"cg1_ncols32": report}}
+
+
 def probe_splice(outdir: Path) -> dict:
     """P0-3：同一段代码单独编译与拼接编译时目标指令 word 1 的差异。"""
     def seg(i: int) -> str:
@@ -389,6 +457,8 @@ def main() -> int:
         probe_gpr_pressure(args.outdir),
         probe_consume_order(args.outdir),
         probe_consume_order_v2(args.outdir),
+        probe_alloc_lifecycle(args.outdir),
+        probe_wait_diff(args.outdir),
         probe_splice(args.outdir),
     ]
     summary = {"schema_version": "tcgen05_gap_probes_v1",

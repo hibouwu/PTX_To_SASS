@@ -1,0 +1,45 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_cf_brxidx_0018_211b6cc6.ptx"
+
+
+// OPCODE brx.idx
+// COORDINATES {"context":"baseline","guard":"none","index_source":"laneid","merge":"separate","target_count":4}
+.visible .entry thor_cf_brxidx_0018_211b6cc6(
+    .param .u64 p_out
+)
+    .reqntid 128
+{
+    .reg .b32 %r0, %idx;
+    .reg .b32 %raw;
+    .reg .b64 %out;
+    // PREPARATION_BEGIN
+    ld.param.b64 %out, [p_out];
+    mov.u32 %raw, %laneid;
+    and.b32 %idx, %raw, 3;
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    ts: .branchtargets L0, L1, L2, L3;
+    brx.idx %idx, ts;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    L0:
+        mov.u32 %r0, 111;
+        st.global.b32 [%out+0], %r0;
+        ret;
+    L1:
+        mov.u32 %r0, 222;
+        st.global.b32 [%out+4], %r0;
+        ret;
+    L2:
+        mov.u32 %r0, 333;
+        st.global.b32 [%out+8], %r0;
+        ret;
+    L3:
+        mov.u32 %r0, 444;
+        st.global.b32 [%out+12], %r0;
+        ret;
+    // OBSERVATION_END
+    ret;
+}

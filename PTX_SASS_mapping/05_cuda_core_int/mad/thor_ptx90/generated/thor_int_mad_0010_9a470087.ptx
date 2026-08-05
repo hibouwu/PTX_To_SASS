@@ -1,0 +1,35 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_int_mad_0010_9a470087.ptx"
+
+
+// OPCODE mad
+// COORDINATES {"context":"baseline","mode":"hi","operand_kind":"reg_reg_reg","sat":false,"type":"u32"}
+.visible .entry thor_int_mad_0010_9a470087(
+    .param .u64 p_a,
+    .param .u64 p_b,
+    .param .u64 p_c,
+    .param .u64 p_out
+)
+{
+    .reg .b64 %pa,%pb,%pc,%pout;
+    .reg .u32 %a,%b;
+    .reg .u32 %c,%d;
+    // PREPARATION_BEGIN
+    ld.param.u64 %pa,[p_a];
+    ld.param.u64 %pb,[p_b];
+    ld.param.u64 %pc,[p_c];
+    ld.param.u64 %pout,[p_out];
+    ld.global.u32 %a,[%pa];
+    ld.global.u32 %b,[%pb];
+    ld.global.u32 %c,[%pc];
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    mad.hi.u32 %d, %a, %b, %c;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    st.global.u32 [%pout], %d;
+    // OBSERVATION_END
+    ret;
+}

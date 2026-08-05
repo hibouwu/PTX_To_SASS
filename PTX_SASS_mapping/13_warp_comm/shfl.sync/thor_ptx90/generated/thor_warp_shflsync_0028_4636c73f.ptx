@@ -1,0 +1,28 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_warp_shflsync_0028_4636c73f.ptx"
+
+
+// OPCODE shfl.sync
+// COORDINATES {"b_form":"imm","c_form":"imm","context":"baseline","mask_form":"reg_nonuniform","mode":"down","pred":false}
+.visible .entry thor_warp_shflsync_0028_4636c73f(
+    .param .u64 p_out
+)
+{
+    .reg .b32 %t0, %rb, %rc, %m, %r3, %r4;
+    .reg .pred %p0;
+    .reg .b64 %out;
+    // PREPARATION_BEGIN
+    ld.param.b64 %out, [p_out];
+    mov.u32 %t0, %tid.x;
+    mov.u32 %m, %tid.x;
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    shfl.sync.down.b32 %r3, %t0, 1, 0x1f, %m;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    st.global.b32 [%out], %r3;
+    // OBSERVATION_END
+    ret;
+}

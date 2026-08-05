@@ -1,0 +1,28 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_lsu_ldglobal_0068_24f53985.ptx"
+
+.global .align 4 .b32 lsu_probe_gsym[4] = {1, 2, 3, 4};
+
+// OPCODE ld.global
+// COORDINATES {"address_form":"named_symbol","context":"address_form","form":"weak_none","width":"b32"}
+.visible .entry thor_lsu_ldglobal_0068_24f53985(
+    .param .u64 p_in,
+    .param .u64 p_out
+)
+{
+    .reg .b64 %in, %out;
+    .reg .b32 %d0;
+    // PREPARATION_BEGIN
+    ld.param.b64 %in, [p_in];
+    ld.param.b64 %out, [p_out];
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    ld.global.b32 %d0, [lsu_probe_gsym];
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    st.global.b32 [%out], %d0;
+    // OBSERVATION_END
+    ret;
+}

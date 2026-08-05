@@ -1,0 +1,34 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_f16_fma_0006_3d4aec77.ptx"
+
+
+// OPCODE fma
+// COORDINATES {"context":"baseline","dtype":"f16x2","ftz":false,"operand_source":"reg","rnd":"rn","sat":true}
+.visible .entry thor_f16_fma_0006_3d4aec77(
+    .param .u64 p_a,
+    .param .u64 p_b,
+    .param .u64 p_c,
+    .param .u64 p_out
+)
+{
+    .reg .b64 %ra, %rb, %rc, %rout;
+    .reg .b32 %av, %bv, %cv, %dv;
+    // PREPARATION_BEGIN
+    ld.param.b64 %ra, [p_a];
+    ld.param.b64 %rb, [p_b];
+    ld.param.b64 %rc, [p_c];
+    ld.param.b64 %rout, [p_out];
+    ld.global.b32 %av, [%ra];
+    ld.global.b32 %bv, [%rb];
+    ld.global.b32 %cv, [%rc];
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    fma.rn.sat.f16x2 %dv, %av, %bv, %cv;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    st.global.b32 [%rout], %dv;
+    // OBSERVATION_END
+    ret;
+}

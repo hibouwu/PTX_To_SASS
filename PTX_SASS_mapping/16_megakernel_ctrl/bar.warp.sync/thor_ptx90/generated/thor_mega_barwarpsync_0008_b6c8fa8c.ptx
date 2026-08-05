@@ -1,0 +1,32 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_mega_barwarpsync_0008_b6c8fa8c.ptx"
+
+
+// OPCODE bar.warp.sync
+// COORDINATES {"guard":"predicated","mask_kind":"zero_imm","shared_context":"both","variant":"baseline"}
+.visible .entry thor_mega_barwarpsync_0008_b6c8fa8c(
+    .param .u64 p_out
+)
+{
+    .reg .b32 %t0, %v;
+    .reg .b64 %out;
+    .shared .align 4 .b32 smem_buf[32];
+    .reg .pred %p;
+    // PREPARATION_BEGIN
+    ld.param.b64 %out, [p_out];
+    mov.u32 %t0, %tid.x;
+    add.u32 %v, %t0, 1;
+    setp.lt.u32 %p, %t0, 16;
+    st.shared.b32 [smem_buf], %t0;
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    @%p bar.warp.sync 0x0;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    ld.shared.b32 %v, [smem_buf];
+    st.global.b32 [%out], %v;
+    // OBSERVATION_END
+    ret;
+}

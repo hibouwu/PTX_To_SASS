@@ -1,0 +1,33 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_mbarrier_arrive_0012_2f394858.ptx"
+
+
+// OPCODE mbarrier.arrive
+// COORDINATES {"context":"baseline","count_form":"register","no_complete":false,"scope":"cta","sem":"release","space":"shared_cta","token":"consumed"}
+.visible .entry thor_mbarrier_arrive_0012_2f394858(
+    .param .u64 p_out
+)
+    .reqntid 32
+{
+    .shared .align 8 .b64 mbar;
+    .reg .b64 %out, %tok;
+    .reg .b32 %addr, %cnt, %v;
+    .reg .b32 %n;
+    // PREPARATION_BEGIN
+    ld.param.b64 %out, [p_out];
+    mov.u32 %addr, mbar;
+    mov.u32 %cnt, 1;
+    mbarrier.init.shared::cta.b64 [%addr], %cnt;
+    bar.sync 0;
+    mov.u32 %n, 2;
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    mbarrier.arrive.release.cta.shared::cta.b64 %tok, [%addr], %n;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    st.global.u64 [%out], %tok;
+    // OBSERVATION_END
+    ret;
+}

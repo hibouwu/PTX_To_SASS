@@ -1,0 +1,35 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_quant_dp4a_0002_f5f83b99.ptx"
+
+
+// OPCODE dp4a
+// COORDINATES {"atype":"s32","b_class":"reg","btype":"s32","c_source":"reg","context":"baseline"}
+.visible .entry thor_quant_dp4a_0002_f5f83b99(
+    .param .u64 p_a,
+    .param .u64 p_b,
+    .param .u64 p_c,
+    .param .u64 p_out
+)
+    .reqntid 128
+{
+    .reg .u64 %rd_a, %rd_b, %rd_c, %rd_out;
+    .reg .s32 %a, %b, %c, %d;
+    // PREPARATION_BEGIN
+    ld.param.u64 %rd_a, [p_a];
+    ld.param.u64 %rd_b, [p_b];
+    ld.param.u64 %rd_c, [p_c];
+    ld.param.u64 %rd_out, [p_out];
+    ld.global.s32 %a, [%rd_a];
+    ld.global.s32 %b, [%rd_b];
+    ld.global.s32 %c, [%rd_c];
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    dp4a.s32.s32 %d, %a, %b, %c;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    st.global.s32 [%rd_out], %d;
+    // OBSERVATION_END
+    ret;
+}

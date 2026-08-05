@@ -1,0 +1,31 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_cluster_mapa_0005_cf7b3341.ptx"
+
+
+// OPCODE mapa
+// COORDINATES {"addr_source":"symbol_direct","context":"baseline","rank_source":"register","rank_value":null,"type":"u32"}
+.visible .entry thor_cluster_mapa_0005_cf7b3341(
+    .param .u64 p_out
+)
+    .reqnctapercluster 2
+{
+    .shared .align 8 .b8 smem[64];
+    .reg .b32 %addr, %dst;
+    .reg .b32 %rank, %t0;
+    .reg .b64 %out;
+    // PREPARATION_BEGIN
+    ld.param.b64 %out, [p_out];
+    mov.u32 %addr, smem;
+    mov.u32 %t0, %tid.x;
+    and.b32 %rank, %t0, 1;
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    mapa.shared::cluster.u32 %dst, %addr, %rank;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    st.global.u32 [%out], %dst;
+    // OBSERVATION_END
+    ret;
+}

@@ -1,6 +1,6 @@
 # 12 · BF16 与 BF16x2
 
-状态：`NOT_STARTED`
+状态：`IN_PROGRESS`（族级实验设计与 `sm_110a` 助记符/合法面校准完成，见 [实验设计.md](实验设计.md)；全部结论来自独立的 bf16 探针，未引用 `11_half_precision`。`fma` 已建成自包含静态套件并通过本机 CUDA 13.0 O0–O3 自检——8 syntax + 25 expanded case、11 负向探针全 PASS；其余 9 个 opcode 处于 `DESIGNED`）
 
 ## 范围
 
@@ -8,7 +8,7 @@
 
 ## 具体指令目录
 
-- [`add`](add/)、[`sub`](sub/)、[`mul`](mul/)、[`fma`](fma/)
+- [`add`](add/)、[`sub`](sub/)、[`mul`](mul/)、[`fma`](fma/)（`FRAMEWORK_VALIDATED`，[套件](fma/thor_ptx90/)）
 - [`min`](min/)、[`max`](max/)、[`abs`](abs/)、[`neg`](neg/)
 - [`set`](set/)、[`setp`](setp/)
 

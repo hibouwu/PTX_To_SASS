@@ -1,0 +1,27 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_lsu_ldglobal_0012_1669b15a.ptx"
+
+
+// OPCODE ld.global
+// COORDINATES {"address_form":"reg","context":"baseline","form":"weak_cv","width":"b16"}
+.visible .entry thor_lsu_ldglobal_0012_1669b15a(
+    .param .u64 p_in,
+    .param .u64 p_out
+)
+{
+    .reg .b64 %in, %out;
+    .reg .b16 %d0;
+    // PREPARATION_BEGIN
+    ld.param.b64 %in, [p_in];
+    ld.param.b64 %out, [p_out];
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    ld.global.cv.b16 %d0, [%in];
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    st.global.b16 [%out], %d0;
+    // OBSERVATION_END
+    ret;
+}

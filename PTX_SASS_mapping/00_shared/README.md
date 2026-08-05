@@ -80,9 +80,12 @@ SEMANTIC_FAIL
 | [`templates/family_README.md`](templates/family_README.md) | 新指令族索引模板 |
 | [`templates/opcode_README.md`](templates/opcode_README.md) | 新 opcode 研究目录模板 |
 | [`templates/factors.yaml`](templates/factors.yaml) | 因子模型模板 |
+| [`templates/suite_runtime.py`](templates/suite_runtime.py) | 自包含 opcode 套件 runtime 模板（按 `Spec.family` 参数化，复制后不改动） |
+| [`templates/建族套件指南.md`](templates/建族套件指南.md) | 族实验设计 + 套件建设流程与对抗式审查检查单 |
 | [`tools/validate_manifest.py`](tools/validate_manifest.py) | 使用 Python 标准库检查 JSONL、必需字段和 ID 唯一性 |
 | [`tools/normalize_sass.py`](tools/normalize_sass.py) | 生成保留寄存器类别和别名关系的 allocation 表示 |
 | [`tools/check_coverage.py`](tools/check_coverage.py) | 统计指定因子的一阶水平与二阶组合覆盖 |
+| [`tools/audit_families.py`](tools/audit_families.py) | 审计族目录交付物与对抗式审查检查单落实情况 |
 
 共同术语分别见 [`terminology/observation_levels.md`](terminology/observation_levels.md)、[`terminology/status_model.md`](terminology/status_model.md)和[`terminology/evidence_levels.md`](terminology/evidence_levels.md)。JSON Schema 用于稳定跨指令族的共同外壳，不限制各族在 `semantic_form`、`context`、`observation` 和 `evidence` 中增加指令专属字段。
 

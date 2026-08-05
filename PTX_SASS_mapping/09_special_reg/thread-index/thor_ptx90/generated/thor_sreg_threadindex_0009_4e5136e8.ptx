@@ -1,0 +1,28 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_sreg_threadindex_0009_4e5136e8.ptx"
+
+
+// OPCODE mov
+// COORDINATES {"consumer":"store","context":"baseline","dim":"z","kind":"tid"}
+.visible .entry thor_sreg_threadindex_0009_4e5136e8(
+    .param .u64 p_base,
+    .param .u64 p_out
+)
+{
+    .reg .b32 %r0, %r1, %r2;
+    .reg .b64 %basep, %outp, %rd0, %addr;
+    .reg .u32 %v;
+    .reg .pred %p;
+    // PREPARATION_BEGIN
+    ld.param.u64 %outp, [p_out];
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    mov.u32 %r0, %tid.z;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    st.global.u32 [%outp], %r0;
+    // OBSERVATION_END
+    ret;
+}

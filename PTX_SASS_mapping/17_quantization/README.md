@@ -1,6 +1,8 @@
 # 17 · Quantization
 
-状态：`NOT_STARTED`
+状态：`FRAMEWORK_VALIDATED`（首轮：`dp4a` 旗舰套件 14 syntax + 26 expanded case，O0–O3 共 160 次编译/归属 PASS，10 负向探针全绿；其余 4 个 opcode 完成校准，`DESIGNED`）
+
+详见 [`实验设计.md`](实验设计.md)：5 个 opcode 的实测助记符表、satfinite/rounding 合法面、对抗式审查缺口落实、STATIC_ONLY 边界（逐 lane oracle 归运行时）。
 
 ## 范围
 
@@ -8,11 +10,11 @@
 
 ## 具体指令目录
 
-- [`dp4a`](dp4a/)
-- [`dp2a`](dp2a/)
-- [`cvt.pack`](cvt.pack/)
-- [`cvt.e4m3x2`](cvt.e4m3x2/)
-- [`cvt.e5m2x2`](cvt.e5m2x2/)
+- [`dp4a`](dp4a/) — `FRAMEWORK_VALIDATED`，套件见 [`dp4a/thor_ptx90/`](dp4a/thor_ptx90/)
+- [`dp2a`](dp2a/) — `DESIGNED`
+- [`cvt.pack`](cvt.pack/) — `DESIGNED`
+- [`cvt.e4m3x2`](cvt.e4m3x2/) — `DESIGNED`
+- [`cvt.e5m2x2`](cvt.e5m2x2/) — `DESIGNED`
 
 ## 优先上下文
 

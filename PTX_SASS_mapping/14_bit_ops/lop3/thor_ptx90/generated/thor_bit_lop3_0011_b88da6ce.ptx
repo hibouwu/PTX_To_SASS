@@ -1,0 +1,29 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_bit_lop3_0011_b88da6ce.ptx"
+
+
+// OPCODE lop3
+// COORDINATES {"a_class":"reg","axis":"slot_class","b_class":"imm","boolop":"none","c_class":"imm","context":"baseline","immlut":"0xaa"}
+.visible .entry thor_bit_lop3_0011_b88da6ce(
+    .param .u64 p_out
+)
+    .reqntid 128
+{
+    .reg .b32 %t0, %t1, %t2, %r0;
+    .reg .b64 %out;
+    // PREPARATION_BEGIN
+    ld.param.b64 %out, [p_out];
+    mov.u32 %t0, %tid.x;
+    mov.u32 %t1, %ctaid.x;
+    mov.u32 %t2, %ntid.x;
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    lop3.b32 %r0, %t0, 0x33333333, 0x55555555, 0xaa;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    st.global.b32 [%out], %r0;
+    // OBSERVATION_END
+    ret;
+}

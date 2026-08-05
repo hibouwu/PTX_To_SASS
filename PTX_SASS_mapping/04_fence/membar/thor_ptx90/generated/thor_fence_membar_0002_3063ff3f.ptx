@@ -1,0 +1,27 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_fence_membar_0002_3063ff3f.ptx"
+
+
+// OPCODE membar
+// COORDINATES {"context":"baseline","level":"gl"}
+.visible .entry thor_fence_membar_0002_3063ff3f(
+    .param .u64 p_out
+)
+    .reqntid 128
+{
+    .reg .b64 %out;
+    .reg .u32 %v;
+    // PREPARATION_BEGIN
+    ld.param.b64 %out, [p_out];
+    mov.u32 %v, %tid.x;
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    membar.gl;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    st.global.u32 [%out], %v;
+    // OBSERVATION_END
+    ret;
+}

@@ -1,0 +1,30 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_act_tanh_0009_e9606d09.ptx"
+
+
+// OPCODE tanh.approx
+// COORDINATES {"consumer":"cvt","context":"baseline","dtype":"bf16"}
+.visible .entry thor_act_tanh_0009_e9606d09(
+    .param .u64 p_in,
+    .param .u64 p_out
+)
+{
+    .reg .b64 %rin, %rout;
+    .reg .b16 %a, %d;
+    .reg .f32 %f;
+    // PREPARATION_BEGIN
+    ld.param.b64 %rin, [p_in];
+    ld.param.b64 %rout, [p_out];
+    ld.global.b16 %a, [%rin];
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    tanh.approx.bf16 %d, %a;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    cvt.f32.bf16 %f, %d;
+    st.global.f32 [%rout], %f;
+    // OBSERVATION_END
+    ret;
+}

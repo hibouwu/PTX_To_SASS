@@ -1,0 +1,34 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_atomic_global_0017_e968df7a.ptx"
+
+
+// OPCODE atom.global
+// COORDINATES {"address_form":"indirect","context":"baseline","op":"and","result_use":"live","scope":"none","sem":"none","type":"b64"}
+.visible .entry thor_atomic_global_0017_e968df7a(
+    .param .u64 p_addr,
+    .param .u64 p_out
+)
+    .reqntid 64
+{
+    .reg .u64 %base, %addr, %out, %toff;
+    .reg .u32 %t0;
+    .reg .b64 %d, %b;
+    // PREPARATION_BEGIN
+    ld.param.u64 %base, [p_addr];
+    ld.param.u64 %out, [p_out];
+    mov.u32 %t0, %tid.x;
+    cvt.u64.u32 %toff, %t0;
+    shl.b64 %toff, %toff, 3;
+    add.u64 %addr, %base, %toff;
+    mov.b64 %b, 1;
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    atom.global.and.b64 %d, [%addr], %b;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    st.global.b64 [%out], %d;
+    // OBSERVATION_END
+    ret;
+}

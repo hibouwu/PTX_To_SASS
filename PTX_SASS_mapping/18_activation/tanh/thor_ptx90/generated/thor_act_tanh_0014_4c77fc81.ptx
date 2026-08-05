@@ -1,0 +1,32 @@
+.version 9.0
+.target sm_110a
+.address_size 64
+.file 1 "thor_act_tanh_0014_4c77fc81.ptx"
+
+
+// OPCODE tanh.approx
+// COORDINATES {"consumer":"mul","context":"baseline","dtype":"bf16x2"}
+.visible .entry thor_act_tanh_0014_4c77fc81(
+    .param .u64 p_in,
+    .param .u64 p_in2,
+    .param .u64 p_out
+)
+{
+    .reg .b64 %rin, %rin2, %rout;
+    .reg .b32 %a, %b, %d, %e;
+    // PREPARATION_BEGIN
+    ld.param.b64 %rin, [p_in];
+    ld.param.b64 %rin2, [p_in2];
+    ld.param.b64 %rout, [p_out];
+    ld.global.b32 %a, [%rin];
+    ld.global.b32 %b, [%rin2];
+    // PREPARATION_END
+    // TARGET_PATTERN_BEGIN
+    tanh.approx.bf16x2 %d, %a;
+    // TARGET_PATTERN_END
+    // OBSERVATION_BEGIN
+    mul.bf16x2 %e, %d, %b;
+    st.global.b32 [%rout], %e;
+    // OBSERVATION_END
+    ret;
+}
