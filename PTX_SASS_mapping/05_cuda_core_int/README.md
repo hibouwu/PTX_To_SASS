@@ -1,6 +1,6 @@
 # 05 · CUDA Core 整数指令
 
-状态：`NOT_STARTED`
+状态：`IN_PROGRESS`（[实验设计.md](实验设计.md) 已完成全族 26 opcode 的实测校准与结构分类；`mad` 套件已建成并通过首轮自检：35 syntax + 43 expanded case × O0–O3 共 312 次编译/归属 PASS，9 个带诊断锚定的负向探针全部按预期拒绝。旗舰发现：非 sat 的 `mad.hi.{s32,u32}` 其 c 操作数被物化零替换而不参与累加，见设计文档）
 
 ## 范围
 

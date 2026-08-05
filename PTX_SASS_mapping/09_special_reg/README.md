@@ -1,6 +1,6 @@
 # 09 · Special register
 
-状态：`NOT_STARTED`
+状态：`IN_PROGRESS`（[实验设计.md](实验设计.md) 已完成 47 个 special register 的全量 producer 校准表与 `%tid`/`%ctaid` manipulation check；`thread-index` 套件已建成并通过首轮自检：24 syntax + 46 expanded case × O0–O3 共 280 次编译/归属 PASS，9 个带诊断锚定的负向探针全部按预期拒绝。关键发现：producer 分 S2R/CS2R/常量 bank/位段提取/合成序列五类，`%ctaid` 随消费者 uniformity 在 S2R/S2UR 间路由，`%tid.w` 合法且折叠为 RZ）
 
 ## 范围
 

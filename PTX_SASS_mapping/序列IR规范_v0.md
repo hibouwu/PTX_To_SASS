@@ -2,14 +2,14 @@
 
 > 适用范围：PTX ISA 9.0、NVIDIA Thor、`sm_110a`、CUDA 13.0
 > 本文性质：自研静态编译器的中间表示规范。输入为顺序固定的 PTX 序列，输出为 SASS 指令字。
-> 证据锚点：本规范的每条结构性决策都对应一项已入库的实验发现或一条显式范围裁决，见第二节对照表；引用的探针可由 [probes/run_gap_probes.py](probes/run_gap_probes.py) 复现。
-> 规则来源：本文不复述任何映射规则。指令选择的权威来源见 [tcgen05.mma/AI_入口_权威源指引.md](tcgen05.mma/AI_入口_权威源指引.md) 与各指令套件的规则 JSON；IR 只按 `rule_id` 引用它们。
+> 证据锚点：本规范的每条结构性决策都对应一项已入库的实验发现或一条显式范围裁决，见第二节对照表；引用的探针可由 [probes/run_gap_probes.py](01_tcgen05/probes/run_gap_probes.py) 复现。
+> 规则来源：本文不复述任何映射规则。指令选择的权威来源见 [tcgen05.mma/AI_入口_权威源指引.md](01_tcgen05/tcgen05.mma/AI_入口_权威源指引.md) 与各指令套件的规则 JSON；IR 只按 `rule_id` 引用它们。
 
 ## 一、定位与范围
 
 目标：把一段顺序固定的 tcgen05 PTX 序列，确定性地翻译成带正确调度控制字段的 SASS，并使每条输出指令可审计回其依据的规则与证据。
 
-定位：这是一层 target-specific 的序列 lowering IR，不是通用 PTX 编译器 IR；其全部简化（无调度器、无 CFG、确定性选择）都以固定序列域为前提。
+定位：这是一层 target-specific 的序列 lowering IR，不是通用 PTX 编译器 IR；其全部简化（无调度器、无 CFG、确定性选择）都以固定序列域为前提。这里的 target 是 Thor/`sm_110a` 而非某个指令族——本文因而置于 `PTX_SASS_mapping/` 顶层与《实验设计》并列，不隶属任何族目录。当前全部证据来自 `01_tcgen05/`，其余族接入时只需补各自的规则来源与契约声明，IR 结构不变。
 
 非目标（显式排除）：
 
@@ -17,7 +17,7 @@
 - 循环、跨基本块数据流、CFG SSA 构造与 phi——输入是直线序列，guard 产生的分支按区域处理；pass 1 的线性定值重命名（第四节）不在此排除之列；
 - 描述符与 idesc 内部字段建模——沿用项目"不透明值"裁决；
 - 运行时语义验证——沿用 `STATIC_ONLY` 口径；
-- 复现 ptxas 的物理寄存器编号与屏障索引——只要求自洽且依赖边为 ptxas 结果的超集。
+- 复现 ptxas 的物理寄存器编号与屏障索引——只要求自洽，且异步覆盖关系为参照的超集（pass 7(b) 的比较域）。
 
 ## 二、设计决策与证据对照
 
@@ -29,8 +29,8 @@
 | 操作数记角色槽与虚拟值，不记物理编号 | `probe:template_idesc`：换模板物理编号全变、槽位角色不变；五槽位 bitfield 位置已冻结 |
 | 寄存器类（R/UR/P/UP）是值类型的一部分 | `probe:gpr_pressure`：GPR 压至 R165 与 UR 域正交 |
 | `anti` 边独立成类 | STTM/UTCHMMA 实测设置读屏障，异步读源期间源寄存器不可覆盖 |
-| `async` 边按队列建模而非逐对建模 | 队列内按序完成：9 条在飞 LDTM 仅消耗 4 个屏障 |
-| `wait::ld`、`tcgen05.fence` 解析为边而非节点 | 二者实测零指令；`fence` 仅剩 NOP 定界 |
+| `async` 边按队列建模而非逐对建模 | `probe:async_depth`/`probe:consume_order_v2`：9 条在飞仅 4 屏障、单次 wait 覆盖全队列（观察）；覆盖机制以 5.5 契约形式独立声明，边只记结构 |
+| `wait::ld`、`tcgen05.fence` 解析为边而非节点 | 二者实测零**语义**指令：仅 NOP 定界与相邻指令调度字段差（probe:wait_diff、fence 套件差分） |
 | `wait::st` 为 hybrid 节点 | 实测产生 `FENCE.VIEW.ASYNC.T`，12/12 组合成立 |
 | alloc 族不进选择器，走录制模板 | 其 lowering 为含自旋、影子状态、trap stub 的合成协议；参数空间封闭（32 模板） |
 | 资源状态边（collector/TMEM/commit 域）独立成类 | 这些约束不由寄存器承载，数据流边结构性抓不到 |
@@ -44,7 +44,7 @@ flowchart TD
     P2["Pass 2 · legality<br/>四象限约束表 + collector 状态机 + 阴性目录"]
     L1["L1 语义序列 IR<br/>节点 + 六类边 + 值表 + 完成契约 + 区域划分"]
     P3["Pass 3 · select<br/>逐节点查规则表；template 粘贴录制 SASS"]
-    P4["Pass 4 · regalloc<br/>虚拟值 → 物理编号（自洽即可）"]
+    P4["Pass 4 · regalloc<br/>物理编号：自洽 + 偶对齐 + 模板预着色"]
     P5["Pass 5 · sched-fields<br/>按区域分配屏障变量、填 stall"]
     L2["L2 编码 IR<br/>每 128-bit 指令一条记录，word 1 先符号后具体"]
     P6["Pass 6 · encode<br/>装配指令字"]
@@ -84,7 +84,7 @@ flowchart TD
 | `role` | 目标指令的角色槽名：`A`、`B`、`D`、`aux`、`idesc`、`enable`、`mask`、`taddr`、`mbar` 等。角色顺序属 ISA 层事实（五槽位 bitfield 已冻结），物理编号不属于 |
 | `opaque` | 描述符、idesc、TMEM 地址标记为 true：IR 不解释其位内容，只跟踪定值与使用 |
 | `def` | 定值节点 id。PTX 虚拟寄存器允许复定义（如 `mov %s,0; xor %s,%s,%r0`），pass 1 对每个定值点重命名为新虚拟值——即仅线性定值重命名，无 CFG SSA 构造。重命名后值表单定值 |
-| `lifetime` | 活跃延伸类，pass 4 直接消费：`normal`（终于最后使用点）、`async_write_pending`（定值为异步写，延伸至覆盖 drain 点）、`async_read_source`（被异步读源消费，延伸至该消费者的读屏障覆盖点）、`resource_owned`（TMEM 区间，alloc 至 dealloc）。由 pass 1 从定值/使用上下文推导后物化——单一真相源是节点上下文，本字段是缓存，二者不一致视为 pass 1 缺陷 |
+| `lifetime` | 活跃延伸类，pass 4 直接消费：`normal`（终于最后使用点）、`async_write_pending`（终点=max(最后使用点, 覆盖 drain 点)）、`async_read_source`（终点=max(最后使用点, 该异步读的读屏障覆盖点)）、`resource_owned`（TMEM 区间，alloc 至 dealloc）。缺省为 `normal`；`IMM` 类不带该字段（pass 4 跳过）。由 pass 1 从定值/使用上下文推导后物化——单一真相源是节点上下文，本字段是缓存，二者不一致视为 pass 1 缺陷 |
 
 ## 五、L1 语义序列 IR
 
@@ -128,7 +128,7 @@ flowchart TD
 | `data` | RAW：先写后读 | 值表 def/use 扫描 | 生产者为可变延迟时消费者 wait 其写屏障；生产者为固定延迟时由发射路径 stall 承担（第六节 stall 构造规则、pass 7(c)），不占屏障 |
 | `anti` | WAR：异步读完成前源不可覆盖 | 异步读源指令（STTM、UTCHMMA 的 TS/SS 源）与后续覆盖者 | 覆盖者需要 wait 生产者的**读屏障** |
 | `mem` | 通用访存序 | 全部 may-alias 的 `st/ld.global`、`shared` 访存按程序序构成保守链（含 volatile/strong） | 编码层按程序序发射并依赖同地址访存的流水线序；此为显式裁决而非留白。寄存器层 WAW 经 pass 1 重命名后在 L1 不存在，物理层重写序由 pass 4 活跃区间规则承担 |
-| `async` | 队列成员的程序序（**结构事实**，投影二可核） | `queue` 相同的节点按程序序隐含；wait 脱糖强化 | 边自身不决定编码；编码行为由该队列在 5.5 声明的完成契约决定，无已验证契约的队列按逐生产者屏障保守处理 |
+| `async` | 队列结构（**结构事实**，投影二可核）：成员间程序序为隐含关系不物化；物化的 `async` 边只有一种——队列成员 → drain 点（wait 脱糖产生） | wait 脱糖（5.3） | 边自身不决定编码；编码行为由该队列在 5.5 声明的完成契约决定，无已验证契约的队列按逐生产者屏障保守处理 |
 | `resource` | 硬件状态约束 | collector 通道状态机、TMEM 区间（alloc 定义至 dealloc 释放）、commit 覆盖域（该 commit 提交此前本队列全部异步操作） | 禁止跨边插入冲突操作；不产生 wait，产生合法性与排序约束 |
 | `order` | 纯排序 | `tcgen05.fence::{before,after}_thread_sync` 相对最近 `sync` 节点 | 编码层不得让 tcgen05 异步操作跨越该边（当前编译器以指令顺序天然满足；见第十二节未决项） |
 
@@ -141,7 +141,9 @@ flowchart TD
 | `tcgen05.fence::before_thread_sync;` | 为此前每个 tcgen05 异步节点加一条 `order` 边：from=该异步节点，to=下一个 `sync` 节点 |
 | `tcgen05.fence::after_thread_sync;` | 为此后每个 tcgen05 异步节点加一条 `order` 边：from=上一个 `sync` 节点，to=该异步节点 |
 
-依据：`wait::ld` 零指令由单因素对照证实（probe:wait_diff——有/无 wait 两 kernel 助记符序列相同，唯一差异是相邻 `LDCU.64` 的 word 1 由 `0x000e64` 变 `0x000e62`）；`tcgen05.fence` 零指令见 fence 套件 26 case 差分；`wait::st` 实测发射真实指令（wait 套件 12/12）。
+依据：`wait::ld` 的 lowering 为**零语义指令**而非字面零指令（probe:wait_diff）——有/无 wait 的全部差异为：一条中流 `NOP` 定界（0x0050，居 `LDCU.64` 与 `STG` 之间，与 fence 的 NOP 定界同型）加相邻 `LDCU.64` 的 word 1 调度字段差（`0x000e64`→`0x000e62`）；尾部 NOP 差异为 128B 对齐填充，可豁免。`tcgen05.fence` 同类（fence 套件 26 case 差分）；`wait::st` 实测发射真实指令（wait 套件 12/12）。
+
+NOP 定界的裁决：v0 不物化该 NOP——依赖语义已由 wait/stall 字段承载，NOP 是 ptxas 的调度定界产物；pass 7(a) 回环比较时 NOP 一律豁免（与尾部填充同列）；若 Thor 复核发现该 NOP 承载必要延迟，由判据 (c) 与最大 stall 策略兜底并回升此裁决。
 
 ### 5.4 区域
 
@@ -160,13 +162,15 @@ flowchart TD
 
 契约与边分离的理由：`async` 边是投影二可核验的结构事实（队列成员与程序序），完成覆盖是投影三之上的机制解释（第十三节：编译器契约层）。二者绑定会让机制假设污染 IR——若某队列将来被发现发射 FIFO 而完成非 FIFO，受影响的只是该队列的契约声明与 pass 5 行为，边结构与全部已生成的 L1 产物不变。
 
-规则：pass 5 仅对持有已验证契约、且当前序列落在其 `verified_scope` 内的队列，应用"等最后成员即覆盖全队列"；契约缺失或越界（混合队列、跨区域）一律回退 `fallback`。跨队列覆盖无契约可依，永远不得假设。当前已声明的契约仅 ld 队列一条（上示）；st、mma、cp 队列待混合队列实验（第十四节最高优先级）后登记。
+规则：pass 5 仅对持有已验证契约、且当前序列满足其 scope 谓词的队列，应用"等最后成员即覆盖全队列"；否则一律回退 `fallback`。跨队列覆盖无契约可依，永远不得假设。
+
+scope 谓词（机械可执行，L1 节点区间上可判定）——"单队列、单区域"定义为：契约队列任一成员的在飞窗口（发射节点至其 drain 点）内，无任何其他队列成员在飞；且该队列全部成员与其 drain 点属同一 `region`。二者任一不满足即越界。当前已声明的契约仅 ld 队列一条（上示）；st、mma、cp 队列待混合队列实验（第十四节最高优先级）后登记。
 
 ## 六、L2 编码 IR
 
 ```json
 {"schema_version": "tcgen05_ir_enc_v0",
- "node": "n4",
+ "node": "n3",
  "seq": 3,
  "mnemonic": "LDTM",
  "modifiers": ["16dp64bit"],
@@ -184,8 +188,8 @@ flowchart TD
 | `mnemonic`/`modifiers` | 由 pass 3 查权威规则表得出，本层不推导 |
 | `operands[].phys` | pass 4 产物。只要求自洽：同值同编号、类不混用；不要求与 ptxas 一致 |
 | `word1_sym` | 屏障是变量 `b0..b5`。stall 符号构造规则：与下一条发射指令存在**无屏障保护**的固定延迟依赖时记 `LAT(生产集->消费集)`；该依赖被屏障保护或不存在依赖时记 `min`。pass 5 前禁止出现具体索引与周期数 |
-| `word1` | pass 5/6 落成的具体值。字段布局沿用 [tools/decode_ctrl.py](tools/decode_ctrl.py) 的假设（wait[57:52]、rd[51:49]、wr[48:46]、yield[45]、stall[44:41]、reuse[61:58]），该布局在 `sm_110a` 上待 Thor 复核 |
-| `emits` 展开 | L2 记录粒度=发射指令：`emits: n` 的节点产生 n 条记录（`node` 相同、`seq` 连续）；操作数分裂（如 `16x32bx2` 的半列偏移与 dst 递增）由 pass 3 所引规则的 1:N 展开表定义；`word1_sym` 逐记录持有；节点属队列时由末条记录承载 `wr_barrier`（完成覆盖按记录计） |
+| `word1` | pass 5/6 落成的具体值。字段布局沿用 [01_tcgen05/tools/decode_ctrl.py](01_tcgen05/tools/decode_ctrl.py) 的假设（wait[57:52]、rd[51:49]、wr[48:46]、yield[45]、stall[44:41]、reuse[61:58]），该布局在 `sm_110a` 上待 Thor 复核 |
+| `emits` 展开 | L2 记录粒度=发射指令：`emits: n` 的节点产生 n 条记录（`node` 相同、`seq` 连续）；操作数分裂（如 `16x32bx2` 的半列偏移与 dst 递增）由 pass 3 所引规则的 1:N 展开表定义；`word1_sym` 逐记录持有；若 pass 5 为该节点分配了写屏障，则由末条记录承载（完成覆盖按记录计） |
 | `reuse` | v0 裁决：恒置 0。不置恒安全（仅损失操作数复用缓存的端口收益），错置可能读到陈旧操作数；性能层留待 v1。模板字内 ptxas 已置的 reuse 位随字原样保留 |
 | `rule_id`/`evidence_grade` | 强制字段，对全部记录生效（含外围指令）。tcgen05 指令引各套件规则 JSON；外围指令引对应指令族研究或 `peripheral_select_v0` 表（见第八节）；template 粘贴记 `template_id` 与录制哈希 |
 
@@ -193,13 +197,13 @@ flowchart TD
 
 | pass | 输入不变量 | 输出保证 |
 |---|---|---|
-| 1 parse | 合法 PTX 文本、顺序固定 | 节点/值/边表；wait 与 fence 已脱糖；队列成员按程序序编号 |
+| 1 parse | 合法 PTX 文本、顺序固定；契约登记表（5.5）为输入 | 节点/值/边表；wait 与 fence 已脱糖；队列成员按程序序编号；值表的 `lifetime` 已按第四节推导物化；适用的完成契约随 L1 一并输出 |
 | 2 legality | L1 全表 | 每节点通过约束检查，或整体 REJECT 并给出违反的约束 id。检查项包括：collector 状态机路径、alloc 与 dealloc 各自的 ncols 约束（二者不对称）、变体与限定符联合合法性、操作数形态。约束表按四象限验证维护 |
 | 3 select | 合法 L1 | 每 `op`/`hybrid` 节点得到 mnemonic、modifiers、操作数形态与 `rule_id`；每 `template` 节点得到录制 SASS 与哈希。禁止对无规则覆盖的形态凭插值生成——查不到即 REJECT_OUT_OF_DOMAIN |
-| 4 regalloc | 选择完成 | 虚拟值到物理编号的自洽映射；R/UR/P/UP 分文件；活跃区间不冲突。硬约束：`R64`/`UR64` 类的物理起始编号必须偶对齐（实测全部 `LDC.64`/`LDCU.64` 落偶起始寄存器对），"自洽即可"不豁免此条。异步定值专项规则：异步写目的值（LDTM 结果等）的活跃终点不是最后使用点，而是覆盖其队列成员身份的 drain 点——即使无任何消费者（本编译器不做 DCE，无消费者的异步写照常发射且必须保持跟踪）；在此之前其物理寄存器不得重分配，重分配点若早于完成必须先等待对应屏障（WAW 保护） |
+| 4 regalloc | 选择完成 | 虚拟值到物理编号的自洽映射；R/UR/P/UP 分文件；活跃区间不冲突。硬约束：`R64`/`UR64` 类的物理起始编号必须偶对齐（实测全部 `LDC.64`/`LDCU.64` 落偶起始寄存器对），"自洽即可"不豁免此条。异步定值专项规则：异步写目的值（LDTM 结果等）的活跃终点 = **max(最后使用点, 覆盖其队列成员身份的 drain 点)**，二者取晚者——drain 点可能早于最后使用点（第九节实例：%v3 的 drain 点 n4 早于最后使用点 n5），也可能晚于（无消费者时，本编译器不做 DCE，异步写照常发射且必须跟踪至 drain）；终点之前其物理寄存器不得重分配，重分配点若早于完成必须先等待对应屏障（WAW 保护）。template 预着色：模板 `defs` 流出的值预着色为模板录制的物理编号（第十节禁止模板内重编号的对偶义务）；模板活跃 span 内，`footprint` 所列 UR/GPR 对外部值不可分配——寄存器侧 clobber，与 pass 5 的屏障侧 clobber 对应 |
 | 5 sched-fields | 编号完成 | 每 `word1_sym` 的屏障变量落成索引：数据/anti 边的生产者放写/读屏障，消费者填 wait；同队列按 5.5 契约应用"最后生产者"覆盖（契约缺失或越界回退逐生产者屏障）；变量数超出 6 时按回收策略插入 drain。策略未定前保守：完全串行化，即同一时刻至多一个在飞异步操作，发射后立即等待其屏障再发射下一条——与第十二节"禁用单屏障共享并发形态"一致。`template` 节点是屏障 clobber 点：入口前全量 drain（满足模板的记分牌入口前提，如 alloc 模板内 `DEPBAR.LE SB0, 0x36` 的阈值等待），出口后视全部屏障状态为未知并重新分配——当前串行化策略下该规则自动成立，放开并发后成为显式义务。stall 由官方延迟表查得，查不到取最大值 |
 | 6 encode | 字段完整 | 128-bit 指令字；word 0 按已冻结槽位 bitfield 填充 |
-| 7 verify | cubin | 三项判据：(a) nvdisasm 回环，助记符/修饰符/操作数形态与 L2 一致；(b) 若存在 ptxas 参照，异步覆盖包含检查。比较域限定为异步完成覆盖关系：生产者取两侧均可按助记符族识别的 tcgen05 异步指令，关系为"该生产者在其结果首次被使用前是否被某次 wait 覆盖"，生成侧关系集须为参照侧超集；比较前剔除参照側屏障回收边（`tools/decode_ctrl.py` 的 reclaim 分类）。不以任意指令对为端点逐条比边——参照侧经 ptxas 折叠与消除后与生成侧不同构（第九节 xor 折叠进 STG 即实例），逐条比对不可机械执行；固定延迟依赖不入 (b)，由 (c) 承担；(c) 每个无屏障保护的固定延迟定值-使用对，其间发射路径 stall 之和不低于延迟表下界——延迟表未对齐前生成侧强制最大 stall，(c) 平凡成立，此为显式声明而非验证盲区 |
+| 7 verify | cubin | 三项判据：(a) nvdisasm 回环，助记符/修饰符/操作数形态与 L2 一致（NOP 与尾部对齐填充豁免，见 5.3 的 NOP 裁决）；(b) 若存在 ptxas 参照，异步覆盖包含检查。比较域限定为异步完成覆盖关系：生产者取两侧均可按助记符族识别的 tcgen05 异步指令，关系为"该生产者在其结果首次被使用前是否被某次 wait 覆盖"，生成侧关系集须为参照侧超集；比较前剔除参照側屏障回收边（`01_tcgen05/tools/decode_ctrl.py` 的 reclaim 分类）。不以任意指令对为端点逐条比边——参照侧经 ptxas 折叠与消除后与生成侧不同构（第九节 xor 折叠进 STG 即实例），逐条比对不可机械执行；固定延迟依赖不入 (b)，由 (c) 承担；(c) 每个无屏障保护的固定延迟定值-使用对，其间发射路径 stall 之和不低于延迟表下界——延迟表未对齐前生成侧强制最大 stall，(c) 平凡成立，此为显式声明而非验证盲区 |
 
 关于"屏障分配反向影响指令选择"的风险（通用后端中成立）：v0 域内该反馈环不存在——pass 3 是零自由度的确定性查表，固定 PTX 形态唯一决定 SASS 形态，屏障分配没有可影响的选择点。此论断的前提是"每形态唯一映射"；若 v1 引入性能层的多形态选择，前提失效，须重估管线单向性。
 
@@ -207,17 +211,17 @@ flowchart TD
 
 pass 2 不内嵌规则文本，只装载：
 
-- `tcgen05.mma/thor_ptx90/results/rule-mining/canonical_mapping_rules.json`（896 条正向规则）；
-- 各指令套件 `validation/` 与阴性目录；
+- `01_tcgen05/tcgen05.mma/thor_ptx90/results/rule-mining/canonical_mapping_rules.json`（896 条正向规则）；
+- 各指令套件的 `validation/` 与阴性目录（当前证据全部来自 `01_tcgen05/`）；
 - 本仓库审查文档新增的约束（alloc 2 的幂 / dealloc 32 的倍数、`red × pack` 非法、multicast 与 mask 强配对、`.cta_group` 不可省略等），登记入各套件 factors.json 的 `constraints` 字段后由此装载（该字段已存在于全部 10 个套件但当前均为空数组，登记本身仍是待办）。
 
-外围指令的选择来源（v0 裁决）：序列中非 tcgen05 的 PTX 指令（`ld.param`、`mov`、`add`、`xor`、`st.global`、`bar.sync` 等）不在 tcgen05 规则 JSON 覆盖内。其选择层来源分两级：优先引用仓库内对应指令族的映射研究（如 `verification_num_mapping/results/mapping_report.csv` 已含 `14_bit_ops` 等族的 PTX→SASS 对照），无族覆盖的用一张显式的外围最小映射表（`peripheral_select_v0`，如 `ld.param.b32`→`LDCU`/`LDC`、`st.global.b32`→`STG.E`），该表与 tcgen05 规则同样带证据锚点、同样受四象限维护。禁止把外围指令当"显然的"而免除来源登记——第九节示例的 `LDCU`/`STG` 记录即须引用此表。
+外围指令的选择来源（v0 裁决）：序列中非 tcgen05 的 PTX 指令（`ld.param`、`mov`、`add`、`xor`、`st.global`、`bar.sync` 等）不在 tcgen05 规则 JSON 覆盖内。其选择层来源分两级：优先引用仓库内对应指令族的映射研究（如 `../verification_num_mapping/results/mapping_report.csv` 已含 `14_bit_ops` 等族的 PTX→SASS 对照），无族覆盖的用一张显式的外围最小映射表（`peripheral_select_v0`，如 `ld.param.b32`→`LDCU`/`LDC`、`st.global.b32`→`STG.E`），该表与 tcgen05 规则同样带证据锚点、同样受四象限维护。禁止把外围指令当"显然的"而免除来源登记——第九节示例的 `LDCU`/`STG` 记录即须引用此表。
 
 维护规则：发现象限三/四实例（预期非法但接受、预期合法但拒绝）时，先改约束表并重跑四象限，再改 IR。
 
 ## 九、完整示例
 
-输入 PTX（对应 `probes/results/async_depth_1.ptx`）：
+输入 PTX（对应 `01_tcgen05/probes/results/async_depth_1.ptx`）：
 
 ```ptx
 ld.param.b32 %taddr,[p_t];
@@ -233,10 +237,10 @@ L1（完整闭合，仅省略每行的 schema_version；`%s` 的两次定值经 
 
 ```json
 {"id":"%v1","class":"UR32","role":"taddr","def":"n1","opaque":true,"lifetime":"normal"}
-{"id":"%v2","class":"R64","role":"out_addr","def":"n2","opaque":false}
+{"id":"%v2","class":"R64","role":"out_addr","def":"n2","opaque":false,"lifetime":"normal"}
 {"id":"%v3","class":"R32","role":"dst","def":"n3","opaque":false,"lifetime":"async_write_pending"}
 {"id":"%v4","class":"IMM","value":0,"def":"n4","opaque":false}
-{"id":"%v5","class":"R32","role":"acc","def":"n5","opaque":false}
+{"id":"%v5","class":"R32","role":"acc","def":"n5","opaque":false,"lifetime":"normal"}
 
 {"id":"n1","kind":"op","opcode":"ld.param.b32","slots":{"dst":["%v1"]},"guard":null,"region":"r0"}
 {"id":"n2","kind":"op","opcode":"ld.param.b64","slots":{"dst":["%v2"]},"guard":null,"region":"r0"}
@@ -274,7 +278,7 @@ L2（关键三条；`word1` 为该探针实测值，`word1_sym` 为本 IR 的生
  "rule_id":"peripheral_select_v0.st_global_b32","evidence_grade":"OBSERVATION"}
 ```
 
-对照实测 SASS（`probes/results/async_depth_1.disasm.txt`）：`LDCU UR4` 置 b0（SB0），`LDTM` 等 b0、置 b1（SB1），`STG` 等 b1——与 `word1` 逐值吻合。xor 被 ptxas 折叠进 STG 路径的现象属于优化域，本 IR 不追求复现，verify 只要求边包含成立。
+对照实测 SASS（`01_tcgen05/probes/results/async_depth_1.disasm.txt`，解码为投影三）：`LDCU UR4` 置 SB0；`LDTM` 等 SB0、置 SB1；`STG` 等 SB1——上示三条记录的 `word1` 逐值吻合。但须注明参照侧的完整事实：SB1 同时被 `LDC.64 R2`（0020，out 指针）与 `LDCU.64 UR4`（0040，描述符）设置，三生产者共享一个屏障、`STG` 单次等待（与第十三节补录同型，计数器语义的又一实例）。生成侧不复现共享——按逐生产者分配会给三者各自的屏障，与参照的对应经 pass 7(b) 的覆盖关系比较而非 word1 逐位比较。xor 被 ptxas 折叠进 STG 路径属优化域，本 IR 不追求复现。
 
 ## 十、模板节点的录制与粘贴契约
 
@@ -303,7 +307,7 @@ L2（关键三条；`word1` 为该探针实测值，`word1_sym` 为本 IR 的生
 
 | 问题 | 阻塞的 pass | 当前策略 |
 |---|---|---|
-| word 1 字段布局在 `sm_110a` 上未经 Thor 复核 | 5、6、7 | 沿用自洽假设，Thor 上按 tools/README 步骤 3.2 复核后升级 |
+| word 1 字段布局在 `sm_110a` 上未经 Thor 复核 | 5、6、7 | 沿用自洽假设，Thor 上按 01_tcgen05/tools/README.md 步骤 3.2 复核后升级 |
 | 屏障语义是计数器还是标志位 | 5 | 静态强证据支持计数器（第十三节补录：SB1 三异构生产者共享 + `DEPBAR.LE` 阈值语义）；保守策略维持至 Thor 运行时确认 |
 | 屏障回收策略 | 5 | 保守：区域边界与变量耗尽时全量 drain |
 | 延迟表向量与 `UDP_subset` 成员的逐位对齐 | 5 | 未对齐项 stall 取最大值 |
@@ -348,13 +352,13 @@ L2（关键三条；`word1` 为该探针实测值，`word1_sym` 为本 IR 的生
   蕴含"最后成员完成即全体完成"——这是 ptxas 所依赖的硬件契约。
   静态方法不能证明硬件本身按序完成；对本项目而言，需要复刻的正是
   编译器契约，硬件层确认归 Thor 运行时阶段。
-层级标注：屏障/等待的解读依赖 decode_ctrl.py 字段布局假设（投影三）；
+层级标注：屏障/等待的解读依赖 01_tcgen05/tools/decode_ctrl.py 字段布局假设（投影三）；
 布局被推翻时仅重做解释层，投影一/二的观察不失效。
 ```
 
-补录——同一探针数据对第十二节头号未决问题（屏障是计数器还是标志位）的静态证据：三个异构生产者（LDC.64 / LDTM / LDCU.64，跨 mio 与 udp 管线）共享 SB1、三者完成时点各异、单次 wait 即全部覆盖。若屏障是单比特标志，后设置者会丢失先前生产者的跟踪，除非存在跨管线完成序契约——而 mio 与 udp 之间不存在已知的此类契约。独立佐证：alloc 生命周期 lowering 含 `DEPBAR.LE SB0, 0x36`（probe:alloc_lifecycle，两处；另见已跟踪的 `verification_num_mapping/sass_dumps/01_tcgen05__T08_alloc_cg1_O0.sass:393`），阈值等待（记分牌值 ≤ 阈值）语义只对计数器成立。两条证据同指计数器。该问题状态从"未测"升级为"静态强证据支持计数器，保守策略维持至 Thor 运行时确认"。
+补录——同一探针数据对第十二节头号未决问题（屏障是计数器还是标志位）的静态证据：三个异构生产者（LDC.64 / LDTM / LDCU.64，跨 mio 与 udp 管线）共享 SB1、三者完成时点各异、单次 wait 即全部覆盖。若屏障是单比特标志，后设置者会丢失先前生产者的跟踪，除非存在跨管线完成序契约——而 mio 与 udp 之间不存在已知的此类契约。独立佐证：alloc 生命周期 lowering 含 `DEPBAR.LE SB0, 0x36`（probe:alloc_lifecycle，两处；另见已跟踪的 `../verification_num_mapping/sass_dumps/01_tcgen05__T08_alloc_cg1_O0.sass:393`），阈值等待（记分牌值 ≤ 阈值）语义只对计数器成立。两条证据同指计数器。该问题状态从"未测"升级为"静态强证据支持计数器，保守策略维持至 Thor 运行时确认"。
 
-方法教训（已上升为第十五节的强制规则）：处理变量必须先在投影二核验存活，才允许进入投影三/四的解释。v1 的失误正是跳过了这一步；本节补录的 SB1 共享现象在首轮解读中同样被漏读——完整解码全部指令而非只看目标助记符，同属该规则的适用范围。
+方法教训（已上升为第十五节的强制规则）：处理变量必须先在投影二核验存活，才允许进入投影三/四的解释。首轮实验（probe:consume_order）的失误正是跳过了这一步；本节补录的 SB1 共享现象在首轮解读中同样被漏读——完整解码全部指令而非只看目标助记符，同属该规则的适用范围。
 
 副发现一（probe:consume_order 的 partial 变体，归类为独立的 DCE 实验，不算消费顺序档位）：无消费者的 `tcgen05.ld` 会被 ptxas 整条死代码消除，`tcgen05.st` 因存储副作用不受影响。推论：任何"构造在飞队列"的实验必须给每个队列成员配消费者，否则队列坐标名不副实；wait 套件受此影响的 case 已按此口径加注。
 
@@ -400,5 +404,5 @@ L2（关键三条；`word1` 为该探针实测值，`word1_sym` 为本 IR 的生
 ## 十六、版本与演进
 
 - v0（本文）：结构冻结候选。schema 字段可增不可改义；`schema_version` 逐层独立演进。
-- 升级到 v1 的条件：Thor 复核字段布局、屏障语义裁决、至少一个完整生命周期序列通过 pass 7 全部三项判据。
+- 升级到 v1 的条件：Thor 复核字段布局、屏障语义裁决、至少一个完整生命周期序列通过 pass 7 全部三项判据、回填第九节 `rule_id` 占位符（ld 套件 results 重跑后按 manifest 对号）。
 - 本规范与权威规则源的关系：IR 引用规则，不复制规则。任何在 IR 文档内复述映射表的修改都应被拒绝（防双重真相原则）。

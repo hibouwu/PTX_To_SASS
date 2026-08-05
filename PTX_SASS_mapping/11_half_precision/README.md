@@ -1,6 +1,6 @@
 # 11 · F16 与 F16x2
 
-状态：`NOT_STARTED`
+状态：`IN_PROGRESS`（[实验设计.md](实验设计.md) 已完成校准；`fma` 套件已建成并通过首轮自检：8 syntax + 21 expanded case × O0–O3 共 116 次编译/归属 PASS，10 个带诊断锚定的负向探针全部按预期拒绝。关键发现：sm_110a 无标量 f16 指令——标量与 packed 共用 `HFMA2`，仅以 `.H0_H0` selector 区分；`.rn` 强制且唯一；neg/abs 在 O3 折叠进 HFMA2 操作数位）
 
 ## 范围
 
