@@ -1,0 +1,36 @@
+[workspace]
+
+resolver = "2"
+
+members = [
+    "ext/highs-sys",
+    "kernel_metadata",
+    "ptx_parser_macros_impl",
+    "ptx_parser_macros",
+    "ptx_parser",
+    "ptx",
+    "ptx_py",
+]
+
+default-members = ["ptx", "ptx_py"]
+
+[profile.release-lto]
+inherits = "release"
+codegen-units = 1
+lto = true
+
+# By default (even in dev) we build LLVM in Release (opt-level is controlled 
+# by cmake). That's because LLVM in Debug is excruciatingly slow and makes any
+# kind of debugging impossible. This profile is a special configuration for when
+# you want to build LLVM in Debug
+[profile.dev-llvm]
+inherits = "dev"
+
+[profile.dev-llvm.package.xtask]
+opt-level = 2
+
+[profile.dev.package.xtask]
+opt-level = 2
+
+[patch.crates-io]
+highs-sys = { path = "ext/highs-sys" }
