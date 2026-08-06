@@ -92,22 +92,6 @@ $DUMP Attention/softmax_mt.ptx 2>/dev/null > PTX_IR/tests/softmax_mt_nvptx.ll
 
 ---
 
-## 修改了哪些文件
-
-相比 ZLUDA 原版（目标 AMD），以下文件被修改以输出 NVPTX IR：
-
-| 文件 | 改动 |
-|---|---|
-| `ptx/src/pass/llvm/mod.rs` | `ParamEntry` 地址空间 4 → 101（NVPTX param space） |
-| `ptx/src/pass/llvm/emit.rs` | 调用约定 AMDGPUKernel→PTXKernel；去掉 `amdgpu-*` 属性；`target-features`→`target-cpu=sm_xxx`；22 个 `llvm.amdgcn.*` → `llvm.nvvm.*`；`setreg`/`dcache.inv` no-op |
-| `ptx/src/pass/mod.rs` | 特殊寄存器改为 `llvm.nvvm.read.ptx.sreg.*`（x/y/z 分立，无轴参数）；传递 sm_version 给 emit |
-| `ptx/src/pass/fix_special_registers.rs` | `sreg_to_function` map 改为 `(sreg, axis)` 键，去掉轴常量参数传递 |
-| `ptx/src/pass/replace_instructions_with_functions.rs` | rsqrt/sqrt/rcp/ex2/lg2 approx 改用 `llvm.nvvm.*` 完整名，`to_call` 跳过含 `.` 名称的 ZLUDA 前缀 |
-| `llvm_zluda/build.rs` | 加 `CMAKE_SUPPRESS_REGENERATION=ON`，解决 cmake 时间戳循环问题 |
-| `ext/highs-sys/build.rs` | 同上 |
-
----
-
 ## 已验证的 PTX 场景
 
 | PTX | sm 版本 | 覆盖的指令 | IR 行数 |
