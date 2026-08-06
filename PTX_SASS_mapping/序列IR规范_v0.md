@@ -63,6 +63,20 @@ flowchart TD
     class CUBIN output;
 ```
 
+**Pass 1 · parse：** 将顺序固定的 PTX 文本解析成初始语义结构，识别 opcode、qualifier、操作数、guard、异步队列和区域，为节点按程序顺序编号，对重复定义的 PTX 寄存器进行线性定值重命名，并生成值表以及 data、anti、mem、async、resource、order 等依赖边；`wait` 与 `fence` 在这一阶段被脱糖为 drain 或排序关系，适用的完成契约也随 L1 一并登记。
+
+**Pass 2 · legality：** 根据正向规则、阴性目录、四象限约束表和 collector/资源状态机判断整个 L1 序列是否合法，检查 opcode variant、CTA group、kind、TS/SS 操作数来源、稀疏与 WS 模式、collector、block scaling、`.ashift`、alloc/dealloc、multicast 与 mask 等单项及联合约束；合法序列继续编译，非法序列以明确的约束 id 拒绝。
+
+**Pass 3 · select：** 对每个合法 L1 节点查询权威映射规则，确定对应的 SASS opcode、modifier、谓词形式、操作数槽位和一对一或一对多的发射形态，并记录 `rule_id` 与证据等级；alloc 等复杂 lowering 不逐条推导，而是选择带固定寄存器接口、记分牌前提和重定位信息的已录制模板，无规则覆盖的输入直接标记为 `REJECT_OUT_OF_DOMAIN`。
+
+**Pass 4 · regalloc：** 将 L1 中的虚拟值分配到具体的 R、UR、P、UP 物理寄存器文件，保证同时存活的值不冲突、64-bit 寄存器对满足偶对齐要求，并延长异步写目的值和异步读源值的活跃区间直到相应完成点；模板输出采用录制编号预着色，模板活跃范围内声明的固定寄存器和 clobber 区域不得分配给外部值，但最终编号不要求与 ptxas 完全相同。
+
+**Pass 5 · sched-fields：** 在物理寄存器和发射顺序已经确定后生成 word 1 的调度控制信息，为可变延迟生产者分配读写屏障，为消费者或 drain 点填写 wait mask，按照队列完成契约决定是否允许“等待最后成员覆盖此前成员”，并处理屏障回收、区域出口和模板入口前的全量 drain；没有屏障保护的固定延迟依赖通过 stall 下界满足，v0 中普通指令的 reuse 位恒置 0。
+
+**Pass 6 · encode：** 将 L2 中已经确定的 opcode、modifier、predicate、物理寄存器、立即数、操作数槽位和调度字段写入对应 bitfield，展开一条 PTX 对应的多条发射记录，处理模板代码和相对地址的重定位，最终为每条 SASS 生成由 word 0 与 word 1 组成的 128-bit 机器指令。
+
+**Pass 7 · verify：** 对生成结果执行三层静态验证：首先通过 `nvdisasm` 回环确认助记符、modifier、谓词和操作数形态与 L2 一致；其次检查异步写结果使用、异步读源覆盖、队列 drain 和资源释放之前的完成覆盖不弱于规则或 ptxas 参照；最后检查所有未受屏障保护的固定延迟依赖，其发射路径累计 stall 不低于延迟表下界。
+
 序列化格式一律 JSONL，与仓库既有 manifest 风格一致；每行一个对象，`schema_version` 起始。
 
 ## 四、值模型
@@ -164,7 +178,9 @@ NOP 定界的裁决：v0 不物化该 NOP——依赖语义已由 wait/stall 字
 
 规则：pass 5 仅对持有已验证契约、且当前序列满足其 scope 谓词的队列，应用"等最后成员即覆盖全队列"；否则一律回退 `fallback`。跨队列覆盖无契约可依，永远不得假设。
 
-scope 谓词（机械可执行，L1 节点区间上可判定）——"单队列、单区域"定义为：契约队列任一成员的在飞窗口（发射节点至其 drain 点）内，无任何其他队列成员在飞；且该队列全部成员与其 drain 点属同一 `region`。二者任一不满足即越界。当前已声明的契约仅 ld 队列一条（上示）；st、mma、cp 队列待混合队列实验（第十四节最高优先级）后登记。
+契约是生成侧允许的最省形态（整队列单屏障、drain 点一次等待）。参照侧受 6 槽屏障数限制可能分组复用屏障（async_depth_9 的 9 在飞仅 4 屏障即实例，5.5 契约证据与之并不矛盾：前者是硬件-编译器契约，后者是 ptxas 在槽位约束下的实现选择），生成侧与参照的对应一律经 pass 7(b) 的覆盖关系比较收敛，不要求逐位一致。
+
+scope 谓词（机械可执行，L1 节点区间上可判定）——"单队列、单区域"定义为：契约队列任一成员的在飞窗口（发射节点至其 drain 点）内，不存在任何**其他队列**的成员在飞（同队列多成员在飞是常态，不构成越界）；且该队列全部成员与其 drain 点属同一 `region`。二者任一不满足即越界。当前已声明的契约仅 ld 队列一条（上示）；st、mma、cp 队列待混合队列实验（第十四节最高优先级）后登记。
 
 ## 六、L2 编码 IR
 
@@ -188,7 +204,7 @@ scope 谓词（机械可执行，L1 节点区间上可判定）——"单队列�
 | `mnemonic`/`modifiers` | 由 pass 3 查权威规则表得出，本层不推导 |
 | `operands[].phys` | pass 4 产物。只要求自洽：同值同编号、类不混用；不要求与 ptxas 一致 |
 | `word1_sym` | 屏障是变量 `b0..b5`。stall 符号构造规则：与下一条发射指令存在**无屏障保护**的固定延迟依赖时记 `LAT(生产集->消费集)`；该依赖被屏障保护或不存在依赖时记 `min`。pass 5 前禁止出现具体索引与周期数 |
-| `word1` | pass 5/6 落成的具体值。字段布局沿用 [01_tcgen05/tools/decode_ctrl.py](01_tcgen05/tools/decode_ctrl.py) 的假设（wait[57:52]、rd[51:49]、wr[48:46]、yield[45]、stall[44:41]、reuse[61:58]），该布局在 `sm_110a` 上待 Thor 复核 |
+| `word1` | pass 5/6 落成的具体值。字段布局沿用 [01_tcgen05/tools/decode_ctrl.py](01_tcgen05/tools/decode_ctrl.py) 的假设（wait[57:52]、rd[51:49]、wr[48:46]、yield[45]、stall[44:41]、reuse[61:58]），该布局在 `sm_110a` 上待 Thor 复核（decode_ctrl.py 自带的生产者/消费者配对自洽校验属解码层内部一致性检查，不等价于硬件真值复核） |
 | `emits` 展开 | L2 记录粒度=发射指令：`emits: n` 的节点产生 n 条记录（`node` 相同、`seq` 连续）；操作数分裂（如 `16x32bx2` 的半列偏移与 dst 递增）由 pass 3 所引规则的 1:N 展开表定义；`word1_sym` 逐记录持有；若 pass 5 为该节点分配了写屏障，则由末条记录承载（完成覆盖按记录计） |
 | `reuse` | v0 裁决：恒置 0。不置恒安全（仅损失操作数复用缓存的端口收益），错置可能读到陈旧操作数；性能层留待 v1。模板字内 ptxas 已置的 reuse 位随字原样保留 |
 | `rule_id`/`evidence_grade` | 强制字段，对全部记录生效（含外围指令）。tcgen05 指令引各套件规则 JSON；外围指令引对应指令族研究或 `peripheral_select_v0` 表（见第八节）；template 粘贴记 `template_id` 与录制哈希 |
@@ -203,7 +219,7 @@ scope 谓词（机械可执行，L1 节点区间上可判定）——"单队列�
 | 4 regalloc | 选择完成 | 虚拟值到物理编号的自洽映射；R/UR/P/UP 分文件；活跃区间不冲突。硬约束：`R64`/`UR64` 类的物理起始编号必须偶对齐（实测全部 `LDC.64`/`LDCU.64` 落偶起始寄存器对），"自洽即可"不豁免此条。异步定值专项规则：异步写目的值（LDTM 结果等）的活跃终点 = **max(最后使用点, 覆盖其队列成员身份的 drain 点)**，二者取晚者——drain 点可能早于最后使用点（第九节实例：%v3 的 drain 点 n4 早于最后使用点 n5），也可能晚于（无消费者时，本编译器不做 DCE，异步写照常发射且必须跟踪至 drain）；终点之前其物理寄存器不得重分配，重分配点若早于完成必须先等待对应屏障（WAW 保护）。template 预着色：模板 `defs` 流出的值预着色为模板录制的物理编号（第十节禁止模板内重编号的对偶义务）；模板活跃 span 内，`footprint` 所列 UR/GPR 对外部值不可分配——寄存器侧 clobber，与 pass 5 的屏障侧 clobber 对应 |
 | 5 sched-fields | 编号完成 | 每 `word1_sym` 的屏障变量落成索引：数据/anti 边的生产者放写/读屏障，消费者填 wait；同队列按 5.5 契约应用"最后生产者"覆盖（契约缺失或越界回退逐生产者屏障）；变量数超出 6 时按回收策略插入 drain。策略未定前保守：完全串行化，即同一时刻至多一个在飞异步操作，发射后立即等待其屏障再发射下一条——与第十二节"禁用单屏障共享并发形态"一致。`template` 节点是屏障 clobber 点：入口前全量 drain（满足模板的记分牌入口前提，如 alloc 模板内 `DEPBAR.LE SB0, 0x36` 的阈值等待），出口后视全部屏障状态为未知并重新分配——当前串行化策略下该规则自动成立，放开并发后成为显式义务。stall 由官方延迟表查得，查不到取最大值 |
 | 6 encode | 字段完整 | 128-bit 指令字；word 0 按已冻结槽位 bitfield 填充 |
-| 7 verify | cubin | 三项判据：(a) nvdisasm 回环，助记符/修饰符/操作数形态与 L2 一致（NOP 与尾部对齐填充豁免，见 5.3 的 NOP 裁决）；(b) 若存在 ptxas 参照，异步覆盖包含检查。比较域限定为异步完成覆盖关系：生产者取两侧均可按助记符族识别的 tcgen05 异步指令，关系为"该生产者在其结果首次被使用前是否被某次 wait 覆盖"，生成侧关系集须为参照侧超集；比较前剔除参照側屏障回收边（`01_tcgen05/tools/decode_ctrl.py` 的 reclaim 分类）。不以任意指令对为端点逐条比边——参照侧经 ptxas 折叠与消除后与生成侧不同构（第九节 xor 折叠进 STG 即实例），逐条比对不可机械执行；固定延迟依赖不入 (b)，由 (c) 承担；(c) 每个无屏障保护的固定延迟定值-使用对，其间发射路径 stall 之和不低于延迟表下界——延迟表未对齐前生成侧强制最大 stall，(c) 平凡成立，此为显式声明而非验证盲区 |
+| 7 verify | cubin | 三项判据：(a) nvdisasm 回环，助记符/修饰符/操作数形态与 L2 一致（NOP 与尾部对齐填充豁免，见 5.3 的 NOP 裁决）；(b) 若存在 ptxas 参照，异步覆盖包含检查。比较域限定为异步完成覆盖关系：生产者取两侧均可按助记符族识别的 tcgen05 异步指令，关系为"该生产者在其结果首次被使用前是否被某次 wait 覆盖"，生成侧关系集须为参照侧超集；比较前剔除参照侧屏障回收边（`01_tcgen05/tools/decode_ctrl.py` 的 reclaim 分类）。不以任意指令对为端点逐条比边——参照侧经 ptxas 折叠与消除后与生成侧不同构（第九节 xor 折叠进 STG 即实例），逐条比对不可机械执行；固定延迟依赖不入 (b)，由 (c) 承担；(c) 每个无屏障保护的固定延迟定值-使用对，其间发射路径 stall 之和不低于延迟表下界——延迟表未对齐前生成侧强制最大 stall，(c) 平凡成立，此为显式声明而非验证盲区 |
 
 关于"屏障分配反向影响指令选择"的风险（通用后端中成立）：v0 域内该反馈环不存在——pass 3 是零自由度的确定性查表，固定 PTX 形态唯一决定 SASS 形态，屏障分配没有可影响的选择点。此论断的前提是"每形态唯一映射"；若 v1 引入性能层的多形态选择，前提失效，须重估管线单向性。
 
@@ -221,7 +237,7 @@ pass 2 不内嵌规则文本，只装载：
 
 ## 九、完整示例
 
-输入 PTX（对应 `01_tcgen05/probes/results/async_depth_1.ptx`）：
+输入 PTX（对 `01_tcgen05/probes/results/async_depth_1.ptx` 的简化誊录：省略了探针中的 `add.s32 %t0,%taddr,0` 并把 `[%t0]` 直书为 `[%taddr]`——该加零在 pass 1 并入 taddr 定值，不影响示例形态）：
 
 ```ptx
 ld.param.b32 %taddr,[p_t];
@@ -273,12 +289,12 @@ L2（关键三条；`word1` 为该探针实测值，`word1_sym` 为本 IR 的生
  "word1_sym":{"wait":["b0"],"wr_barrier":"b1","stall":"min"},
  "word1":"0x001e620008060000",
  "rule_id":"tcgen05.ld.forward.<待引用：ld 套件 results 重跑后按 manifest 回填>","evidence_grade":"OBSERVATION"}
-{"node":"n6","mnemonic":"STG.E","word1_sym":{"wait":["b1"],"stall":"min"},
+{"node":"n6","mnemonic":"STG.E","word1_sym":{"wait":[],"stall":"min"},
  "word1":"0x002fe2000c101904",
  "rule_id":"peripheral_select_v0.st_global_b32","evidence_grade":"OBSERVATION"}
 ```
 
-对照实测 SASS（`01_tcgen05/probes/results/async_depth_1.disasm.txt`，解码为投影三）：`LDCU UR4` 置 SB0；`LDTM` 等 SB0、置 SB1；`STG` 等 SB1——上示三条记录的 `word1` 逐值吻合。但须注明参照侧的完整事实：SB1 同时被 `LDC.64 R2`（0020，out 指针）与 `LDCU.64 UR4`（0040，描述符）设置，三生产者共享一个屏障、`STG` 单次等待（与第十三节补录同型，计数器语义的又一实例）。生成侧不复现共享——按逐生产者分配会给三者各自的屏障，与参照的对应经 pass 7(b) 的覆盖关系比较而非 word1 逐位比较。xor 被 ptxas 折叠进 STG 路径属优化域，本 IR 不追求复现。
+对照实测 SASS（`01_tcgen05/probes/results/async_depth_1.disasm.txt`，解码为投影三）：`LDCU UR4` 置 SB0；`LDTM` 等 SB0、置 SB1；`STG` 等 SB1——上示三条记录的 `word1` 逐值吻合。但须注明参照侧的完整事实：SB1 同时被 `LDC.64 R2`（0020，out 指针）与 `LDCU.64 UR4`（0040，描述符）设置，三生产者共享一个屏障、`STG` 单次等待（与第十三节补录同型，计数器语义的又一实例）。生成侧的 `word1_sym` 不照抄参照：drain 点 n4 折叠后，ld 队列的完成等待随数据边落在 n5（xor，消费 `%v3` 处，`wait: ["b1"]`，该记录不在上示三条之列），`STG` 只依赖固定延迟的 `%v5` 与 `%v2`，由 stall 承担、不占屏障；参照侧把完成等待落在最终消费者（`STG`）是 ptxas 的调度产物。两侧差异正是 5.5 契约与 pass 7(b) 覆盖关系比较的适用对象，不做 word1 逐位比较。xor 被 ptxas 折叠进 STG 路径属优化域，本 IR 不追求复现。
 
 ## 十、模板节点的录制与粘贴契约
 
@@ -314,6 +330,14 @@ L2（关键三条；`word1` 为该探针实测值，`word1_sym` 为本 IR 的生
 | `DEPBAR.LE SB0, 0x36` 的阈值语义（54 的含义：队列深度上限？编码单位？） | 模板 footprint 的入口前提申报 | 仅用于计数器佐证，不据此生成 DEPBAR；Thor 上可变前序深度差分测定 |
 | `order` 边在何种上下文下真正约束编译产物 | 2、7 | fence 套件已记录"当前不可观测"，出现可观测实例前 order 边仅作合法性标记 |
 | 序列组合矩阵（P0-3） | 全部 | IR 支持任意序列，但已验证域以套件覆盖为准；域外序列标记 OUT_OF_VALIDATED_DOMAIN 仍可生成，verify 强制走 oracle 对照 |
+| drain 点节点被 pass 3 折叠/消除时 wait 的重定址 | 5、6、7 | 未定义。5.3 的 wait::ld 脱糖把 drain 点定在"wait 后第一个节点"，该节点可能被折叠（第九节 n4 mov 即实例）；v0 需三选一：禁折叠 drain 点、重定址到其后首个存活发射记录、或折叠时并入消费链 |
+| `tcgen05.st` 源寄存器的 anti 覆盖范围 | 1、5 | 5.2 anti 仅列 STTM/UTCHMMA 的 TS/SS 源；tcgen05.st 的源寄存器是否同属"异步读源"待定，混合队列实验（第十四节最高优先级）一并裁定 |
+| `tcgen05.commit` 作为完成点的 IR 连接 | 1、5 | 5.3 只定义了 wait 的脱糖；commit 是否产生 async 边、是否按完成契约等待、L2 wait 字段如何填均未定义，待 commit 套件差分后登记 |
+| `mem` 与 `resource` 边在 TMEM 数据访问上的边界 | 1、2 | tcgen05.ld/st 经 taddr 的 TMEM 数据访问是否入 mem 链、与 alloc/dealloc 区间生命周期的重叠如何分类，未定义 |
+| guard 谓词化消费者的屏障等待语义 | 5 | 谓词不产生区域边界，但被谓词化的 drain/消费者节点的 wait 是否条件执行未定义 |
+| 非相邻固定延迟依赖的 stall 累计分配 | 5、7(c) | word1_sym 只记相邻 LAT；跨多条中间指令的依赖由中间指令 stall 累计承担，分配规则待延迟表对齐后定义（未对齐前最大 stall 兜底，(c) 平凡成立） |
+
+> 上表后半六行（drain 点重定址、st 源 anti、commit 完成点、mem/resource 边界、谓词化 wait、非相邻 stall 累计）为 v0 对抗式审查新增登记，只列缺口、不预设解法；对应修改须先走各套件四象限与证据锚点流程再落地。
 
 ## 十三、观察与机制假设的分离
 

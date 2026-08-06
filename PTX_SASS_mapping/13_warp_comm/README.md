@@ -1,6 +1,6 @@
 # 13 · Warp communication
 
-状态：`NOT_STARTED`
+状态：`IN_PROGRESS`（[实验设计.md](实验设计.md) 已完成全 6 opcode 的实测校准；`shfl.sync` 套件已建成并通过首轮自检：34 syntax + 46 expanded case × O0–O3 共 320 次编译/归属 PASS，6 个带诊断锚定的负向探针全部按预期拒绝。关键发现：membermask 不是 SHFL 操作数而是 WARPSYNC 发射决策的输入；uniform 源的 SHFL 被整条消除；redux/elect 结果路由进 UR 文件；activemask 无专用指令 = `VOTE.ANY PT` 形态）
 
 ## 范围
 

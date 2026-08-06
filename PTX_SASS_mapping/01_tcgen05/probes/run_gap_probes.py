@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""复现《对抗式审查_实验设计缺口》与《序列IR规范_v0》引用的全部探针。
+"""复现《01_tcgen05/对抗式审查_实验设计缺口》与《序列IR规范_v0》（PTX_SASS_mapping 顶层）引用的全部探针。
 
 每个探针生成 PTX、以 ptxas -O3 编译、以 nvdisasm -hex -c 反汇编，并把
 PTX/反汇编文本与关键观测值写入 results/。summary.json 记录工具版本、

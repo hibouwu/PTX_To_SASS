@@ -1,6 +1,6 @@
 # 14 · Bit operations
 
-状态：`NOT_STARTED`
+状态：`IN_PROGRESS`（[实验设计.md](实验设计.md) 已完成全 10 opcode 的实测校准；`lop3` 套件已建成并通过首轮自检：37 syntax + 61 expanded case × O0–O3 共 392 次编译/归属 PASS，15 个带诊断锚定的负向探针全部按预期拒绝。关键发现：immLut 只在 b 槽原样透传、a/c 槽立即数触发 immLut 代数置换；immLut 越界不报错而静默截断/回绕；`lop3.BoolOp` 双目的消费时一对二 lowering；本目标无独立 BFE/BFI 指令）
 
 ## 范围
 

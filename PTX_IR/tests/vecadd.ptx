@@ -1,0 +1,42 @@
+//
+// 最小验证 kernel：c[i] = a[i] + b[i]
+// 覆盖: ld.param / cvta / 特殊寄存器 / mad / ld.global / add / st.global
+//
+.version 8.0
+.target sm_80
+.address_size 64
+
+.visible .entry vecadd(
+    .param .u64 p_a,
+    .param .u64 p_b,
+    .param .u64 p_c
+)
+{
+    .reg .b32   %r<6>;
+    .reg .b64   %rd<11>;
+    .reg .f32   %f<4>;
+
+    ld.param.u64    %rd1, [p_a];
+    ld.param.u64    %rd2, [p_b];
+    ld.param.u64    %rd3, [p_c];
+    cvta.to.global.u64  %rd4, %rd1;
+    cvta.to.global.u64  %rd5, %rd2;
+    cvta.to.global.u64  %rd6, %rd3;
+
+    mov.u32     %r1, %ctaid.x;
+    mov.u32     %r2, %ntid.x;
+    mov.u32     %r3, %tid.x;
+    mad.lo.s32  %r4, %r1, %r2, %r3;
+
+    mul.wide.s32 %rd7, %r4, 4;
+    add.s64     %rd8, %rd4, %rd7;
+    add.s64     %rd9, %rd5, %rd7;
+    add.s64     %rd10, %rd6, %rd7;
+
+    ld.global.f32   %f1, [%rd8];
+    ld.global.f32   %f2, [%rd9];
+    add.f32     %f3, %f1, %f2;
+    st.global.f32   [%rd10], %f3;
+
+    ret;
+}

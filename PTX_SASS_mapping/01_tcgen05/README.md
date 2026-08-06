@@ -38,3 +38,5 @@
 
 - [`tcgen05.mma/thor_ptx90/`](tcgen05.mma/thor_ptx90/)：Thor `.version 9.0`/`.target sm_110a` 专用矩阵；语法集为 1,152 个源码实现/896 个 semantic form，扩展集为 9,216 个源码实现/7,168 个 logical design，另有 34 个 `CTX.protocol`、8 个完整 `effect_slice` case；全部通过 CUDA 13.0 `ptxas` 的 O0/O1/O2/O3 汇编，另含 3 个 capability/非法组合预期拒绝探针。
 - 其余 10 个 `thor_ptx90/` 静态套件：syntax 共 162 个 case、expanded 共 202 个 case；CUDA 13.0 下 O0–O3 共 1,456 次编译与反汇编全部通过，16 个预期拒绝探针全部通过。该结果验证实验框架，不替代后续的人类规则归纳和运行时语义研究。
+
+本族的探针与规则是 [`../序列IR规范_v0.md`](../序列IR规范_v0.md) 当前的全部证据来源；该规范面向 Thor/`sm_110a` 整体而非单一指令族，因此置于上级目录。
