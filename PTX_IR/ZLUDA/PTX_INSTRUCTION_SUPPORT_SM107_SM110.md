@@ -2,13 +2,13 @@
 
 ## 1. 结论摘要
 
-本文审计当前 `ZLUDA/ptx` 的 PTX 到 NVVM LLVM IR 转换能力，目标是回答两个不同的问题：当前代码能识别和 lower 哪些 PTX 指令；这些输出是否适合继续面向 `sm_107` 或 `sm_110` 做 NVPTX codegen。结论以当前仓库源码为准，不把“parser 能解析”“emitter 有 match arm”“生成了 LLVM IR”和“最终可在目标 GPU 正确执行”混为一件事。
+本文审计当前 `ZLUDA/ptx` 的 PTX 到 NVVM LLVM IR 转换能力，目标是回答两个不同的问题：当前代码能识别和 lower 哪些 PTX 指令；这些输出是否适合继续面向 `sm_107` 或 `sm_110` 做 NVPTX codegen。结论以当前仓库源码为准，不把“parser 能解析”“emitter 有 match arm”“生成了 LLVM IR”和“最终可在目标 GPU 正确执行”混为一件事。Pass 内部结构不在本文重复，统一链接到 [`PASS_DESIGN/`](PASS_DESIGN/README.md)。
 
 当前 parser 的内部 `Instruction` 枚举共有 81 个变体。最终 emitter 对这 81 个变体具有穷尽分发，其中 59 个进入直接发射函数，17 个要求先由 pass 替换为 NVVM intrinsic 或 ZLUDA helper call，5 个被直接当成 NOP。这个数字只说明内部枚举的分发闭合，不能理解为支持 PTX ISA 的 81 条完整指令，更不能理解为 81 个 opcode 的所有类型、修饰符、地址空间和同步语义均已正确实现。
 
 从目标架构看，当前前端可以把数字 `.target sm_NNN` 写成 LLVM 函数的 `target-cpu="sm_NNN"`。vendored LLVM 的 NVPTX processor 表明确包含 `sm_110`、`sm_110a` 和 `sm_110f`，但不包含 `sm_107`。因此：
 
-- `sm_110`：可以生成带该 `target-cpu` 的 NVVM LLVM IR，vendored NVPTX 源码也认识该处理器；但 SM110 相关的新 PTX 指令族远未覆盖，且本项目默认构建没有编入 NVPTX backend。
+- `sm_110`：可以生成带该 `target-cpu` 的 NVVM LLVM IR，vendored NVPTX 源码也认识该处理器；但 SM110 相关的新 PTX 指令族远未覆盖，且本项目默认构建没有编入 NVPTX backend。特别是 vendored LLVM 的 tcgen05 predicate 只把 `sm_110a + PTX 9.0` 列为 SM110-family 合法组合，不能把 `sm_110` 与 `sm_110a` 混写。
 - `sm_107`：parser 会接受数字 107，前端也会生成 `target-cpu="sm_107"`，但 vendored NVPTX backend 不认识该处理器。当前状态不能声称具备 SM107 codegen 支持。
 - `sm_110a` / `sm_110f`：parser 语法能读出单字符后缀，但构造 `ptx_parser::Module` 时会丢弃后缀，只保存 `110`。当前输出会退化成 `target-cpu="sm_110"`，无法保留 architecture-specific 或 family-specific 目标语义。
 
@@ -87,7 +87,6 @@ parser 中存在大量针对同一 enum 变体的语法规则，例如 `ld`、`s
 | `rsqrt.approx.f32` | `llvm.nvvm.rsqrt.approx.f` | B/U | 已验证的静态映射集中在 f32 approximate 形式 |
 | `sqrt.approx.f32` | `llvm.nvvm.sqrt.approx.f` | B/U | 其他 `sqrt.rn.f32` 可能走 ZLUDA helper；不能概括为所有 sqrt 均为 NVVM intrinsic |
 | `ex2.approx.f32` | `llvm.nvvm.ex2.approx.f` | B/U | 仅已有 parser/FTZ 组合 |
-| `lg2.approx.f32` | `llvm.nvvm.lg2.approx.f` | B/U | helper pass 对 FTZ=false 形态有明确 intrinsic 映射 |
 | `sin.approx.f32`, `cos.approx.f32` | emitter 中的 NVVM/LLVM 发射路径 | A/B/U | 需继续用 NVPTX verifier/codegen 验证 intrinsic 签名 |
 | `tanh` | ZLUDA helper | B/U | 不是直接 NVVM intrinsic；依赖 helper 实现 |
 | `copysign` | `llvm.copysign.*` | A/U | 参数顺序在 emitter 中显式调整 |
@@ -116,7 +115,7 @@ parser 中存在大量针对同一 enum 变体的语法规则，例如 `ld`、`s
 | `activemask` | ZLUDA helper | B/U | 依赖 helper bitcode |
 | `vote.sync` | ZLUDA helper | B/C/U | any/all/ballot 有映射；仅限 parser 当前形式 |
 | `redux.sync` | ZLUDA helper | B/C/U | add/min/max 有映射，其他 reduction kind 不在该 lowering 集合 |
-| `shfl.sync` | ZLUDA helper | C | up/down/bfly/idx 且没有第二 predicate 目标时可替换；带 `dst_pred` 的形式不会命中 helper，抵达 emitter 后失败 |
+| `shfl.sync` | ZLUDA helper | B/C/U | 无 `dst_pred` 时直接 helper 化；有 `dst_pred` 时 Pass 18 已展开为返回 v2.u32 的 helper call、`RepackVector` 和 predicate `cvt`。仍需验证 helper ABI 与 member mask 语义。 |
 | `match.sync` | ZLUDA helper | B/C/U | 当前 helper 名为 `match_any_sync_*`，不能据此声称支持全部 match 模式 |
 | `nanosleep` | ZLUDA helper | B/U | 依赖 helper 实现 |
 | `dp4a` | `llvm.nvvm.idp4a.*.*` | C | u/u 与 s/s 支持；u/s 或 s/u 混合 signedness 明确 TODO |
@@ -132,7 +131,7 @@ parser 中存在大量针对同一 enum 变体的语法规则，例如 `ld`、`s
 
 | 指令族/能力 | 当前状态 | 对 SM110 的影响 |
 | --- | --- | --- |
-| `tcgen05.*` | parser/AST 无对应指令变体 | Blackwell tensor-core generation 5 路径不可用 |
+| `tcgen05.*` | parser/AST 无对应指令变体；vendored LLVM 对 SM110-family 的合法目标是 `sm_110a + PTX 9.0` | 当前不可用；即使补 parser，也不能在精确目标 `sm_110` 上误开 tcgen05 |
 | `wgmma.*` | parser/AST 无对应指令变体 | Warpgroup MMA 不可用 |
 | `cp.async.bulk*` / TMA bulk copy | parser/AST 无对应指令变体 | TMA global/shared/tensor bulk movement 不可用 |
 | `mbarrier.*` | parser/AST 无完整指令族 | TMA 与异步 pipeline 常用完成机制不可用 |
@@ -227,7 +226,7 @@ LLVM_TARGETS_TO_BUILD=AMDGPU
 
 ## 8. 按目标给出的可用范围
 
-### 8.1 面向 SM110
+### 8.1 面向 SM110 family
 
 当前适合作为第一阶段验证输入的范围：
 
@@ -253,7 +252,7 @@ LLVM_TARGETS_TO_BUILD=AMDGPU
 - 完整矩阵 shape/type/layout 空间
 - cache policy、grid dependency 和 async group 的原始语义
 
-因此对 SM110 的合理表述是：“基础 PTX 子集可生成 NVVM IR，Blackwell/新一代异步与 tensor 指令子集尚未实现”，而不是“支持 SM110 PTX”。
+其中 tcgen05 必须进一步限定为 `sm_110a + PTX 9.0`，不能因 processor 表同时存在 `sm_110/sm_110a/sm_110f` 就认为三者 feature 等价。因此对 SM110 family 的合理表述是：“基础 PTX 子集可生成 NVVM IR，精确 target 后缀尚未保留，Blackwell/新一代异步与 tensor 指令子集尚未实现”，而不是“支持 SM110 PTX”。
 
 ### 8.2 面向 SM107
 
@@ -274,7 +273,7 @@ LLVM_TARGETS_TO_BUILD=AMDGPU
 
 1. 使用包含 NVPTX target 的 LLVM，对最小 `sm_110` module 执行 verifier 和 IR→PTX codegen。
 2. 对 `sm_107` 执行同一命令，记录 unknown processor 或 feature 结果；在目标身份明确前停止扩大 SM107 指令测试。
-3. 增加 `.target sm_110a` 和 `.target sm_110f` 测试，暴露后缀丢失，而不是静默按 `sm_110` 继续。
+3. 增加 `.target sm_110a` 和 `.target sm_110f` 测试，要求完整保留后缀；tcgen05 用例必须精确检查 `sm_110a + PTX 9.0`，不得静默按 `sm_110` 继续。
 
 ### P1：基础语义
 
@@ -288,14 +287,14 @@ LLVM_TARGETS_TO_BUILD=AMDGPU
 1. `setp` 单目标与双目标。
 2. `dp4a` 四种 signedness 组合。
 3. `ldmatrix` 的 x1/x2/x4、m8n8/m16n16、b8/b16 组合。
-4. `shfl.sync` 有无 predicate 目标。
+4. `shfl.sync` 有无 predicate 目标，并验证 Pass 18 的 call→repack→cvt 顺序。
 5. `bar.red` 有无 threadcount。
 6. `vshr` clamp/wrap。
 7. `cp.async` 与真实异步可见性、commit/wait 行为对照。
 
 ### P3：SM110 新指令补齐
 
-优先依赖链应是：cluster state-space/scope → `mbarrier` → TMA/tensormap/proxy fence → WGMMA/tcgen05。原因是后面的 tensor/async 指令通常依赖前面的地址空间和同步基础；只增加 parser opcode 而没有这些语义层，仍然无法正确运行。
+优先依赖链应是：完整 target descriptor → cluster state-space/scope → `mbarrier` → TMA/tensormap/proxy fence → WGMMA/tcgen05。原因是后面的 tensor/async 指令通常依赖前面的目标、地址空间和同步基础；只增加 parser opcode 而没有这些语义层，仍然无法正确运行。具体应修改的既有 Pass 与新增协议 Pass 的判定见 [`PASS_DESIGN/README.md`](PASS_DESIGN/README.md)。
 
 ## 10. 维护时的判定规则
 
@@ -310,6 +309,16 @@ LLVM_TARGETS_TO_BUILD=AMDGPU
 7. 是否有 PTX→LLVM verifier→NVPTX codegen→硬件结果的端到端测试？
 
 只有前六项成立并通过第七项，才应把该具体 opcode + modifier + type + state-space 组合标为“已验证支持”。
+
+### 10.1 本轮对抗式复审
+
+本轮用“找出能推翻支持结论的源码分支”复核矩阵，得到并修正了三项旧结论：
+
+- `shfl.sync` 的 predicate destination 已有 Pass 18 专用展开，旧文档写成必然失败不再成立；但 helper ABI 尚未端到端验证，所以仍是 B/C/U。
+- `lg2.approx.f32` 在表中重复出现，已删除重复行。
+- tcgen05 不能笼统归入 `sm_110`：vendored LLVM 的 feature predicate 对 SM110-family 要求精确 `sm_110a + PTX 9.0`。
+
+仍未通过的广义主张是“支持 SM110 PTX”：目标后缀丢失、默认 LLVM 缺 NVPTX backend、现代指令族缺失和大量 U 级组合都构成反例。因此本文只给具体组合评级，不给架构级“支持”标签。
 
 ## 11. 源码证据索引
 
@@ -335,7 +344,7 @@ LLVM_TARGETS_TO_BUILD=AMDGPU
 | 默认本地 LLVM 构建可做 NVPTX codegen | 否 | 否 |
 | 基础标量 PTX 子集 | 可继续验证 | 在 processor 问题解决前无有效目标结论 |
 | cluster/TMA/mbarrier | 不支持 | 不支持 |
-| wgmma/tcgen05 | 不支持 | 不支持 |
+| wgmma/tcgen05 | 不支持；tcgen05 的未来目标还必须是精确 `sm_110a` | 不支持 |
 | 综合评级 | C：基础子集可用，现代 SM110 能力缺失 | E：目标 processor 不成立，不能声称支持 |
 
 当前最准确的项目能力描述是：**能够把一个有限、以传统 CUDA core 指令和部分 helper/intrinsic 为主的 PTX 子集转换成带 SM 数字属性的 NVVM LLVM IR；对 SM110 具备基础起点，但不覆盖关键新指令族；对 SM107 尚不具备有效的 backend 目标支持。**
